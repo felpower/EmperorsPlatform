@@ -349,12 +349,13 @@
   function renderRecoveryGate() {
     const passwordInput = document.getElementById("recovery-password");
     const email = authState.user?.email || "your email";
+    const isFirstTime = !authState.user?.user_metadata?.password_set;
     return `
       <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
         <div>
           <p class="eyebrow">Set Your Password</p>
-          <h3 style="margin-top: 4px;">Complete Your Registration</h3>
-          <p class="muted">You were invited to join Uni Wien Emperors. Set a password to activate your account.</p>
+          <h3 style="margin-top: 4px;">${isFirstTime ? "Complete Your Registration" : "Reset Your Password"}</h3>
+          <p class="muted">${isFirstTime ? "You were invited to join Uni Wien Emperors. Set a password to activate your account." : "Create a new password for your account."}</p>
         </div>
         <div>
           <p><strong>Email:</strong> ${email}</p>
@@ -365,6 +366,7 @@
         </div>
         <div class="button-row">
           <button id="recovery-submit" type="button" class="primary-button" ${recoveryState.loading ? "disabled" : ""}>Set Password</button>
+          ${!isFirstTime ? `<button id="recovery-cancel" type="button" class="ghost-button">Cancel</button>` : ""}
         </div>
         ${recoveryState.status ? `<p class="meta" style="color: ${recoveryState.status.includes("successfully") ? "#00aa00" : "#ff6b6b"};">${recoveryState.status}</p>` : ""}
         <p class="meta">Your password must be at least 6 characters long.</p>
@@ -1519,42 +1521,17 @@
   function renderHeroNotice() {
     const heroActions = document.querySelector(".hero-actions");
     if (!heroActions) return;
-    const sourceLabel = bootstrapMeta.source === "supabase"
-      ? "Supabase"
-      : bootstrapMeta.source === "local-sqlite"
-        ? "SQLite localhost"
-        : "Saved local data";
     const signedInLabel = authState.user ? authDisplayName() || authState.user.email : "Not signed in";
     heroActions.innerHTML = `
       <div class="hero-stack">
-        <div class="notice is-live">
-          <span class="notice-dot"></span>
-          <span>${authState.status} Source: ${sourceLabel}.</span>
-        </div>
         <div class="toolbar-row">
-          ${authState.user ? `<div class="role-switcher"><span>Signed in</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : `<label class="role-switcher"><span>Access preview</span><select id="access-role-select">${accessRoleOptions.map((role) => `<option value="${role}" ${role === currentAccessRole ? "selected" : ""}>${roleLabel(role)}</option>`).join("")}</select></label>`}
+          ${authState.user ? `<div class="role-switcher"><span>Signed in</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : ""}
           <div class="button-row">
-            ${authState.user ? `<button id="auth-sign-out-header" class="ghost-button" type="button">Sign out</button>` : `<button id="reload-local" class="ghost-button" type="button">Reload Local Data</button>`}
-            <button id="export-demo" class="ghost-button" type="button">Export JSON</button>
+            ${authState.user ? `<button id="auth-sign-out-header" class="ghost-button" type="button">Sign out</button>` : ""}
           </div>
         </div>
       </div>
     `;
-    const accessRoleSelect = document.getElementById("access-role-select");
-    if (accessRoleSelect) {
-      accessRoleSelect.onchange = function (event) {
-        currentAccessRole = event.target.value;
-        saveStoredValue(ACCESS_KEY, currentAccessRole);
-        mount();
-      };
-    }
-    const reloadLocalButton = document.getElementById("reload-local");
-    if (reloadLocalButton) {
-      reloadLocalButton.onclick = async function () {
-        await loadBootstrapData();
-        mount();
-      };
-    }
     const signOutHeaderButton = document.getElementById("auth-sign-out-header");
     if (signOutHeaderButton) {
       signOutHeaderButton.onclick = async function () {
@@ -1568,7 +1545,6 @@
         }
       };
     }
-    document.getElementById("export-demo").onclick = exportState;
   }
   function renderDashboard() {
     if (shouldRequireAuth() && !authState.user) {
@@ -1875,6 +1851,16 @@
         ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
       </article>
     `;
+    const securitySection = authState.user && isOwnProfile(member) ? `
+      <article class="card compact-card" style="display:grid; gap: 10px;">
+        <div>
+          <p class="eyebrow">Security</p>
+          <h3 style="margin-top: 4px;">Password</h3>
+        </div>
+        <p class="muted">Update your password to keep your account secure.</p>
+        <div class="button-row"><button type="button" class="primary-button" id="change-password-button">Change password</button></div>
+      </article>
+    ` : "";
 
     return `
       <div class="section-head">
@@ -1903,6 +1889,7 @@
         <div class="profile-side-column">
           ${rolePositionSection}
           ${notesSection}
+          ${securitySection}
           ${sensitiveSection}
         </div>
       </div>
@@ -2128,11 +2115,15 @@
   function getRouteView() {
     const hash = window.location.hash.replace("#", "").trim();
     if (/^user\//i.test(hash)) return "user";
-    // Check for recovery token in URL params
+    if (/^recovery/i.test(hash)) return "recovery";
+    
+    // Check for recovery token in URL params (both search and hash)
     const params = new URLSearchParams(window.location.search);
-    if (params.has("type") && params.get("type") === "recovery") {
+    const hashParams = new URLSearchParams(window.location.hash.replace("#", ""));
+    if ((params.has("type") && params.get("type") === "recovery") || (hashParams.has("type") && hashParams.get("type") === "recovery")) {
       return "recovery";
     }
+    
     return viewIds.includes(hash) ? hash : "dashboard";
   }
 
@@ -2851,6 +2842,13 @@
         }
       };
     }
+    
+    const cancelButton = document.getElementById("recovery-cancel");
+    if (cancelButton) {
+      cancelButton.onclick = function () {
+        window.location.hash = "#dashboard";
+      };
+    }
   }
 
   function bindAuthActions() {
@@ -3328,6 +3326,7 @@
       bindFeeEditModeActions();
       bindAuthActions();
       bindRecoveryActions();
+      bindChangePasswordAction();
       bindTableExports();
       bindTableSorts();
       switchView(getRouteView());
@@ -3338,6 +3337,16 @@
       const dashboard = document.getElementById("dashboard");
       if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${error.message}</p></article>`;
       switchView("dashboard");
+    }
+  }
+
+  function bindChangePasswordAction() {
+    const changePasswordButton = document.getElementById("change-password-button");
+    if (changePasswordButton) {
+      changePasswordButton.onclick = function () {
+        window.location.hash = "#recovery";
+        setTimeout(() => mount(), 100);
+      };
     }
   }
 
