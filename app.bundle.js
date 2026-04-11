@@ -572,6 +572,20 @@
     return `<button class="ghost-button small-button invite-member-button" type="button" data-member-id="${member.id}" data-invite-state="${state}">${label}</button>`;
   }
 
+  function memberInviteStateLabel(member) {
+    const state = memberInviteState(member);
+    if (state === "activated") return "Activated";
+    if (state === "invited") return "Invite pending";
+    return "Not invited";
+  }
+
+  function renderMemberInvitePill(member) {
+    if (currentAccessRole !== "admin") return "";
+    if (member?.deletedAt) return "";
+    if (!String(member?.email || "").trim()) return `<span class="meta">No email</span>`;
+    return plainPill(memberInviteStateLabel(member));
+  }
+
   function userPageMemberIdFromHash() {
     const hash = String(window.location.hash || "").replace("#", "").trim();
     const match = hash.match(/^user\/(.+)$/i);
@@ -1660,6 +1674,7 @@
                 ` : ""}
                 ${showActionColumn ? `
                   <td>
+                    <div class="pill-row dense-row" style="margin-bottom: 6px;">${renderMemberInvitePill(member)}</div>
                     <div class="action-row">
                       ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button member-inline-save-button" type="button" data-member-id="${member.id}">Save</button>` : `<button class="ghost-button small-button edit-member-button" type="button" data-member-id="${member.id}">Edit</button>`}
                       ${renderMemberInviteAction(member)}
