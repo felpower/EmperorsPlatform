@@ -1,0 +1,107 @@
+# ClubHub Team Platform
+
+This repository contains the first working starter for your football team platform.
+
+## Why this setup
+
+The best low-cost option for your case is:
+
+- Frontend: GitHub Pages or your small hosttech server
+- Backend: Supabase
+- Notifications later: email first, browser push second, Android app wrapper only if you still want it
+
+Why this is the best fit:
+
+- Cheap to start
+- Works as a website first
+- Supports multiple roles per user
+- Easy to extend with new features later
+- Lets us import your current Google Sheets / CSV data
+
+## What is already included
+
+- A deployable static web app
+- A PWA manifest and service worker starter
+- Demo dashboard for members, fees, passes, events, and invites
+- Local demo persistence in the browser
+- A production-ready Supabase SQL schema with roles and row-level security
+- A frontend Supabase config placeholder in `src/supabase-config.js`
+
+## Local preview
+
+You can open `index.html` directly, but a local web server is better for service worker testing.
+
+Example with Node:
+
+```bash
+npx serve .
+```
+
+Then open the shown local address in your browser.
+
+## Suggested production architecture
+
+### Phase 1
+
+- Static frontend on GitHub Pages
+- Supabase Auth for login
+- Supabase Postgres for data
+- Email invitations for practices and games
+
+### Phase 2
+
+- Browser push notifications for Android and desktop
+- CSV / Google Sheets importer
+- Better dashboards and filters
+
+### Phase 3
+
+- Optional Android app wrapper using Capacitor
+- Camera upload for documents or player pass attachments
+- Treasurer automation and reminders
+
+## Database setup
+
+Use the SQL file:
+
+- [supabase/schema.sql](./supabase/schema.sql)
+
+That schema supports:
+
+- Members
+- Roles
+- Multiple roles per user
+- Membership fee tracking
+- Player pass expiry tracking
+- Events
+- Invite recipients and responses
+
+## Supabase project values
+
+The frontend config file is:
+
+- [src/supabase-config.js](./src/supabase-config.js)
+
+Important:
+
+- The publishable key is safe for the frontend
+- Do not put your database password or service-role key into browser code
+- Use your database password only in Supabase tools, SQL clients, or CLI commands
+
+## Important note about GitHub Pages
+
+GitHub Pages is a static host. That means:
+
+- The website itself can live there
+- The database and authentication cannot
+- Supabase handles the backend parts
+
+## Recommended next steps
+
+1. Create a Supabase project
+2. Run `supabase/schema.sql`
+3. Connect this frontend to Supabase
+4. Import your existing club data from Google Sheets or CSV
+5. Add login and invitation flow
+
+When you want, I can do the next step and wire this starter to a real Supabase backend.

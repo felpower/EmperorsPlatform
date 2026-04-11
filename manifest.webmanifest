@@ -1,0 +1,10 @@
+{
+  "name": "ClubHub Team Platform",
+  "short_name": "ClubHub",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4efe3",
+  "theme_color": "#123524",
+  "description": "Team platform for football club operations, attendance, passes, and fees.",
+  "icons": []
+}

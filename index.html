@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="All-in-one football team platform for memberships, player passes, attendance, and role-based administration."
+    />
+    <meta name="theme-color" content="#123524" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <title>ClubHub Team Platform</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-badge">CH</div>
+          <div>
+            <p class="eyebrow">Team Operations</p>
+            <h1>ClubHub</h1>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Primary">
+          <button class="nav-link active" data-view="dashboard">Dashboard</button>
+          <button class="nav-link" data-view="members">Members</button>
+          <button class="nav-link" data-view="fees">Fees</button>
+          <button class="nav-link" data-view="passes">Player Passes</button>
+          <button class="nav-link" data-view="events">Practices & Games</button>
+          <button class="nav-link" data-view="invites">Invites</button>
+          <button class="nav-link" data-view="settings">Setup</button>
+        </nav>
+
+        <section class="sidebar-panel">
+          <p class="eyebrow">Recommended stack</p>
+          <strong>GitHub Pages + Supabase</strong>
+          <p>
+            Cheap web-first setup with login, database, storage, and room for
+            push notifications later.
+          </p>
+        </section>
+      </aside>
+
+      <main class="main-content">
+        <header class="hero">
+          <div>
+            <p class="eyebrow">Football Club Control Center</p>
+            <h2>Memberships, squad management, player passes, and attendance in one place.</h2>
+            <p class="hero-copy">
+              This starter runs as a static site today and is structured so we
+              can connect it to a real backend, import your Google Sheets data,
+              and invite your club members later.
+            </p>
+          </div>
+          <div class="hero-actions">
+            <button id="seed-demo" class="primary-button">Reset Demo Data</button>
+            <button id="export-demo" class="ghost-button">Export JSON</button>
+          </div>
+        </header>
+
+        <section id="dashboard" class="view active" aria-label="Dashboard"></section>
+        <section id="members" class="view" aria-label="Members"></section>
+        <section id="fees" class="view" aria-label="Fees"></section>
+        <section id="passes" class="view" aria-label="Player passes"></section>
+        <section id="events" class="view" aria-label="Events"></section>
+        <section id="invites" class="view" aria-label="Invites"></section>
+        <section id="settings" class="view" aria-label="Setup"></section>
+      </main>
+    </div>
+
+    <dialog id="member-dialog" class="dialog">
+      <form method="dialog" id="member-form" class="dialog-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Member</p>
+            <h3>Add or update a club member</h3>
+          </div>
+          <button class="ghost-icon" value="cancel" aria-label="Close">×</button>
+        </div>
+
+        <label>
+          Full name
+          <input name="name" required />
+        </label>
+
+        <label>
+          Email
+          <input name="email" type="email" required />
+        </label>
+
+        <label>
+          Roles
+          <input
+            name="roles"
+            placeholder="player, coach, finance_admin"
+            required
+          />
+        </label>
+
+        <div class="form-grid">
+          <label>
+            Jersey number
+            <input name="jerseyNumber" type="number" min="1" max="99" />
+          </label>
+
+          <label>
+            Membership status
+            <select name="membershipStatus">
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+
+        <label>
+          Notes
+          <textarea name="notes" rows="3"></textarea>
+        </label>
+
+        <menu class="dialog-actions">
+          <button value="cancel" class="ghost-button">Cancel</button>
+          <button value="default" class="primary-button">Save member</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script defer src="./src/data.js"></script>
+    <script defer src="./src/store.js"></script>
+    <script defer src="./src/render.js"></script>
+    <script defer src="./src/supabase-config.js"></script>
+    <script defer src="./src/app.js"></script>
+  </body>
+</html>
