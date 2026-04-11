@@ -71,6 +71,13 @@ function mapFeeStatus(fee) {
   return "pending";
 }
 
+function mapPassStatusForSupabase(value) {
+  const status = normalizeText(value).toLowerCase();
+  if (status === "expiring") return "expiring";
+  if (status === "expired") return "expired";
+  return "valid";
+}
+
 async function supabaseRequest({ baseUrl, serviceRoleKey, method, endpoint, body }) {
   const response = await fetch(`${baseUrl}${endpoint}`, {
     method,
@@ -106,6 +113,13 @@ async function batchInsert({ baseUrl, serviceRoleKey, endpoint, rows, batchSize 
 }
 
 async function clearSupabaseData({ baseUrl, serviceRoleKey }) {
+  await supabaseRequest({
+    baseUrl,
+    serviceRoleKey,
+    method: "DELETE",
+    endpoint: "/player_passes?id=not.is.null"
+  });
+
   await supabaseRequest({
     baseUrl,
     serviceRoleKey,
@@ -220,6 +234,17 @@ async function main() {
       from membership_fees
     `);
 
+    const playerPasses = await all(db, `
+      select
+        id,
+        member_id,
+        pass_status,
+        expiry_date,
+        license_name,
+        note
+      from player_passes
+    `);
+
     const feeRows = fees
       .filter((fee) => memberIdMap.has(Number(fee.member_id)))
       .map((fee) => ({
@@ -234,7 +259,18 @@ async function main() {
         status_note: normalizeText(fee.status_note) || null
       }));
 
-    console.log(`Found ${memberRows.length} members and ${feeRows.length} fees in ${dbPath}`);
+    const playerPassRows = playerPasses
+      .filter((playerPass) => memberIdMap.has(Number(playerPass.member_id)))
+      .map((playerPass) => ({
+        id: crypto.randomUUID(),
+        member_id: memberIdMap.get(Number(playerPass.member_id)),
+        pass_status: mapPassStatusForSupabase(playerPass.pass_status),
+        expires_on: normalizeText(playerPass.expiry_date) || null,
+        federation_reference: normalizeText(playerPass.license_name) || null,
+        notes: normalizeText(playerPass.note) || null
+      }));
+
+    console.log(`Found ${memberRows.length} members, ${feeRows.length} fees, and ${playerPassRows.length} player passes in ${dbPath}`);
     console.log("Clearing current Supabase members and fees...");
     await clearSupabaseData({ baseUrl, serviceRoleKey });
 
@@ -252,6 +288,14 @@ async function main() {
       serviceRoleKey,
       endpoint: "/membership_fees",
       rows: feeRows
+    });
+
+    console.log("Importing player passes...");
+    await batchInsert({
+      baseUrl,
+      serviceRoleKey,
+      endpoint: "/player_passes",
+      rows: playerPassRows
     });
 
     await relinkProfiles({ baseUrl, serviceRoleKey });

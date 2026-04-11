@@ -64,6 +64,7 @@
   let feeBulkStatus = "paid";
   let selectedFeeMemberIds = [];
   let selectedUserMemberId = "";
+  let profileRouteMode = "member";
   let authInviteRole = "admin";
   let teardownMembersStickyHeader = null;
   let teardownFeesStickyHeader = null;
@@ -1031,6 +1032,15 @@
     return fallback;
   }
 
+    function normalizePassStatus({ status, expiry, licenseName }) {
+      const normalized = String(status || "").trim().toLowerCase();
+      const hasExpiry = Boolean(String(expiry || "").trim());
+      const hasLicense = Boolean(String(licenseName || "").trim());
+      if (!normalized) return "missing";
+      if (normalized === "valid" && !hasExpiry && !hasLicense) return "missing";
+      return normalized;
+    }
+
   async function loadSupabaseBootstrap() {
     if (!supabaseClient) return;
     if (!authState.user) {
@@ -1131,6 +1141,8 @@
       const memberId = String(row.id || "");
       const pass = passesByMember.get(memberId) || null;
       const legacyPass = legacyPassesByMember.get(memberId) || null;
+      const passExpiry = pass?.expires_on || legacyPass?.player_pass_expires_on || "";
+      const licenseName = pass?.federation_reference || "";
       const memberFees = feesByMember.get(memberId) || [];
       const latestFee = memberFees[0] || null;
       return {
@@ -1149,9 +1161,13 @@
         deletedAt: row.deleted_at || null,
         profileId: row.profile_id || null,
         inviteSentAt: row.invite_sent_at || null,
-        passStatus: pass?.pass_status || legacyPass?.player_pass_status || "missing",
-        passExpiry: pass?.expires_on || legacyPass?.player_pass_expires_on || "",
-        licenseName: pass?.federation_reference || "",
+        passStatus: normalizePassStatus({
+          status: pass?.pass_status || legacyPass?.player_pass_status,
+          expiry: passExpiry,
+          licenseName
+        }),
+        passExpiry,
+        licenseName,
         feeStatus: latestFee
           ? String(latestFee.status || (Number(latestFee.paid_cents || 0) >= Number(latestFee.amount_cents || 0) && Number(latestFee.amount_cents || 0) > 0 ? "paid" : (Number(latestFee.paid_cents || 0) > 0 ? "partial" : "pending")))
           : "pending",
@@ -1787,10 +1803,15 @@
     }
     const hashMemberId = userPageMemberIdFromHash();
     const ownMemberId = signedInMemberRecord()?.id || "";
-    const memberId = hashMemberId ? hashMemberId : (ownMemberId || selectedUserMemberId);
+    const memberId = profileRouteMode === "own"
+      ? (hashMemberId || ownMemberId)
+      : (hashMemberId || ownMemberId || selectedUserMemberId);
     const member = memberById(memberId);
 
     if (!member) {
+      if (profileRouteMode === "own") {
+        return emptyState("Your profile is not linked yet", "Your signed-in account is not connected to a member record. Ask an admin to link your account to your member profile.");
+      }
       return emptyState("No member selected", "Open a profile from Members or Membership Finance to view and edit details.");
     }
 
@@ -2129,6 +2150,7 @@
     const profileNavButton = document.getElementById("profile-nav-button");
     if (profileNavButton) {
       profileNavButton.onclick = function () {
+        profileRouteMode = "own";
         selectedUserMemberId = "";
         if (!authState.user) {
           window.location.hash = "dashboard";
@@ -2516,6 +2538,7 @@
   function bindUserPageActions() {
     document.querySelectorAll(".open-user-page-button").forEach((button) => {
       button.onclick = function () {
+        profileRouteMode = "member";
         const memberId = String(button.dataset.memberId || "").trim();
         if (!memberId) return;
         selectedUserMemberId = memberId;
@@ -2528,6 +2551,7 @@
     const backButton = document.getElementById("back-to-members");
     if (backButton) {
       backButton.onclick = function () {
+        profileRouteMode = "member";
         window.location.hash = "members";
         switchView("members");
       };

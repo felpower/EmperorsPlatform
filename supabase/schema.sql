@@ -51,7 +51,7 @@ create table if not exists public.player_passes (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null unique references public.members(id) on delete cascade,
   pass_status text not null default 'valid'
-    check (pass_status in ('valid', 'expiring', 'expired')),
+    check (pass_status in ('valid', 'expiring', 'expired', 'missing', 'pending')),
   expires_on date,
   federation_reference text,
   notes text,
