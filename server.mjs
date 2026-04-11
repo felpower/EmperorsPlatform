@@ -3,19 +3,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import {
-  bulkUpdateFeeStatus,
-  closeDatabase,
-  createMember,
-  deleteMember,
-  ensureImported,
-  getBootstrapData,
-  initializeDatabase,
-  mergeMembers,
-  undeleteMember,
-  updateFeeRecord,
-  updateMember
-} from "./src/server/db-v2.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +14,40 @@ const SEPA_GENERATOR_INPUT_CSV = path.join(SEPA_GENERATOR_DIR, "Mitgliedsbeiträ
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://qggypwdmfrkhehmspvsr.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
+const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
+
+let localDbApi = null;
+let localDbUnavailableReason = "";
+
+async function initializeOptionalLocalDatabase() {
+  if (!ENABLE_LOCAL_DB) {
+    localDbUnavailableReason = "ENABLE_LOCAL_DB is disabled for this deployment.";
+    return;
+  }
+
+  try {
+    const dbModule = await import("./src/server/db-v2.mjs");
+    await dbModule.initializeDatabase(path.join(__dirname, "data", "emperors.db"));
+    await dbModule.ensureImported({
+      clubeeXlsxPath: path.join(__dirname, "assets", "uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx"),
+      feesCsvPath: path.join(__dirname, "membership-fees.csv"),
+      playerCsvPath: path.join(__dirname, "player-list.csv")
+    });
+    localDbApi = dbModule;
+  } catch (error) {
+    localDbUnavailableReason = error instanceof Error ? error.message : "Unknown local DB initialization error.";
+    console.warn(`[local-db] disabled: ${localDbUnavailableReason}`);
+    localDbApi = null;
+  }
+}
+
+function requireLocalDb(res, featureLabel = "This endpoint") {
+  if (localDbApi) return true;
+  res.status(503).json({
+    error: `${featureLabel} is unavailable on this deployment. ${localDbUnavailableReason || "Local SQLite module is not available."}`
+  });
+  return false;
+}
 
 function supabaseAdminHeaders(extra = {}) {
   return {
@@ -158,7 +179,10 @@ function sepaStatusCellValue(status) {
 }
 
 async function prepareSepaGeneratorInput(periodToken) {
-  const bootstrap = await getBootstrapData();
+  if (!localDbApi) {
+    throw new Error(`SEPA export requires local database mode. ${localDbUnavailableReason || "Local DB unavailable."}`);
+  }
+  const bootstrap = await localDbApi.getBootstrapData();
   const members = Array.isArray(bootstrap?.members) ? bootstrap.members : [];
   const fees = Array.isArray(bootstrap?.fees) ? bootstrap.fees : [];
   const periodFees = fees.filter((fee) => String(fee?.feePeriod || "") === periodToken);
@@ -251,12 +275,7 @@ async function latestXmlFilePath(directoryPath) {
   return withStats[0];
 }
 
-await initializeDatabase(path.join(__dirname, "data", "emperors.db"));
-await ensureImported({
-  clubeeXlsxPath: path.join(__dirname, "assets", "uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx"),
-  feesCsvPath: path.join(__dirname, "membership-fees.csv"),
-  playerCsvPath: path.join(__dirname, "player-list.csv")
-});
+await initializeOptionalLocalDatabase();
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -294,7 +313,8 @@ app.get("/healthz", (_req, res) => {
 
 app.get("/api/bootstrap", async (_req, res) => {
   try {
-    const data = await getBootstrapData();
+    if (!requireLocalDb(res, "Bootstrap API")) return;
+    const data = await localDbApi.getBootstrapData();
     res.json(data);
   } catch (error) {
     res.status(500).json({
@@ -362,8 +382,9 @@ app.post("/api/auth/invites", async (req, res) => {
 
 app.post("/api/members", async (req, res) => {
   try {
-    await createMember(req.body || {});
-    res.status(201).json(await getBootstrapData());
+    if (!requireLocalDb(res, "Member create API")) return;
+    await localDbApi.createMember(req.body || {});
+    res.status(201).json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown member create error"
@@ -373,8 +394,9 @@ app.post("/api/members", async (req, res) => {
 
 app.put("/api/members/:memberId", async (req, res) => {
   try {
-    await updateMember(Number(req.params.memberId), req.body || {});
-    res.json(await getBootstrapData());
+    if (!requireLocalDb(res, "Member update API")) return;
+    await localDbApi.updateMember(Number(req.params.memberId), req.body || {});
+    res.json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown member update error"
@@ -384,8 +406,9 @@ app.put("/api/members/:memberId", async (req, res) => {
 
 app.delete("/api/members/:memberId", async (req, res) => {
   try {
-    await deleteMember(Number(req.params.memberId));
-    res.json(await getBootstrapData());
+    if (!requireLocalDb(res, "Member delete API")) return;
+    await localDbApi.deleteMember(Number(req.params.memberId));
+    res.json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown member delete error"
@@ -395,8 +418,9 @@ app.delete("/api/members/:memberId", async (req, res) => {
 
 app.post("/api/members/:memberId/undelete", async (req, res) => {
   try {
-    await undeleteMember(Number(req.params.memberId));
-    res.json(await getBootstrapData());
+    if (!requireLocalDb(res, "Member undelete API")) return;
+    await localDbApi.undeleteMember(Number(req.params.memberId));
+    res.json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown member undelete error"
@@ -406,8 +430,9 @@ app.post("/api/members/:memberId/undelete", async (req, res) => {
 
 app.post("/api/members/merge", async (req, res) => {
   try {
-    await mergeMembers(req.body || {});
-    res.json(await getBootstrapData());
+    if (!requireLocalDb(res, "Member merge API")) return;
+    await localDbApi.mergeMembers(req.body || {});
+    res.json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown member merge error"
@@ -417,8 +442,9 @@ app.post("/api/members/merge", async (req, res) => {
 
 app.post("/api/fees/bulk-status", async (req, res) => {
   try {
-    await bulkUpdateFeeStatus(req.body || {});
-    res.json(await getBootstrapData());
+    if (!requireLocalDb(res, "Fees bulk status API")) return;
+    await localDbApi.bulkUpdateFeeStatus(req.body || {});
+    res.json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown fee update error"
@@ -428,8 +454,9 @@ app.post("/api/fees/bulk-status", async (req, res) => {
 
 app.put("/api/fees/:feeId", async (req, res) => {
   try {
-    await updateFeeRecord(Number(req.params.feeId), req.body || {});
-    res.json(await getBootstrapData());
+    if (!requireLocalDb(res, "Fee update API")) return;
+    await localDbApi.updateFeeRecord(Number(req.params.feeId), req.body || {});
+    res.json(await localDbApi.getBootstrapData());
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown fee row update error"
@@ -465,6 +492,8 @@ app.listen(port, () => {
 });
 
 process.on("SIGINT", async () => {
-  await closeDatabase();
+  if (localDbApi?.closeDatabase) {
+    await localDbApi.closeDatabase();
+  }
   process.exit(0);
 });
