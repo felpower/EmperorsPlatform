@@ -7,7 +7,8 @@
       name="description"
       content="All-in-one football team platform for memberships, player passes, attendance, and role-based administration."
     />
-    <meta name="theme-color" content="#123524" />
+    <meta name="theme-color" content="#171d1d" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,54 +18,38 @@
     />
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <title>ClubHub Team Platform</title>
+    <title>Uni Wien Emperors Platform</title>
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-badge">CH</div>
+          <img class="brand-mark" src="./assets/emperors-mark.png" alt="Uni Wien Emperors logo" />
           <div>
             <p class="eyebrow">Team Operations</p>
-            <h1>ClubHub</h1>
+            <img class="brand-wordmark" src="./assets/emperors-wordmark.png" alt="Emperors wordmark" />
           </div>
         </div>
 
         <nav class="nav" aria-label="Primary">
-          <button class="nav-link active" data-view="dashboard">Dashboard</button>
-          <button class="nav-link" data-view="members">Members</button>
-          <button class="nav-link" data-view="fees">Fees</button>
-          <button class="nav-link" data-view="passes">Player Passes</button>
-          <button class="nav-link" data-view="events">Practices & Games</button>
-          <button class="nav-link" data-view="invites">Invites</button>
-          <button class="nav-link" data-view="settings">Setup</button>
+          <a class="nav-link active" href="#dashboard" data-view="dashboard">Dashboard</a>
+          <a class="nav-link" href="#members" data-view="members">Members</a>
+          <a class="nav-link" href="#fees" data-view="fees">Fees</a>
+          <a class="nav-link" href="#passes" data-view="passes">Player Passes</a>
+          <a class="nav-link" href="#events" data-view="events">Practices &amp; Games</a>
+          <a class="nav-link" href="#invites" data-view="invites">Invites</a>
+          <a class="nav-link" href="#settings" data-view="settings">Setup</a>
         </nav>
-
-        <section class="sidebar-panel">
-          <p class="eyebrow">Recommended stack</p>
-          <strong>GitHub Pages + Supabase</strong>
-          <p>
-            Cheap web-first setup with login, database, storage, and room for
-            push notifications later.
-          </p>
-        </section>
       </aside>
 
       <main class="main-content">
         <header class="hero">
           <div>
-            <p class="eyebrow">Football Club Control Center</p>
-            <h2>Memberships, squad management, player passes, and attendance in one place.</h2>
-            <p class="hero-copy">
-              This starter runs as a static site today and is structured so we
-              can connect it to a real backend, import your Google Sheets data,
-              and invite your club members later.
-            </p>
+            <p class="eyebrow">Uni Wien Emperors</p>
+            <h2>Team Operations Dashboard</h2>
+            <p class="hero-copy">Roster, attendance, finances, and player administration.</p>
           </div>
-          <div class="hero-actions">
-            <button id="seed-demo" class="primary-button">Reset Demo Data</button>
-            <button id="export-demo" class="ghost-button">Export JSON</button>
-          </div>
+          <div class="hero-actions"></div>
         </header>
 
         <section id="dashboard" class="view active" aria-label="Dashboard"></section>
@@ -78,66 +63,109 @@
     </div>
 
     <dialog id="member-dialog" class="dialog">
-      <form method="dialog" id="member-form" class="dialog-form">
+      <form method="post" id="member-form" class="dialog-form" novalidate>
+        <input type="hidden" name="memberId" />
+
         <div class="dialog-header">
           <div>
             <p class="eyebrow">Member</p>
-            <h3>Add or update a club member</h3>
+            <h3 id="member-dialog-title">Add a club member</h3>
           </div>
-          <button class="ghost-icon" value="cancel" aria-label="Close">×</button>
+          <button class="ghost-icon" type="button" value="cancel" aria-label="Close">&times;</button>
         </div>
 
-        <label>
-          Full name
-          <input name="name" required />
-        </label>
+        <div class="form-grid">
+          <label>
+            First name
+            <input name="firstName" />
+          </label>
 
-        <label>
-          Email
-          <input name="email" type="email" required />
-        </label>
-
-        <label>
-          Roles
-          <input
-            name="roles"
-            placeholder="player, coach, finance_admin"
-            required
-          />
-        </label>
+          <label>
+            Last name
+            <input name="lastName" />
+          </label>
+        </div>
 
         <div class="form-grid">
+          <label>
+            Email
+            <input name="email" type="email" />
+          </label>
+
           <label>
             Jersey number
             <input name="jerseyNumber" type="number" min="1" max="99" />
           </label>
-
-          <label>
-            Membership status
-            <select name="membershipStatus">
-              <option value="active">Active</option>
-              <option value="pending">Pending</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
         </div>
+
+        <fieldset class="status-filter-group">
+          <legend>Roles</legend>
+          <div class="action-row">
+            <button type="button" class="ghost-button small-button" id="roles-select-all">Select all roles</button>
+            <button type="button" class="ghost-button small-button" id="roles-clear-all">Clear roles</button>
+          </div>
+          <div class="status-filter-options">
+            <label class="status-check"><input type="checkbox" name="roles" value="player" checked /><span>player</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="coach" /><span>coach</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="admin" /><span>admin</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="finance_admin" /><span>finance_admin</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="tech_admin" /><span>tech_admin</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="staff" /><span>staff</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="status-filter-group">
+          <legend>Positions</legend>
+          <div class="action-row">
+            <button type="button" class="ghost-button small-button" id="positions-select-all">Select all positions</button>
+            <button type="button" class="ghost-button small-button" id="positions-clear-all">Clear positions</button>
+          </div>
+          <div class="status-filter-options">
+            <label class="status-check"><input type="checkbox" name="positions" value="QB" /><span>QB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="RB" /><span>RB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="FB" /><span>FB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="WR" /><span>WR</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="TE" /><span>TE</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="OL" /><span>OL</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="DL" /><span>DL</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="LB" /><span>LB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="DB" /><span>DB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="CB" /><span>CB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="S" /><span>S</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="K" /><span>K</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="P" /><span>P</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="OT" /><span>OT</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="OG" /><span>OG</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="C" /><span>C</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="DT" /><span>DT</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="DE" /><span>DE</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="NT" /><span>NT</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="ILB" /><span>ILB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="OLB" /><span>OLB</span></label>
+          </div>
+        </fieldset>
+
+        <label>
+          Membership status
+          <select name="membershipStatus">
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </label>
 
         <label>
           Notes
           <textarea name="notes" rows="3"></textarea>
         </label>
 
-        <menu class="dialog-actions">
-          <button value="cancel" class="ghost-button">Cancel</button>
-          <button value="default" class="primary-button">Save member</button>
-        </menu>
+        <div class="dialog-actions">
+          <button value="cancel" type="button" class="ghost-button">Cancel</button>
+          <button value="default" type="button" class="primary-button" id="member-submit-button">Save member</button>
+        </div>
       </form>
     </dialog>
 
-    <script defer src="./src/data.js"></script>
-    <script defer src="./src/store.js"></script>
-    <script defer src="./src/render.js"></script>
-    <script defer src="./src/supabase-config.js"></script>
-    <script defer src="./src/app.js"></script>
+    <script defer src="./app.bundle.js"></script>
   </body>
 </html>

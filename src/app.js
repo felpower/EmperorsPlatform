@@ -1,4 +1,121 @@
-const { exportState, loadState, resetState, saveState } = window.ClubHubStore;
+const fallbackDemoData = {
+  members: [
+    {
+      id: "fallback-1",
+      name: "Demo Player",
+      email: "player@example.com",
+      roles: ["player"],
+      jerseyNumber: 9,
+      membershipStatus: "active",
+      passStatus: "valid",
+      passExpiry: "2026-12-31",
+      feeStatus: "paid",
+      notes: "Fallback demo member",
+      lastInviteResponse: "confirmed"
+    }
+  ],
+  fees: [
+    {
+      id: "fallback-fee-1",
+      memberId: "fallback-1",
+      season: "2025/26",
+      amount: 180,
+      paidAmount: 180,
+      status: "paid",
+      dueDate: "2025-09-30"
+    }
+  ],
+  events: [
+    {
+      id: "fallback-event-1",
+      title: "Fallback Training",
+      type: "practice",
+      date: "2026-04-14",
+      location: "Main Pitch",
+      inviteStatus: "scheduled",
+      attending: ["fallback-1"],
+      maybe: [],
+      unavailable: []
+    }
+  ],
+  invites: [
+    {
+      id: "fallback-invite-1",
+      eventId: "fallback-event-1",
+      channel: "email",
+      sentAt: "2026-04-11T08:00:00Z",
+      recipients: 1,
+      opens: 1,
+      confirmations: 1
+    }
+  ]
+};
+
+function createFallbackStore() {
+  const fallbackKey = "clubhub-fallback-store";
+  const fallbackData = window.ClubHubData?.demoData ?? fallbackDemoData;
+
+  return {
+    loadState() {
+      try {
+        const saved = localStorage.getItem(fallbackKey);
+        return saved ? JSON.parse(saved) : structuredClone(fallbackData);
+      } catch {
+        return structuredClone(fallbackData);
+      }
+    },
+    saveState(nextState) {
+      localStorage.setItem(fallbackKey, JSON.stringify(nextState));
+    },
+    resetState() {
+      const nextState = structuredClone(fallbackData);
+      localStorage.setItem(fallbackKey, JSON.stringify(nextState));
+      return nextState;
+    },
+    exportState(nextState) {
+      const blob = new Blob([JSON.stringify(nextState, null, 2)], {
+        type: "application/json"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "clubhub-demo-export.json";
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+}
+
+function createFallbackRender() {
+  return {
+    renderDashboard(nextState) {
+      return `<article class="setup-card"><p class="eyebrow">Dashboard</p><h3>Fallback dashboard</h3><p>${nextState.members.length} members loaded.</p></article>`;
+    },
+    renderMembers(nextState) {
+      return `<article class="setup-card"><p class="eyebrow">Members</p><h3>Members</h3><p>${nextState.members.map((member) => member.name).join(", ")}</p></article>`;
+    },
+    renderFees(nextState) {
+      return `<article class="setup-card"><p class="eyebrow">Fees</p><h3>Membership fees</h3><p>${nextState.fees.length} fee records loaded.</p></article>`;
+    },
+    renderPasses(nextState) {
+      return `<article class="setup-card"><p class="eyebrow">Passes</p><h3>Player passes</h3><p>${nextState.members.length} player records loaded.</p></article>`;
+    },
+    renderEvents(nextState) {
+      return `<article class="setup-card"><p class="eyebrow">Events</p><h3>Practices and games</h3><p>${nextState.events.map((event) => event.title).join(", ")}</p></article>`;
+    },
+    renderInvites(nextState) {
+      return `<article class="setup-card"><p class="eyebrow">Invites</p><h3>Invite history</h3><p>${nextState.invites.length} invite records loaded.</p></article>`;
+    },
+    renderSettings(appState) {
+      return `<article class="setup-card"><p class="eyebrow">Setup</p><h3>Fallback setup</h3><p>${appState?.auth?.status ?? "Ready"}</p></article>`;
+    }
+  };
+}
+
+const storeApi = window.ClubHubStore ?? createFallbackStore();
+const renderApi = window.ClubHubRender ?? createFallbackRender();
+
+const { exportState, loadState, resetState, saveState } = storeApi;
 const {
   renderDashboard,
   renderEvents,
@@ -7,7 +124,7 @@ const {
   renderMembers,
   renderPasses,
   renderSettings
-} = window.ClubHubRender;
+} = renderApi;
 
 let state = loadState();
 let authState = {
@@ -48,17 +165,39 @@ const viewIds = [
 ];
 
 function mount() {
-  renderHeroNotice();
-  document.getElementById("dashboard").innerHTML = renderDashboard(state);
-  document.getElementById("members").innerHTML = renderMembers(state);
-  document.getElementById("fees").innerHTML = renderFees(state);
-  document.getElementById("passes").innerHTML = renderPasses(state);
-  document.getElementById("events").innerHTML = renderEvents(state);
-  document.getElementById("invites").innerHTML = renderInvites(state);
-  document.getElementById("settings").innerHTML = renderSettings({ auth: authState });
+  try {
+    renderHeroNotice();
+    document.getElementById("dashboard").innerHTML = renderDashboard(state);
+    document.getElementById("members").innerHTML = renderMembers(state);
+    document.getElementById("fees").innerHTML = renderFees(state);
+    document.getElementById("passes").innerHTML = renderPasses(state);
+    document.getElementById("events").innerHTML = renderEvents(state);
+    document.getElementById("invites").innerHTML = renderInvites(state);
+    document.getElementById("settings").innerHTML = renderSettings({ auth: authState });
 
-  bindMemberDialog();
-  bindAuthPanel();
+    applyRoute();
+    bindMemberDialog();
+    bindAuthPanel();
+  } catch (error) {
+    console.error("ClubHub mount failed", error);
+    authState = {
+      ...authState,
+      mode: "error",
+      status: `Startup error: ${error.message}. Reset demo data and reload.`
+    };
+    renderHeroNotice();
+    document.getElementById("dashboard").innerHTML = `
+      <article class="setup-card">
+        <p class="eyebrow">Startup issue</p>
+        <h3>The app recovered with an error message</h3>
+        <p>${error.message}</p>
+        <p class="muted">
+          Open the browser console for details. The local demo state may be from an older version.
+        </p>
+      </article>
+    `;
+    switchView("dashboard");
+  }
 }
 
 function renderHeroNotice() {
@@ -91,6 +230,10 @@ function renderHeroNotice() {
 }
 
 function switchView(nextViewId) {
+  if (!viewIds.includes(nextViewId)) {
+    nextViewId = "dashboard";
+  }
+
   for (const viewId of viewIds) {
     document.getElementById(viewId).classList.toggle("active", viewId === nextViewId);
   }
@@ -100,10 +243,23 @@ function switchView(nextViewId) {
   }
 }
 
+function getRouteView() {
+  const hash = window.location.hash.replace("#", "").trim();
+  return viewIds.includes(hash) ? hash : "dashboard";
+}
+
+function applyRoute() {
+  switchView(getRouteView());
+}
+
 function bindNavigation() {
   document.querySelectorAll(".nav-link").forEach((button) => {
-    button.addEventListener("click", () => switchView(button.dataset.view));
+    button.addEventListener("click", () => {
+      window.location.hash = button.dataset.view;
+    });
   });
+
+  window.addEventListener("hashchange", applyRoute);
 }
 
 function bindHeaderActions() {
@@ -403,21 +559,23 @@ function bindMemberDialog() {
     saveState(state);
     mount();
     dialog.close();
-    switchView("members");
+    window.location.hash = "members";
   };
 }
 
-function registerServiceWorker() {
-  if ("serviceWorker" in navigator && window.location.protocol !== "file:") {
-    navigator.serviceWorker.register("./sw.js").catch(() => {
-      // Keep startup quiet if SW registration is not supported by the host.
+function unregisterServiceWorkers() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((registration) => {
+        registration.unregister();
+      });
     });
   }
 }
 
 bindNavigation();
 mount();
-registerServiceWorker();
+unregisterServiceWorkers();
 
 if (supabaseClient) {
   supabaseClient.auth.onAuthStateChange((_event, session) => {

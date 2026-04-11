@@ -35,14 +35,21 @@ create table if not exists public.members (
   email text not null,
   jersey_number integer,
   membership_status text not null default 'pending',
-  player_pass_status text not null default 'valid',
-  player_pass_expires_on date,
   notes text,
   created_at timestamptz not null default now(),
   constraint members_membership_status_check
-    check (membership_status in ('active', 'pending', 'inactive')),
-  constraint members_player_pass_status_check
-    check (player_pass_status in ('valid', 'expiring', 'expired'))
+    check (membership_status in ('active', 'pending', 'inactive'))
+);
+
+create table if not exists public.player_passes (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null unique references public.members(id) on delete cascade,
+  pass_status text not null default 'valid'
+    check (pass_status in ('valid', 'expiring', 'expired')),
+  expires_on date,
+  federation_reference text,
+  notes text,
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.membership_fees (
@@ -87,6 +94,7 @@ create table if not exists public.invites (
 alter table public.profiles enable row level security;
 alter table public.member_roles enable row level security;
 alter table public.members enable row level security;
+alter table public.player_passes enable row level security;
 alter table public.membership_fees enable row level security;
 alter table public.events enable row level security;
 alter table public.event_recipients enable row level security;
@@ -141,6 +149,29 @@ on public.members
 for select
 using (auth.role() = 'authenticated');
 
+create policy "Restricted roles read player passes"
+on public.player_passes
+for select
+using (
+  public.has_role('admin')
+  or public.has_role('coach')
+  or public.has_role('tech_admin')
+);
+
+create policy "Restricted roles manage player passes"
+on public.player_passes
+for all
+using (
+  public.has_role('admin')
+  or public.has_role('coach')
+  or public.has_role('tech_admin')
+)
+with check (
+  public.has_role('admin')
+  or public.has_role('coach')
+  or public.has_role('tech_admin')
+);
+
 create policy "Finance admins manage fees"
 on public.membership_fees
 for all
@@ -153,10 +184,13 @@ with check (
   or public.has_role('finance_admin')
 );
 
-create policy "Authenticated users read fees"
+create policy "Finance admins read fees"
 on public.membership_fees
 for select
-using (auth.role() = 'authenticated');
+using (
+  public.has_role('admin')
+  or public.has_role('finance_admin')
+);
 
 create policy "Coaches and admins manage events"
 on public.events
