@@ -1031,10 +1031,14 @@
     const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
 
+    const queryWarnings = [];
     const selectMaybe = async (table, columns, optional = false) => {
       const response = await supabaseClient.from(table).select(columns);
       if (response.error) {
-        if (optional) return [];
+        if (optional) {
+          queryWarnings.push(`${table}: ${response.error.message || "read blocked"}`);
+          return [];
+        }
         throw response.error;
       }
       return response.data || [];
@@ -1205,6 +1209,9 @@
       invites
     });
     authState.status = `Supabase data loaded for ${authDisplayName() || authState.user.email}.`;
+    if (queryWarnings.length) {
+      authState.status += ` Some data may be hidden by permissions (${queryWarnings.join(" | ")}).`;
+    }
   }
 
   async function loadBootstrapData() {
