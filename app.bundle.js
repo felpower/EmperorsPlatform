@@ -249,8 +249,14 @@
   }
 
   function authDisplayName() {
+    const ownMember = signedInMemberRecord();
+    if (ownMember?.name) return String(ownMember.name).trim();
+    if (ownMember?.firstName || ownMember?.lastName) {
+      const fullName = `${String(ownMember.firstName || "").trim()} ${String(ownMember.lastName || "").trim()}`.trim();
+      if (fullName) return fullName;
+    }
     const metadata = authState.user?.user_metadata || {};
-    return String(metadata.full_name || authState.user?.email || "").trim();
+    return String(metadata.full_name || metadata.name || authState.user?.email || "").trim();
   }
 
   function syncAuthSession(session) {
@@ -674,7 +680,12 @@
   function userPageMemberIdFromHash() {
     const hash = String(window.location.hash || "").replace("#", "").trim();
     const match = hash.match(/^user\/(.+)$/i);
-    return match ? decodeURIComponent(match[1]) : "";
+    if (!match) return "";
+    const decoded = decodeURIComponent(match[1]);
+    if (decoded.toLowerCase() === "me") {
+      return String(signedInMemberRecord()?.id || "");
+    }
+    return decoded;
   }
 
   function plainPill(label) {
@@ -1058,6 +1069,9 @@
     const passRows = canReadPassesOnline
       ? await selectMaybe("player_passes", "member_id, pass_status, expires_on, federation_reference, notes, updated_at", true)
       : [];
+    const legacyPassRows = canReadPassesOnline
+      ? await selectMaybe("members", "id, player_pass_status, player_pass_expires_on", true)
+      : [];
     const feeRows = canReadFeesOnline
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
@@ -1078,6 +1092,11 @@
     const passesByMember = new Map();
     (passRows || []).forEach((row) => {
       passesByMember.set(String(row.member_id || ""), row);
+    });
+
+    const legacyPassesByMember = new Map();
+    (legacyPassRows || []).forEach((row) => {
+      legacyPassesByMember.set(String(row.id || ""), row);
     });
 
     const feesByMember = new Map();
@@ -1111,6 +1130,7 @@
       const { firstName, lastName, displayName } = normalizeDisplayName(row);
       const memberId = String(row.id || "");
       const pass = passesByMember.get(memberId) || null;
+      const legacyPass = legacyPassesByMember.get(memberId) || null;
       const memberFees = feesByMember.get(memberId) || [];
       const latestFee = memberFees[0] || null;
       return {
@@ -1129,8 +1149,8 @@
         deletedAt: row.deleted_at || null,
         profileId: row.profile_id || null,
         inviteSentAt: row.invite_sent_at || null,
-        passStatus: pass?.pass_status || "missing",
-        passExpiry: pass?.expires_on || "",
+        passStatus: pass?.pass_status || legacyPass?.player_pass_status || "missing",
+        passExpiry: pass?.expires_on || legacyPass?.player_pass_expires_on || "",
         licenseName: pass?.federation_reference || "",
         feeStatus: latestFee
           ? String(latestFee.status || (Number(latestFee.paid_cents || 0) >= Number(latestFee.amount_cents || 0) && Number(latestFee.amount_cents || 0) > 0 ? "paid" : (Number(latestFee.paid_cents || 0) > 0 ? "partial" : "pending")))
@@ -1767,7 +1787,7 @@
     }
     const hashMemberId = userPageMemberIdFromHash();
     const ownMemberId = signedInMemberRecord()?.id || "";
-    const memberId = hashMemberId || ownMemberId || selectedUserMemberId;
+    const memberId = hashMemberId ? hashMemberId : (ownMemberId || selectedUserMemberId);
     const member = memberById(memberId);
 
     if (!member) {
@@ -2109,6 +2129,7 @@
     const profileNavButton = document.getElementById("profile-nav-button");
     if (profileNavButton) {
       profileNavButton.onclick = function () {
+        selectedUserMemberId = "";
         if (!authState.user) {
           window.location.hash = "dashboard";
           switchView("dashboard");
@@ -2117,11 +2138,10 @@
         const ownMember = signedInMemberRecord();
         if (ownMember?.id) {
           selectedUserMemberId = String(ownMember.id);
-          window.location.hash = `user/${encodeURIComponent(ownMember.id)}`;
+          window.location.hash = "user/me";
           switchView("user");
           return;
         }
-        selectedUserMemberId = "";
         window.location.hash = "user";
         switchView("user");
       };
