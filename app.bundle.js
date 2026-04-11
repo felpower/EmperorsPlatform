@@ -118,7 +118,7 @@
 
   function loadMemberFilters() {
     try {
-      const saved = localStorage.getItem(MEMBER_FILTER_KEY);
+      const saved = sessionStorage.getItem(MEMBER_FILTER_KEY);
       if (!saved) return { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
       const parsed = JSON.parse(saved);
       return {
@@ -134,7 +134,7 @@
   }
 
   function saveMemberFilters() {
-    localStorage.setItem(MEMBER_FILTER_KEY, JSON.stringify(memberFilters));
+    sessionStorage.setItem(MEMBER_FILTER_KEY, JSON.stringify(memberFilters));
   }
 
   function defaultTableSort() {
@@ -259,7 +259,11 @@
     authState.user = session?.user || null;
     authState.roles = extractUserRoles(session?.user);
     if (authState.user) {
-      currentAccessRole = primaryRoleFromRoles(authState.roles);
+      if (authState.roles.length) {
+        currentAccessRole = primaryRoleFromRoles(authState.roles);
+      } else {
+        currentAccessRole = loadStoredValue(ACCESS_KEY, currentAccessRole || "player");
+      }
       saveStoredValue(ACCESS_KEY, currentAccessRole);
       authState.mode = "supabase";
       authState.status = `Signed in as ${authDisplayName() || authState.user.email}.`;
@@ -506,6 +510,15 @@
     const metadata = authState.user?.user_metadata || {};
     const appMetadata = authState.user?.app_metadata || {};
     return String(metadata.member_id || appMetadata.member_id || "").trim();
+  }
+
+  function signedInMemberRecord() {
+    if (!authState.user) return null;
+    const profileMatch = state.members.find((member) => String(member.profileId || "") === String(authState.user.id || ""));
+    if (profileMatch) return profileMatch;
+    const email = signedInUserEmail();
+    if (!email) return null;
+    return state.members.find((member) => String(member.email || "").trim().toLowerCase() === email) || null;
   }
 
   function canEditMemberProfile(member) {
@@ -1172,8 +1185,14 @@
       .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
       .map((row) => String(row.role_code || "").trim())
       .filter(Boolean);
-    if (currentUserRoles.length) {
-      currentAccessRole = primaryRoleFromRoles(currentUserRoles);
+    const profileMatchedMember = (memberRows || []).find((row) => String(row.profile_id || "") === String(authState.user.id || ""));
+    const emailMatchedMember = profileMatchedMember
+      ? null
+      : (memberRows || []).find((row) => String(row.email || "").trim().toLowerCase() === String(authState.user?.email || "").trim().toLowerCase());
+    const memberRoleFallback = parseJsonArrayField(profileMatchedMember?.roles_json ?? emailMatchedMember?.roles_json, []);
+    const effectiveRoles = currentUserRoles.length ? currentUserRoles : (memberRoleFallback.length ? memberRoleFallback : authState.roles);
+    if (effectiveRoles.length) {
+      currentAccessRole = primaryRoleFromRoles(effectiveRoles);
       saveStoredValue(ACCESS_KEY, currentAccessRole);
     }
 
@@ -1550,42 +1569,21 @@
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
-    const stats = computeDashboardStats();
-    const attentionMembers = state.members.filter((member) => ["expiring", "expired", "missing", "pending"].includes(member.passStatus) || member.feeStatus !== "paid").slice(0, 8);
     return `
-      <div class="grid metrics">
-        <article class="metric-card"><p class="eyebrow">Active people</p><strong>${stats.activeMembers}</strong><p>Members currently marked active.</p></article>
-        <article class="metric-card"><p class="eyebrow">Players</p><strong>${stats.players}</strong><p>People carrying the player role.</p></article>
-        <article class="metric-card"><p class="eyebrow">Pass alerts</p><strong>${stats.passAlerts}</strong><p>Expired, expiring, missing, or pending passes.</p></article>
-        <article class="metric-card"><p class="eyebrow">Outstanding fees</p><strong>${formatMoney(stats.outstandingFees)}</strong><p>Open amount across imported quarterly fee rows.</p></article>
-      </div>
-      <div class="split dashboard-layout">
-        <article class="list-card">
-          <div class="section-head"><div><p class="eyebrow">Attention</p><h3>Members needing follow-up</h3></div></div>
-          <div class="list">
-            ${attentionMembers.length ? attentionMembers.map((member) => `
-              <div class="list-item">
-                <div>
-                  <strong>${member.name}</strong>
-                  <div class="meta">${formatList(member.positions, "No position")} | ${formatList(member.roles, "No role")}</div>
-                </div>
-                <div class="pill-row">${statusPill(member.passStatus)}${statusPill(member.feeStatus)}</div>
-              </div>
-            `).join("") : `<div class="list-item"><div><strong>No immediate blockers</strong><div class="meta">No pass or fee problems are currently highlighted.</div></div></div>`}
-          </div>
+      <div style="max-width: 760px; display: grid; gap: 12px;">
+        <article class="setup-card">
+          <p class="eyebrow">Overview</p>
+          <h3>Team Operations</h3>
+          <p>Use the navigation on the left to manage members, invitations, fees, and player passes.</p>
         </article>
-        <article class="list-card">
-          <div class="section-head"><div><p class="eyebrow">Current fee slice</p><h3>${formatFeePeriod(currentFeePeriod()) || "No period"}</h3></div></div>
-          <div class="list">
-            ${filteredFees().slice(0, 8).map((fee) => `
-              <div class="list-item compact-row">
-                <div>
-                  <strong>${memberName(fee.memberId)}</strong>
-                  <div class="meta">${formatMoney(fee.paidAmount)} of ${formatMoney(fee.amount)}</div>
-                </div>
-                ${statusPill(fee.status)}
-              </div>
-            `).join("") || `<div class="list-item"><div><strong>No fee rows</strong><div class="meta">No imported data for the selected quarter.</div></div></div>`}
+        <article class="setup-card">
+          <p class="eyebrow">Quick Start</p>
+          <h3>What to do next</h3>
+          <div class="setup-list compact-list">
+            <div class="setup-step"><span>1</span><div><strong>Members</strong><p>Add or review your roster.</p></div></div>
+            <div class="setup-step"><span>2</span><div><strong>Invites</strong><p>Send invitation emails to activate accounts.</p></div></div>
+            <div class="setup-step"><span>3</span><div><strong>Membership Finance</strong><p>Track quarterly payment status.</p></div></div>
+            <div class="setup-step"><span>4</span><div><strong>My Profile</strong><p>Open your profile to change password and personal details.</p></div></div>
           </div>
         </article>
       </div>
@@ -2092,13 +2090,32 @@
   }
 
   function bindNavigation() {
-    document.querySelectorAll(".nav-link").forEach((link) => {
+    document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
       link.onclick = function () {
         const nextView = link.dataset.view;
         window.location.hash = nextView;
         switchView(nextView);
       };
     });
+
+    const profileNavButton = document.getElementById("profile-nav-button");
+    if (profileNavButton) {
+      profileNavButton.onclick = function () {
+        if (!authState.user) {
+          window.location.hash = "dashboard";
+          switchView("dashboard");
+          return;
+        }
+        const ownMember = signedInMemberRecord();
+        if (ownMember?.id) {
+          window.location.hash = `user/${encodeURIComponent(ownMember.id)}`;
+          switchView("user");
+          return;
+        }
+        window.location.hash = "user";
+        switchView("user");
+      };
+    }
   }
 
   function switchView(nextViewId) {
