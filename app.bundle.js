@@ -351,6 +351,8 @@
       inClubee: Boolean(member.inClubee),
       membershipStatus: member.membershipStatus || (member.active ? "active" : "inactive"),
       deletedAt: member.deletedAt || null,
+      profileId: member.profileId || null,
+      inviteSentAt: member.inviteSentAt || null,
       passStatus: member.passStatus || "missing",
       passExpiry: member.passExpiry || "",
       licenseName: member.licenseName || "",
@@ -552,6 +554,22 @@
 
   function rolePill(value) {
     return plainPill(roleLabel(value));
+  }
+
+  function memberInviteState(member) {
+    if (member?.profileId) return "activated";
+    if (member?.inviteSentAt) return "invited";
+    return "ready";
+  }
+
+  function renderMemberInviteAction(member) {
+    if (currentAccessRole !== "admin") return "";
+    if (member?.deletedAt) return "";
+    if (!String(member?.email || "").trim()) return "";
+    const state = memberInviteState(member);
+    if (state === "activated") return "";
+    const label = state === "invited" ? "Invited" : "Invite";
+    return `<button class="ghost-button small-button invite-member-button" type="button" data-member-id="${member.id}" data-invite-state="${state}">${label}</button>`;
   }
 
   function userPageMemberIdFromHash() {
@@ -910,7 +928,14 @@
       return response.data || [];
     };
 
-    const memberRows = await selectMaybe("members", "id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+    let memberRowsResponse = await supabaseClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at");
+    if (memberRowsResponse.error && /invite_sent_at/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberRowsResponse = await supabaseClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+    }
+    if (memberRowsResponse.error) {
+      throw memberRowsResponse.error;
+    }
+    const memberRows = memberRowsResponse.data || [];
     const memberRoleRows = canReadAllMemberRolesOnline
       ? await selectMaybe("member_roles", "profile_id, role_code", true)
       : await selectMaybe("member_roles", "profile_id, role_code", true);
@@ -986,6 +1011,8 @@
         inClubee: Boolean(row.profile_id),
         membershipStatus: row.membership_status || "pending",
         deletedAt: row.deleted_at || null,
+        profileId: row.profile_id || null,
+        inviteSentAt: row.invite_sent_at || null,
         passStatus: pass?.pass_status || "missing",
         passExpiry: pass?.expires_on || "",
         licenseName: pass?.federation_reference || "",
@@ -1635,7 +1662,7 @@
                   <td>
                     <div class="action-row">
                       ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button member-inline-save-button" type="button" data-member-id="${member.id}">Save</button>` : `<button class="ghost-button small-button edit-member-button" type="button" data-member-id="${member.id}">Edit</button>`}
-                      ${currentAccessRole === "admin" && !member.deletedAt && member.email ? `<button class="ghost-button small-button invite-member-button" type="button" data-member-id="${member.id}">Invite</button>` : ""}
+                      ${renderMemberInviteAction(member)}
                       ${showMergeButton ? `<button class="ghost-button small-button merge-member-button" type="button" data-member-id="${member.id}">Merge</button>` : ""}
                       ${adminActionsEnabled && member.deletedAt ? `<button class="ghost-button small-button undelete-member-button" type="button" data-member-id="${member.id}">Undelete</button>` : ""}
                       ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button danger-button delete-member-button" type="button" data-member-id="${member.id}">Delete</button>` : ""}
@@ -2486,9 +2513,23 @@
       button.onclick = async function () {
         const member = memberById(button.dataset.memberId);
         if (!member || !member.email) return;
+        const inviteState = memberInviteState(member);
+        if (inviteState === "invited") {
+          window.alert("You already invited this person. Wait until they activate their account.");
+          return;
+        }
+        if (inviteState === "activated") {
+          window.alert("This person already activated their account. No invite is needed.");
+          return;
+        }
         try {
           await inviteMember(member.id);
           authState.status = `Invite sent to ${member.email}.`;
+          if (shouldUseSupabaseData()) {
+            await loadBootstrapData();
+          } else {
+            member.inviteSentAt = new Date().toISOString();
+          }
           mount();
           switchView("members");
         } catch (error) {

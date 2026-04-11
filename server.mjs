@@ -27,6 +27,14 @@ const SEPA_GENERATOR_INPUT_CSV = path.join(SEPA_GENERATOR_DIR, "Mitgliedsbeiträ
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://qggypwdmfrkhehmspvsr.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 
+function supabaseAdminHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    ...extra
+  };
+}
+
 function resolvePublicSiteUrl(req) {
   const configured = String(process.env.PUBLIC_SITE_URL || "").trim();
   if (configured) return configured.replace(/\/$/, "");
@@ -43,11 +51,7 @@ async function sendSupabaseInvite({ email, fullName, roles, memberId, req }) {
 
   const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/invite`, {
     method: "POST",
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json"
-    },
+    headers: supabaseAdminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       email,
       data: {
@@ -64,6 +68,65 @@ async function sendSupabaseInvite({ email, fullName, roles, memberId, req }) {
     throw new Error(payload?.msg || payload?.error_description || payload?.error || `Invite failed (${response.status}).`);
   }
   return payload;
+}
+
+async function fetchSupabaseMemberForInvite(memberId) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server to send invites.");
+  }
+
+  const encodedId = encodeURIComponent(String(memberId || "").trim());
+  const baseSelect = "id,email,display_name,first_name,last_name,roles_json,profile_id";
+  const preferredSelect = `${baseSelect},invite_sent_at`;
+
+  const requestMember = async (selectClause) => {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/members?id=eq.${encodedId}&select=${encodeURIComponent(selectClause)}`, {
+      method: "GET",
+      headers: supabaseAdminHeaders()
+    });
+    const payload = await response.json().catch(() => []);
+    return { response, payload };
+  };
+
+  let result = await requestMember(preferredSelect);
+  if (!result.response.ok) {
+    const errorText = JSON.stringify(result.payload || {});
+    if (/invite_sent_at/i.test(errorText)) {
+      result = await requestMember(baseSelect);
+    }
+  }
+
+  if (!result.response.ok) {
+    const message = result.payload?.message || result.payload?.error || `Could not load member (${result.response.status}).`;
+    throw new Error(message);
+  }
+
+  const rows = Array.isArray(result.payload) ? result.payload : [];
+  return rows[0] || null;
+}
+
+async function markSupabaseMemberInviteSent(memberId) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+
+  const encodedId = encodeURIComponent(String(memberId || "").trim());
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/members?id=eq.${encodedId}`, {
+    method: "PATCH",
+    headers: supabaseAdminHeaders({
+      "Content-Type": "application/json",
+      Prefer: "return=minimal"
+    }),
+    body: JSON.stringify({ invite_sent_at: new Date().toISOString() })
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const text = JSON.stringify(payload || {});
+    if (/invite_sent_at/i.test(text)) {
+      return;
+    }
+    const message = payload?.message || payload?.error || `Could not update invite status (${response.status}).`;
+    throw new Error(message);
+  }
 }
 
 function isValidFeePeriodToken(period) {
@@ -222,18 +285,28 @@ app.post("/api/auth/invites", async (req, res) => {
     let memberId = requestedMemberId;
 
     if (requestedMemberId) {
-      const bootstrap = await getBootstrapData();
-      const member = Array.isArray(bootstrap?.members)
-        ? bootstrap.members.find((entry) => String(entry.id) === requestedMemberId)
-        : null;
+      const member = await fetchSupabaseMemberForInvite(requestedMemberId);
       if (!member) {
         res.status(404).json({ error: "Member not found." });
         return;
       }
+
+      if (member.profile_id) {
+        res.status(409).json({ error: "This member already activated their account." });
+        return;
+      }
+
+      if (member.invite_sent_at) {
+        res.status(409).json({
+          error: `You already invited this member on ${new Date(member.invite_sent_at).toLocaleString("de-AT")}.`
+        });
+        return;
+      }
+
       email = email || String(member.email || "").trim();
-      fullName = fullName || String(member.name || `${member.firstName || ""} ${member.lastName || ""}`.trim()).trim();
+      fullName = fullName || String(member.display_name || `${member.first_name || ""} ${member.last_name || ""}`.trim()).trim();
       if (!roles.length) {
-        roles = Array.isArray(member.roles) ? member.roles.map((role) => String(role || "").trim()).filter(Boolean) : ["player"];
+        roles = Array.isArray(member.roles_json) ? member.roles_json.map((role) => String(role || "").trim()).filter(Boolean) : ["player"];
       }
       memberId = String(member.id);
     }
@@ -248,7 +321,10 @@ app.post("/api/auth/invites", async (req, res) => {
     }
 
     const invite = await sendSupabaseInvite({ email, fullName, roles: roles.length ? roles : ["player"], memberId, req });
-    res.json({ ok: true, email, fullName, roles: roles.length ? roles : ["player"], invite });
+    if (memberId) {
+      await markSupabaseMemberInviteSent(memberId);
+    }
+    res.json({ ok: true, email, fullName, roles: roles.length ? roles : ["player"], invite, memberId: memberId || null });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Could not send invitation."

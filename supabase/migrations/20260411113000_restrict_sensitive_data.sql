@@ -25,6 +25,7 @@ alter table public.player_passes enable row level security;
 
 drop policy if exists "Authenticated users read fees" on public.membership_fees;
 
+drop policy if exists "Finance admins read fees" on public.membership_fees;
 create policy "Finance admins read fees"
 on public.membership_fees
 for select
@@ -33,6 +34,7 @@ using (
   or public.has_role('finance_admin')
 );
 
+drop policy if exists "Restricted roles read player passes" on public.player_passes;
 create policy "Restricted roles read player passes"
 on public.player_passes
 for select
@@ -42,6 +44,7 @@ using (
   or public.has_role('tech_admin')
 );
 
+drop policy if exists "Restricted roles manage player passes" on public.player_passes;
 create policy "Restricted roles manage player passes"
 on public.player_passes
 for all

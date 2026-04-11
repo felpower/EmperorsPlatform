@@ -105,11 +105,13 @@ as $$
   );
 $$;
 
+drop policy if exists "Members can read their own profile" on public.profiles;
 create policy "Members can read their own profile"
 on public.profiles
 for select
 using (id = auth.uid());
 
+drop policy if exists "Admins can read all profiles" on public.profiles;
 create policy "Admins can read all profiles"
 on public.profiles
 for select
@@ -120,6 +122,7 @@ using (
   or public.has_role('tech_admin')
 );
 
+drop policy if exists "Admins manage members" on public.members;
 create policy "Admins manage members"
 on public.members
 for all
@@ -136,11 +139,13 @@ with check (
   or public.has_role('tech_admin')
 );
 
+drop policy if exists "Members can read member list" on public.members;
 create policy "Members can read member list"
 on public.members
 for select
 using (auth.role() = 'authenticated');
 
+drop policy if exists "Finance admins manage fees" on public.membership_fees;
 create policy "Finance admins manage fees"
 on public.membership_fees
 for all
@@ -153,11 +158,13 @@ with check (
   or public.has_role('finance_admin')
 );
 
+drop policy if exists "Authenticated users read fees" on public.membership_fees;
 create policy "Authenticated users read fees"
 on public.membership_fees
 for select
 using (auth.role() = 'authenticated');
 
+drop policy if exists "Coaches and admins manage events" on public.events;
 create policy "Coaches and admins manage events"
 on public.events
 for all
@@ -170,16 +177,19 @@ with check (
   or public.has_role('coach')
 );
 
+drop policy if exists "Authenticated users read events" on public.events;
 create policy "Authenticated users read events"
 on public.events
 for select
 using (auth.role() = 'authenticated');
 
+drop policy if exists "Authenticated users read attendance" on public.event_recipients;
 create policy "Authenticated users read attendance"
 on public.event_recipients
 for select
 using (auth.role() = 'authenticated');
 
+drop policy if exists "Coaches and admins manage attendance" on public.event_recipients;
 create policy "Coaches and admins manage attendance"
 on public.event_recipients
 for all
@@ -192,11 +202,13 @@ with check (
   or public.has_role('coach')
 );
 
+drop policy if exists "Authenticated users read invites" on public.invites;
 create policy "Authenticated users read invites"
 on public.invites
 for select
 using (auth.role() = 'authenticated');
 
+drop policy if exists "Admins and coaches create invites" on public.invites;
 create policy "Admins and coaches create invites"
 on public.invites
 for insert

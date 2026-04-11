@@ -41,6 +41,7 @@ create table if not exists public.members (
   membership_status text not null default 'pending',
   notes text,
   deleted_at timestamptz,
+  invite_sent_at timestamptz,
   created_at timestamptz not null default now(),
   constraint members_membership_status_check
     check (membership_status in ('active', 'pending', 'inactive'))

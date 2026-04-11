@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "import:supabase": "node scripts/import-sqlite-to-supabase.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",
