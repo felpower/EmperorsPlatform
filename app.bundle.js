@@ -317,9 +317,18 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    const data = await response.json();
+    const rawBody = await response.text();
+    let data = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      data = {};
+    }
     if (!response.ok) {
-      throw new Error(data.error || "Could not send invite.");
+      if (response.status === 404) {
+        throw new Error("Invite API is not reachable. Start the backend server (or deploy the API) and try again.");
+      }
+      throw new Error(data.error || data.message || `Could not send invite (${response.status}).`);
     }
     return data;
   }
@@ -2303,6 +2312,41 @@
         }
       };
     });
+    document.querySelectorAll(".invite-member-button").forEach((button) => {
+      button.onclick = async function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const member = memberById(button.dataset.memberId);
+        if (!member || !member.email) return;
+        const inviteState = memberInviteState(member);
+        if (inviteState === "invited") {
+          window.alert("You already invited this person. Wait until they activate their account.");
+          return;
+        }
+        if (inviteState === "activated") {
+          window.alert("This person already activated their account. No invite is needed.");
+          return;
+        }
+        button.disabled = true;
+        try {
+          await inviteMember(member.id);
+          authState.status = `Invite sent to ${member.email}.`;
+          if (shouldUseSupabaseData()) {
+            await loadBootstrapData();
+          } else {
+            member.inviteSentAt = new Date().toISOString();
+          }
+          mount();
+          switchView("members");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("members");
+        } finally {
+          button.disabled = false;
+        }
+      };
+    });
     if (form) {
       form.onsubmit = async function (event) {
         event.preventDefault();
@@ -2524,36 +2568,6 @@
       };
     }
 
-    document.querySelectorAll(".invite-member-button").forEach((button) => {
-      button.onclick = async function () {
-        const member = memberById(button.dataset.memberId);
-        if (!member || !member.email) return;
-        const inviteState = memberInviteState(member);
-        if (inviteState === "invited") {
-          window.alert("You already invited this person. Wait until they activate their account.");
-          return;
-        }
-        if (inviteState === "activated") {
-          window.alert("This person already activated their account. No invite is needed.");
-          return;
-        }
-        try {
-          await inviteMember(member.id);
-          authState.status = `Invite sent to ${member.email}.`;
-          if (shouldUseSupabaseData()) {
-            await loadBootstrapData();
-          } else {
-            member.inviteSentAt = new Date().toISOString();
-          }
-          mount();
-          switchView("members");
-        } catch (error) {
-          authState.status = error.message;
-          mount();
-          switchView("members");
-        }
-      };
-    });
   }
 
   function bindFeeFilters() {
