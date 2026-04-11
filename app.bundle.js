@@ -4,6 +4,8 @@
     publishableKey: "sb_publishable_3DSRw25D8oYpoivsnpVViQ_aIiOX0vy",
     projectRef: "qggypwdmfrkhehmspvsr"
   };
+  const APP_CONFIG = window.__EMPERORS_CONFIG__ || {};
+  const API_BASE_URL = String(APP_CONFIG.apiBaseUrl || "").trim().replace(/\/$/, "");
 
   const demoData = {
     source: "demo",
@@ -78,6 +80,11 @@
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function apiUrl(path) {
+    const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
+    return API_BASE_URL ? `${API_BASE_URL}${normalizedPath}` : normalizedPath;
   }
 
   function loadStoredValue(key, fallback) {
@@ -313,7 +320,7 @@
   }
 
   async function inviteRecipient(payload) {
-    const response = await fetch("/api/auth/invites", {
+    const response = await fetch(apiUrl("/api/auth/invites"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
@@ -1145,7 +1152,7 @@
     }
 
     try {
-      const response = await fetch("/api/bootstrap");
+      const response = await fetch(apiUrl("/api/bootstrap"));
       if (!response.ok) throw new Error(`Bootstrap request failed with ${response.status}`);
       const bootstrap = await response.json();
       applyBootstrap(bootstrap);
@@ -1341,7 +1348,7 @@
       return;
     }
     const memberId = String(memberPayload.memberId || "").trim();
-    const url = memberId ? `/api/members/${memberId}` : "/api/members";
+    const url = memberId ? apiUrl(`/api/members/${memberId}`) : apiUrl("/api/members");
     const method = memberId ? "PUT" : "POST";
     const response = await fetch(url, {
       method,
@@ -1367,7 +1374,7 @@
       await removeMemberViaSupabase(memberId);
       return;
     }
-    const response = await fetch(`/api/members/${memberId}`, { method: "DELETE" });
+    const response = await fetch(apiUrl(`/api/members/${memberId}`), { method: "DELETE" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not delete member.");
     applyBootstrap(payload);
@@ -1378,7 +1385,7 @@
       await undeleteMemberViaSupabase(memberId);
       return;
     }
-    const response = await fetch(`/api/members/${memberId}/undelete`, { method: "POST" });
+    const response = await fetch(apiUrl(`/api/members/${memberId}/undelete`), { method: "POST" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not undelete member.");
     applyBootstrap(payload);
@@ -1389,7 +1396,7 @@
       await mergeMembersViaSupabase({ keepMemberId, removeMemberId, firstName, lastName });
       return;
     }
-    const response = await fetch("/api/members/merge", {
+    const response = await fetch(apiUrl("/api/members/merge"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ keepMemberId, removeMemberId, firstName, lastName })
@@ -1404,7 +1411,7 @@
       await updateFeeStatusesBulkViaSupabase({ feePeriod, status, memberIds });
       return;
     }
-    const response = await fetch("/api/fees/bulk-status", {
+    const response = await fetch(apiUrl("/api/fees/bulk-status"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ feePeriod, status, memberIds })
@@ -1419,7 +1426,7 @@
       await updateFeeRowViaSupabase({ feeId, status, amount, paidAmount, note, iban });
       return;
     }
-    const response = await fetch(`/api/fees/${feeId}`, {
+    const response = await fetch(apiUrl(`/api/fees/${feeId}`), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status, amount, paidAmount, note, iban })
@@ -2702,7 +2709,7 @@
           if (!period) {
             throw new Error("Please select a quarter first.");
           }
-          await downloadFromApi(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`, `SEPA_Lastschrift_${period}.xml`);
+          await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
           authState.status = "SEPA XML exported.";
           mount();
           switchView("fees");
@@ -2979,13 +2986,23 @@
     const searchInput = document.getElementById("member-search-input");
     if (searchInput) {
       searchInput.oninput = function () {
+        const rawValue = String(searchInput.value || "");
+        const cursorStart = Number.isFinite(searchInput.selectionStart) ? searchInput.selectionStart : rawValue.length;
+        const cursorEnd = Number.isFinite(searchInput.selectionEnd) ? searchInput.selectionEnd : rawValue.length;
         memberFilters = {
           ...memberFilters,
-          search: String(searchInput.value || "").trim()
+          search: rawValue
         };
         saveMemberFilters();
         mount();
         switchView("members");
+        const nextSearchInput = document.getElementById("member-search-input");
+        if (nextSearchInput) {
+          nextSearchInput.focus();
+          const safeStart = Math.min(cursorStart, nextSearchInput.value.length);
+          const safeEnd = Math.min(cursorEnd, nextSearchInput.value.length);
+          nextSearchInput.setSelectionRange(safeStart, safeEnd);
+        }
       };
     }
     const clearButton = document.getElementById("clear-member-filters");

@@ -20,12 +20,13 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
-const port = 4173;
+const port = Number(process.env.PORT || 4173);
 const SEPA_GENERATOR_DIR = "C:\\Projekte\\UniWien-SEPAs";
 const SEPA_GENERATOR_SCRIPT = path.join(SEPA_GENERATOR_DIR, "sepa_generator.py");
 const SEPA_GENERATOR_INPUT_CSV = path.join(SEPA_GENERATOR_DIR, "Mitgliedsbeiträge Quartale bezahlt - Sheet1.csv");
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://qggypwdmfrkhehmspvsr.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
+const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
 
 function supabaseAdminHeaders(extra = {}) {
   return {
@@ -258,10 +259,37 @@ await ensureImported({
 });
 
 app.use(express.json());
+app.use((req, res, next) => {
+  const requestOrigin = String(req.headers.origin || "").trim();
+  if (CORS_ORIGIN) {
+    if (CORS_ORIGIN === "*") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    } else {
+      const allowed = CORS_ORIGIN
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      if (requestOrigin && allowed.includes(requestOrigin)) {
+        res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      }
+    }
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
 app.use(express.static(__dirname));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/healthz", (_req, res) => {
+  res.status(200).send("ok");
 });
 
 app.get("/api/bootstrap", async (_req, res) => {
