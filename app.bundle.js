@@ -29,7 +29,7 @@
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
-  const viewIds = ["dashboard", "members", "fees", "user", "passes", "events", "invites", "settings"];
+  const viewIds = ["dashboard", "members", "fees", "user", "passes", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -76,6 +76,11 @@
     ready: false,
     loading: true,
     roles: []
+  };
+  let recoveryState = {
+    show: false,
+    status: "",
+    loading: false
   };
 
   function clone(value) {
@@ -317,6 +322,54 @@
       throw response.error;
     }
     syncAuthSession(null);
+  }
+
+  async function setRecoveryPassword(password) {
+    if (!supabaseClient) {
+      throw new Error("Supabase auth is not configured.");
+    }
+    recoveryState.loading = true;
+    recoveryState.status = "Setting password...";
+    try {
+      const response = await supabaseClient.auth.updateUser({ password: String(password || "") });
+      if (response.error) {
+        throw response.error;
+      }
+      recoveryState.status = "Password set successfully! Redirecting to sign in...";
+      setTimeout(() => {
+        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
+      }, 1500);
+    } catch (error) {
+      recoveryState.status = error.message || "Failed to set password.";
+    } finally {
+      recoveryState.loading = false;
+    }
+  }
+
+  function renderRecoveryGate() {
+    const passwordInput = document.getElementById("recovery-password");
+    const email = authState.user?.email || "your email";
+    return `
+      <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
+        <div>
+          <p class="eyebrow">Set Your Password</p>
+          <h3 style="margin-top: 4px;">Complete Your Registration</h3>
+          <p class="muted">You were invited to join Uni Wien Emperors. Set a password to activate your account.</p>
+        </div>
+        <div>
+          <p><strong>Email:</strong> ${email}</p>
+        </div>
+        <div class="form-grid">
+          <label>New Password<input id="recovery-password" type="password" autocomplete="new-password" placeholder="••••••••" minlength="6" /></label>
+          <label>Confirm Password<input id="recovery-password-confirm" type="password" autocomplete="new-password" placeholder="••••••••" minlength="6" /></label>
+        </div>
+        <div class="button-row">
+          <button id="recovery-submit" type="button" class="primary-button" ${recoveryState.loading ? "disabled" : ""}>Set Password</button>
+        </div>
+        ${recoveryState.status ? `<p class="meta" style="color: ${recoveryState.status.includes("successfully") ? "#00aa00" : "#ff6b6b"};">${recoveryState.status}</p>` : ""}
+        <p class="meta">Your password must be at least 6 characters long.</p>
+      </article>
+    `;
   }
 
   async function inviteRecipient(payload) {
@@ -2075,6 +2128,11 @@
   function getRouteView() {
     const hash = window.location.hash.replace("#", "").trim();
     if (/^user\//i.test(hash)) return "user";
+    // Check for recovery token in URL params
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("type") && params.get("type") === "recovery") {
+      return "recovery";
+    }
     return viewIds.includes(hash) ? hash : "dashboard";
   }
 
@@ -2757,6 +2815,75 @@
         }
       };
     }
+  }
+
+  function bindRecoveryActions() {
+    const submitButton = document.getElementById("recovery-submit");
+    if (submitButton) {
+      submitButton.onclick = async function () {
+        const passwordInput = document.getElementById("recovery-password");
+        const confirmInput = document.getElementById("recovery-password-confirm");
+        const password = String(passwordInput?.value || "").trim();
+        const confirm = String(confirmInput?.value || "").trim();
+        
+        if (!password) {
+          recoveryState.status = "Password is required.";
+          mount();
+          return;
+        }
+        if (password.length < 6) {
+          recoveryState.status = "Password must be at least 6 characters.";
+          mount();
+          return;
+        }
+        if (password !== confirm) {
+          recoveryState.status = "Passwords do not match.";
+          mount();
+          return;
+        }
+        
+        try {
+          await setRecoveryPassword(password);
+          mount();
+        } catch (error) {
+          recoveryState.status = error.message;
+          mount();
+        }
+      };
+    }
+  }
+
+  function bindAuthActions() {
+    const signInButton = document.getElementById("auth-sign-in");
+    if (signInButton) {
+      signInButton.onclick = async function () {
+        const emailInput = document.getElementById("auth-email");
+        const passwordInput = document.getElementById("auth-password");
+        try {
+          await signInWithEmailPassword(String(emailInput?.value || ""), String(passwordInput?.value || ""));
+          await loadBootstrapData();
+          authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
+          mount();
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+        }
+      };
+    }
+
+    const signOutButton = document.getElementById("auth-sign-out");
+    if (signOutButton) {
+      signOutButton.onclick = async function () {
+        try {
+          await signOut();
+          authState.status = "Signed out.";
+          mount();
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+        }
+      };
+    }
 
     const adminInviteRoleSelect = document.getElementById("admin-invite-role");
     if (adminInviteRoleSelect) {
@@ -3193,12 +3320,14 @@
       document.getElementById("events").innerHTML = renderEvents();
       document.getElementById("invites").innerHTML = renderInvites();
       document.getElementById("settings").innerHTML = renderSettings();
+      document.getElementById("recovery").innerHTML = renderRecoveryGate();
       bindMemberActions();
       bindUserPageActions();
       bindMemberFilters();
       bindFeeFilters();
       bindFeeEditModeActions();
       bindAuthActions();
+      bindRecoveryActions();
       bindTableExports();
       bindTableSorts();
       switchView(getRouteView());

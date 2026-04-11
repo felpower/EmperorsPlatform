@@ -15,6 +15,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "https://qggypwdmfrkhehmspvsr.s
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
 const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
+const SERVE_STATIC_FRONTEND = String(process.env.SERVE_STATIC_FRONTEND || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
 
 let localDbApi = null;
 let localDbUnavailableReason = "";
@@ -87,6 +88,10 @@ async function sendSupabaseInvite({ email, fullName, roles, memberId, req }) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const errorText = `${payload?.msg || payload?.error_description || payload?.error || ""}`.toLowerCase();
+    if (response.status === 429 || errorText.includes("rate limit")) {
+      throw new Error("Supabase email rate limit exceeded. Configure a custom SMTP provider in Supabase Auth, or wait and try again later.");
+    }
     throw new Error(payload?.msg || payload?.error_description || payload?.error || `Invite failed (${response.status}).`);
   }
   return payload;
@@ -301,7 +306,9 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(__dirname));
+if (SERVE_STATIC_FRONTEND) {
+  app.use(express.static(__dirname));
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
