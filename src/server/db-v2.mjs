@@ -133,16 +133,16 @@ function mapFeeStatus(value, { treatBlankAsNotCollected = false } = {}) {
   const normalized = text.toLowerCase();
   if (!normalized) {
     return treatBlankAsNotCollected
-      ? { status: "not_collected", paidCents: 0, note: "not collected" }
+      ? { status: "not_collected", paidCents: 0, note: null }
       : null;
   }
-  if (["paid", "paid with fees", "paid rookie"].includes(normalized)) return { status: "paid", paidCents: 8250, note: text };
-  if (["pending", "not paid"].includes(normalized)) return { status: "pending", paidCents: 0, note: text };
-  if (["not collected", "not_collected", "notcollected"].includes(normalized)) return { status: "not_collected", paidCents: 0, note: text };
-  if (normalized === "exempt") return { status: "exempt", paidCents: 0, note: text };
-  if (normalized === "exit") return { status: "exit", paidCents: 0, note: text };
-  if (normalized === "n/a") return { status: "not_applicable", paidCents: 0, note: text };
-  return { status: "partial", paidCents: 0, note: text };
+  if (["paid", "paid with fees", "paid rookie"].includes(normalized)) return { status: "paid", paidCents: 8250, note: null };
+  if (["pending", "not paid"].includes(normalized)) return { status: "pending", paidCents: 0, note: null };
+  if (["not collected", "not_collected", "notcollected"].includes(normalized)) return { status: "not_collected", paidCents: 0, note: null };
+  if (normalized === "exempt") return { status: "exempt", paidCents: 0, note: null };
+  if (normalized === "exit") return { status: "exit", paidCents: 0, note: null };
+  if (normalized === "n/a") return { status: "not_applicable", paidCents: 0, note: null };
+  return { status: "partial", paidCents: 0, note: null };
 }
 
 function normalizeFeeStatusForUpdate(value) {
@@ -656,7 +656,7 @@ export async function ensureImported({ playerCsvPath, feesCsvPath, clubeeXlsxPat
         rookie: toBool(row.Rookie),
         inClubee: toBool(row["In Clubee"]),
         membershipStatus: toBool(row.Active) ? "active" : "inactive",
-        notes: String(row["Column 1"] || "").trim(),
+        notes: "",
         playerPass: null
       });
     }
@@ -687,9 +687,7 @@ export async function ensureImported({ playerCsvPath, feesCsvPath, clubeeXlsxPat
     }
     const existing = members.get(normalizedKey);
     const email = String(row["E-Mail"] || "").trim();
-    const description = String(row["Beschreibung (Deutsch)"] || "").trim();
     if (!existing.email && email) existing.email = email;
-    if (description) existing.notes = existing.notes ? `${existing.notes}; ${description}` : description;
   }
 
   for (const row of clubeeRows) {
@@ -833,10 +831,24 @@ export async function ensureFeeCoverage() {
   const targetPeriods = quarterSequence(normalizePeriodToken(quarterFromDate()), 4);
   const existingRows = await all("select member_id as memberId, fee_period as feePeriod from membership_fees");
   const existing = new Set(existingRows.map((row) => `${row.memberId}:${row.feePeriod}`));
+  const lastKnownIbanRows = await all(`
+    select member_id as memberId, fee_period as feePeriod, iban
+    from membership_fees
+    where trim(coalesce(iban, '')) <> ''
+    order by member_id, fee_period desc
+  `);
+  const lastKnownIban = new Map();
+  for (const row of lastKnownIbanRows) {
+    const memberKey = String(row.memberId);
+    if (!lastKnownIban.has(memberKey)) {
+      lastKnownIban.set(memberKey, String(row.iban || "").trim());
+    }
+  }
 
   await run("begin transaction");
   try {
     for (const member of members) {
+      const memberIban = lastKnownIban.get(String(member.id)) || null;
       for (const feePeriod of targetPeriods) {
         const key = `${member.id}:${feePeriod}`;
         if (existing.has(key)) continue;
@@ -844,8 +856,8 @@ export async function ensureFeeCoverage() {
           `
             insert into membership_fees (
               member_id, season_label, fee_period, amount_cents, paid_cents,
-              status, status_note
-            ) values (?, ?, ?, ?, ?, ?, ?)
+              status, iban, status_note
+            ) values (?, ?, ?, ?, ?, ?, ?, ?)
           `,
           [
             member.id,
@@ -854,7 +866,8 @@ export async function ensureFeeCoverage() {
             8250,
             0,
             "not_collected",
-            "not collected"
+            memberIban,
+            null
           ]
         );
       }
@@ -903,7 +916,7 @@ export async function updateFeeRecord(feeId, payload) {
   }
 
   const existing = await get(
-    "select id, amount_cents as amountCents from membership_fees where id = ?",
+    "select id, amount_cents as amountCents, iban from membership_fees where id = ?",
     [normalizedFeeId]
   );
   if (!existing) {
@@ -930,16 +943,20 @@ export async function updateFeeRecord(feeId, payload) {
 
   const note = String(payload.note || "").trim();
   const storedNote = note || null;
+  const nextIban = Object.prototype.hasOwnProperty.call(payload, "iban")
+    ? (String(payload.iban || "").trim() || null)
+    : (existing.iban || null);
   await run(
     `
       update membership_fees
       set status = ?,
           amount_cents = ?,
           paid_cents = ?,
+          iban = ?,
           status_note = ?
       where id = ?
     `,
-    [status, amountCents, paidCents, storedNote, normalizedFeeId]
+    [status, amountCents, paidCents, nextIban, storedNote, normalizedFeeId]
   );
 }
 
@@ -980,6 +997,7 @@ async function getFeeRows() {
       amount_cents as amountCents,
       paid_cents as paidCents,
       status,
+      iban,
       status_note as note
     from membership_fees
     order by season_label, fee_period, member_id
@@ -1232,7 +1250,7 @@ export async function getBootstrapData() {
     permissionsModel: {
       note: "Admins inherit all coach/player/finance/tech capabilities.",
       restrictedAreas: {
-        fees: ["admin", "finance_admin"],
+        fees: ["admin"],
         playerPasses: ["admin", "coach", "tech_admin"]
       }
     },
@@ -1269,6 +1287,7 @@ export async function getBootstrapData() {
       amount: Number(((fee.amountCents || 0) / 100).toFixed(2)),
       paidAmount: Number(((fee.paidCents || 0) / 100).toFixed(2)),
       status: fee.status,
+      iban: fee.iban || "",
       note: fee.note || ""
     })),
     events: [],

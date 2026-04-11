@@ -10,7 +10,7 @@
     permissionsModel: {
       note: "Admins inherit all coach, player, finance, and tech capabilities.",
       restrictedAreas: {
-        fees: ["admin", "finance_admin"],
+        fees: ["admin"],
         playerPasses: ["admin", "coach", "tech_admin"]
       }
     },
@@ -26,7 +26,8 @@
   const FEE_STATUS_FILTER_KEY = "emperors-fee-status-filter";
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
-  const viewIds = ["dashboard", "members", "fees", "passes", "events", "invites", "settings"];
+  const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
+  const viewIds = ["dashboard", "members", "fees", "user", "passes", "events", "invites", "settings"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -57,15 +58,22 @@
   let feeInlineEditId = null;
   let memberMergeMode = false;
   let memberFiltersExpanded = false;
+  let feeFiltersExpanded = false;
   let feeBulkStatus = "paid";
   let selectedFeeMemberIds = [];
+  let selectedUserMemberId = "";
+  let authInviteRole = "admin";
   let teardownMembersStickyHeader = null;
+  let teardownFeesStickyHeader = null;
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
   let authState = {
     mode: "local",
     status: "Local development mode active.",
-    user: null
+    user: null,
+    ready: false,
+    loading: true,
+    roles: []
   };
 
   function clone(value) {
@@ -202,6 +210,128 @@
     return Array.from(new Set(Array.isArray(roles) ? roles.filter(Boolean) : []));
   }
 
+  function isLocalDevHost() {
+    return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  }
+
+  function shouldRequireAuth() {
+    return Boolean(supabaseClient) && !isLocalDevHost();
+  }
+
+  function extractUserRoles(user) {
+    const metadata = user?.user_metadata || {};
+    const appMetadata = user?.app_metadata || {};
+    const rawRoles = Array.isArray(metadata.roles)
+      ? metadata.roles
+      : Array.isArray(appMetadata.roles)
+        ? appMetadata.roles
+        : [];
+    return capabilitySet(rawRoles.map((role) => String(role || "").trim()).filter(Boolean));
+  }
+
+  function primaryRoleFromRoles(roles) {
+    const available = capabilitySet(roles);
+    const preferred = ["admin", "finance_admin", "coach", "tech_admin", "player", "staff"];
+    return preferred.find((role) => available.includes(role)) || "player";
+  }
+
+  function authDisplayName() {
+    const metadata = authState.user?.user_metadata || {};
+    return String(metadata.full_name || authState.user?.email || "").trim();
+  }
+
+  function syncAuthSession(session) {
+    authState.ready = true;
+    authState.loading = false;
+    authState.user = session?.user || null;
+    authState.roles = extractUserRoles(session?.user);
+    if (authState.user) {
+      currentAccessRole = primaryRoleFromRoles(authState.roles);
+      saveStoredValue(ACCESS_KEY, currentAccessRole);
+      authState.mode = "supabase";
+      authState.status = `Signed in as ${authDisplayName() || authState.user.email}.`;
+      return;
+    }
+    currentAccessRole = loadStoredValue(ACCESS_KEY, "admin");
+    authState.mode = supabaseClient ? "supabase" : "local";
+    authState.status = shouldRequireAuth()
+      ? "Sign in with email and password to continue."
+      : (window.location.hostname.includes("localhost") || window.location.hostname === "127.0.0.1"
+        ? "Local database mode active."
+        : "Static preview mode active.");
+  }
+
+  function renderAuthGate() {
+    const authMessage = authState.loading
+      ? "Checking your session..."
+      : shouldRequireAuth()
+        ? "Use your email and password to sign in. If you were invited, set your password from the email you received first."
+        : "Sign in is available for Supabase users, but local demo mode is still active on localhost.";
+
+    return `
+      <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
+        <div>
+          <p class="eyebrow">Authentication</p>
+          <h3 style="margin-top: 4px;">Sign in</h3>
+          <p class="muted">${authMessage}</p>
+        </div>
+        <div class="form-grid">
+          <label>Email<input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+          <label>Password<input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
+        </div>
+        <div class="button-row">
+          <button id="auth-sign-in" type="button" class="primary-button">Sign in</button>
+          <button id="auth-sign-out" type="button" class="ghost-button">Sign out</button>
+        </div>
+        <p class="meta">Members receive an invite email first, then set their password during registration. Admin accounts can be invited the same way.</p>
+      </article>
+    `;
+  }
+
+  async function signInWithEmailPassword(email, password) {
+    if (!supabaseClient) {
+      throw new Error("Supabase auth is not configured.");
+    }
+    const response = await supabaseClient.auth.signInWithPassword({
+      email: String(email || "").trim(),
+      password: String(password || "")
+    });
+    if (response.error) {
+      throw response.error;
+    }
+    syncAuthSession(response.data.session || null);
+  }
+
+  async function signOut() {
+    if (!supabaseClient) return;
+    const response = await supabaseClient.auth.signOut();
+    if (response.error) {
+      throw response.error;
+    }
+    syncAuthSession(null);
+  }
+
+  async function inviteRecipient(payload) {
+    const response = await fetch("/api/auth/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Could not send invite.");
+    }
+    return data;
+  }
+
+  async function inviteMember(memberId) {
+    return inviteRecipient({ memberId });
+  }
+
+  async function inviteAdmin(email, fullName, roles) {
+    return inviteRecipient({ email, fullName, roles });
+  }
+
   function normalizeMember(member, index) {
     const fallbackParts = splitNameParts(member.name || "");
     const firstName = String(member.firstName || fallbackParts.firstName || "").trim();
@@ -239,6 +369,7 @@
       amount: Number(fee.amount || 0),
       paidAmount: Number(fee.paidAmount || 0),
       status: fee.status || "pending",
+      iban: String(fee.iban || "").trim(),
       note: fee.note || ""
     };
   }
@@ -293,6 +424,94 @@
     return state.members.find((item) => String(item.id) === String(memberId)) || null;
   }
 
+  function signedInUserEmail() {
+    return String(authState.user?.email || "").trim().toLowerCase();
+  }
+
+  function signedInUserMemberId() {
+    const metadata = authState.user?.user_metadata || {};
+    const appMetadata = authState.user?.app_metadata || {};
+    return String(metadata.member_id || appMetadata.member_id || "").trim();
+  }
+
+  function canEditMemberProfile(member) {
+    if (!member) return false;
+    if (currentAccessRole === "admin") return true;
+    if (currentAccessRole !== "player") return false;
+
+    const loggedInMemberId = signedInUserMemberId();
+    if (loggedInMemberId && String(member.id) === loggedInMemberId) return true;
+
+    const loggedInEmail = signedInUserEmail();
+    if (!loggedInEmail) return false;
+    return String(member.email || "").trim().toLowerCase() === loggedInEmail;
+  }
+
+  function isOwnProfile(member) {
+    if (!member) return false;
+    const loggedInMemberId = String(signedInUserMemberId() || "").trim();
+    if (loggedInMemberId && String(member.id) === loggedInMemberId) return true;
+    const loggedInEmail = signedInUserEmail();
+    if (!loggedInEmail) return false;
+    return String(member.email || "").trim().toLowerCase() === loggedInEmail;
+  }
+
+  function canViewSensitiveProfileFields(member) {
+    return currentAccessRole === "admin" || isOwnProfile(member);
+  }
+
+  function shiftQuarterToken(token, offset) {
+    const [quarterRaw, yearRaw] = String(token || "Q1_2025").split("_");
+    let quarter = Number(String(quarterRaw || "Q1").replace("Q", "")) || 1;
+    let year = Number(yearRaw || 2025);
+    for (let i = 0; i < Math.abs(offset); i += 1) {
+      if (offset > 0) {
+        quarter += 1;
+        if (quarter > 4) {
+          quarter = 1;
+          year += 1;
+        }
+      } else {
+        quarter -= 1;
+        if (quarter < 1) {
+          quarter = 4;
+          year -= 1;
+        }
+      }
+    }
+    return `Q${quarter}_${year}`;
+  }
+
+  function profileQuarterWindowTokens() {
+    const current = currentQuarterToken();
+    return [
+      shiftQuarterToken(current, -4),
+      shiftQuarterToken(current, -3),
+      shiftQuarterToken(current, -2),
+      shiftQuarterToken(current, -1),
+      current,
+      shiftQuarterToken(current, 1),
+      shiftQuarterToken(current, 2)
+    ];
+  }
+
+  function memberFeesByPeriod(memberId) {
+    const map = new Map();
+    state.fees
+      .filter((fee) => String(fee.memberId) === String(memberId))
+      .forEach((fee) => {
+        if (fee.feePeriod) map.set(fee.feePeriod, fee);
+      });
+    return map;
+  }
+
+  function memberIban(memberId) {
+    const fees = state.fees
+      .filter((fee) => String(fee.memberId) === String(memberId) && String(fee.iban || "").trim())
+      .sort((left, right) => String(right.feePeriod || "").localeCompare(String(left.feePeriod || "")));
+    return fees[0]?.iban || "";
+  }
+
   function memberFirstName(memberId) {
     const member = memberById(memberId);
     if (!member) return "";
@@ -316,6 +535,29 @@
   function statusPill(value, label) {
     const normalized = String(value || "pending").toLowerCase();
     return `<span class="status ${normalized}">${label || statusLabel(normalized)}</span>`;
+  }
+
+  function roleLabel(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    const labels = {
+      player: "Athlete",
+      admin: "Admin",
+      finance_admin: "Finance",
+      tech_admin: "Tech",
+      coach: "Coach",
+      staff: "Staff"
+    };
+    return labels[normalized] || value;
+  }
+
+  function rolePill(value) {
+    return plainPill(roleLabel(value));
+  }
+
+  function userPageMemberIdFromHash() {
+    const hash = String(window.location.hash || "").replace("#", "").trim();
+    const match = hash.match(/^user\/(.+)$/i);
+    return match ? decodeURIComponent(match[1]) : "";
   }
 
   function plainPill(label) {
@@ -349,6 +591,110 @@
     return values.length ? values.join(", ") : emptyLabel;
   }
 
+  function escapeCsvValue(value) {
+    const text = String(value ?? "");
+    if (/[",\n\r]/.test(text)) {
+      return `"${text.replaceAll("\"", "\"\"")}"`;
+    }
+    return text;
+  }
+
+  function downloadBlobFile(content, type, fileName) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadCsv(columns, rows, fileName) {
+    const header = columns.map((column) => escapeCsvValue(column.label)).join(",");
+    const body = rows
+      .map((row) => columns.map((column) => escapeCsvValue(row[column.key])).join(","))
+      .join("\n");
+    const csv = `${header}\n${body}`;
+    downloadBlobFile(csv, "text/csv;charset=utf-8", fileName);
+  }
+
+  function downloadExcel(columns, rows, fileName) {
+    const headerHtml = columns.map((column) => `<th>${String(column.label || "")}</th>`).join("");
+    const bodyHtml = rows
+      .map((row) => `<tr>${columns.map((column) => `<td>${String(row[column.key] ?? "")}</td>`).join("")}</tr>`)
+      .join("");
+    const html = `
+      <html>
+      <head><meta charset="utf-8" /></head>
+      <body>
+        <table>
+          <thead><tr>${headerHtml}</tr></thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    downloadBlobFile(html, "application/vnd.ms-excel;charset=utf-8", fileName);
+  }
+
+  async function downloadFromApi(url, fallbackFileName) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      let message = `Download failed (${response.status})`;
+      try {
+        const payload = await response.json();
+        message = payload?.error || message;
+      } catch {
+        // ignore JSON parse errors for non-JSON error responses
+      }
+      throw new Error(message);
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("content-disposition") || "";
+    const fileNameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i);
+    const extractedName = decodeURIComponent(fileNameMatch?.[1] || fileNameMatch?.[2] || "");
+    const fileName = extractedName || fallbackFileName;
+    const urlObject = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = urlObject;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(urlObject);
+  }
+
+  function memberExportRows() {
+    return sortedMembers().map((member) => ({
+      id: member.id,
+      firstName: member.firstName || "",
+      lastName: member.lastName || "",
+      email: member.email || "",
+      positions: (member.positions || []).join(", "),
+      roles: (member.roles || []).map((role) => roleLabel(role)).join(", "),
+      jerseyNumber: member.jerseyNumber ?? "",
+      membershipStatus: member.membershipStatus || "",
+      passStatus: member.passStatus || "",
+      passExpiry: member.passExpiry || "",
+      deletedAt: member.deletedAt || ""
+    }));
+  }
+
+  function feeExportRows() {
+    return sortedVisibleFees().map((fee) => ({
+      memberId: fee.memberId,
+      firstName: memberFirstName(fee.memberId) || "",
+      lastName: memberLastName(fee.memberId) || "",
+      feePeriod: fee.feePeriod || "",
+      amount: Number(fee.amount || 0).toFixed(2),
+      paidAmount: Number(fee.paidAmount || 0).toFixed(2),
+      status: statusLabel(fee.status),
+      iban: fee.iban || ""
+    }));
+  }
+
   function emptyState(title, copy) {
     return `<article class="setup-card empty-state"><p class="eyebrow">No data yet</p><h3>${title}</h3><p>${copy}</p></article>`;
   }
@@ -360,7 +706,7 @@
         <h3>${title}</h3>
         <p>${copy}</p>
         <div class="pill-row">
-          ${plainPill(`Viewing as ${currentAccessRole}`)}
+          ${plainPill(`Viewing as ${roleLabel(currentAccessRole)}`)}
           ${plainPill("Admins inherit all capabilities")}
         </div>
       </article>
@@ -527,7 +873,208 @@
     saveState();
   }
 
+  function shouldUseSupabaseData() {
+    return Boolean(supabaseClient) && !isLocalDevHost();
+  }
+
+  function parseJsonArrayField(value, fallback = []) {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === "string" && value.trim()) {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  }
+
+  async function loadSupabaseBootstrap() {
+    if (!supabaseClient) return;
+    if (!authState.user) {
+      authState.status = "Sign in with email and password to continue.";
+      return;
+    }
+
+    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
+    const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
+
+    const selectMaybe = async (table, columns, optional = false) => {
+      const response = await supabaseClient.from(table).select(columns);
+      if (response.error) {
+        if (optional) return [];
+        throw response.error;
+      }
+      return response.data || [];
+    };
+
+    const memberRows = await selectMaybe("members", "id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+    const memberRoleRows = canReadAllMemberRolesOnline
+      ? await selectMaybe("member_roles", "profile_id, role_code", true)
+      : await selectMaybe("member_roles", "profile_id, role_code", true);
+    const passRows = canReadPassesOnline
+      ? await selectMaybe("player_passes", "member_id, pass_status, expires_on, federation_reference, notes, updated_at", true)
+      : [];
+    const feeRows = canReadFeesOnline
+      ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
+      : [];
+    const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
+    const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
+    const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
+
+    const rolesByProfile = new Map();
+    (memberRoleRows || []).forEach((row) => {
+      const profileId = String(row.profile_id || "").trim();
+      const roleCode = String(row.role_code || "").trim();
+      if (!profileId || !roleCode) return;
+      const roles = rolesByProfile.get(profileId) || [];
+      roles.push(roleCode);
+      rolesByProfile.set(profileId, roles);
+    });
+
+    const passesByMember = new Map();
+    (passRows || []).forEach((row) => {
+      passesByMember.set(String(row.member_id || ""), row);
+    });
+
+    const feesByMember = new Map();
+    (feeRows || []).forEach((row) => {
+      const memberId = String(row.member_id || "");
+      const list = feesByMember.get(memberId) || [];
+      list.push(row);
+      feesByMember.set(memberId, list);
+    });
+    feesByMember.forEach((rows) => {
+      rows.sort((left, right) => String(right.season_label || right.due_date || right.created_at || "").localeCompare(String(left.season_label || left.due_date || left.created_at || "")));
+    });
+
+    const recipientsByEvent = new Map();
+    (recipientRows || []).forEach((row) => {
+      const eventId = String(row.event_id || "");
+      const list = recipientsByEvent.get(eventId) || [];
+      list.push(row);
+      recipientsByEvent.set(eventId, list);
+    });
+
+    const normalizeDisplayName = (row) => {
+      const firstName = String(row.first_name || "").trim();
+      const lastName = String(row.last_name || "").trim();
+      const fallback = String(row.display_name || "").trim();
+      const displayName = `${firstName} ${lastName}`.trim() || fallback || "Unknown member";
+      return { firstName, lastName, displayName };
+    };
+
+    const members = (memberRows || []).map((row) => {
+      const { firstName, lastName, displayName } = normalizeDisplayName(row);
+      const memberId = String(row.id || "");
+      const pass = passesByMember.get(memberId) || null;
+      const memberFees = feesByMember.get(memberId) || [];
+      const latestFee = memberFees[0] || null;
+      return {
+        id: memberId,
+        firstName,
+        lastName,
+        name: displayName,
+        email: String(row.email || ""),
+        positions: parseJsonArrayField(row.positions_json, []),
+        roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
+        jerseyNumber: row.jersey_number === null || row.jersey_number === undefined ? null : Number(row.jersey_number),
+        active: String(row.membership_status || "") === "active",
+        rookie: false,
+        inClubee: Boolean(row.profile_id),
+        membershipStatus: row.membership_status || "pending",
+        deletedAt: row.deleted_at || null,
+        passStatus: pass?.pass_status || "missing",
+        passExpiry: pass?.expires_on || "",
+        licenseName: pass?.federation_reference || "",
+        feeStatus: latestFee
+          ? String(latestFee.status || (Number(latestFee.paid_cents || 0) >= Number(latestFee.amount_cents || 0) && Number(latestFee.amount_cents || 0) > 0 ? "paid" : (Number(latestFee.paid_cents || 0) > 0 ? "partial" : "pending")))
+          : "pending",
+        notes: String(row.notes || ""),
+        lastInviteResponse: "pending"
+      };
+    });
+
+    const fees = (feeRows || []).map((row) => ({
+      id: String(row.id || ""),
+      memberId: String(row.member_id || ""),
+      season: String(row.season_label || ""),
+      feePeriod: String(row.fee_period || row.season_label || ""),
+      amount: Number(row.amount_cents || 0) / 100,
+      paidAmount: Number(row.paid_cents || 0) / 100,
+      status: String(row.status || (String(row.paid_cents || 0) >= Number(row.amount_cents || 0) && Number(row.amount_cents || 0) > 0 ? "paid" : (Number(row.paid_cents || 0) > 0 ? "partial" : "pending"))),
+      iban: String(row.iban || ""),
+      note: String(row.status_note || "")
+    }));
+
+    const eventRecipientsByEvent = new Map();
+    (recipientRows || []).forEach((row) => {
+      const eventId = String(row.event_id || "");
+      const list = eventRecipientsByEvent.get(eventId) || [];
+      list.push(row);
+      eventRecipientsByEvent.set(eventId, list);
+    });
+
+    const events = (eventRows || []).map((row) => {
+      const recipients = eventRecipientsByEvent.get(String(row.id || "")) || [];
+      return {
+        id: String(row.id || ""),
+        title: String(row.title || ""),
+        type: String(row.event_type || "practice"),
+        date: String(row.starts_at || "").slice(0, 10),
+        location: String(row.location || ""),
+        inviteStatus: recipients.length ? "sent" : "scheduled",
+        attending: recipients.filter((recipient) => recipient.response === "confirmed").map((recipient) => String(recipient.member_id || "")),
+        maybe: recipients.filter((recipient) => recipient.response === "maybe").map((recipient) => String(recipient.member_id || "")),
+        unavailable: recipients.filter((recipient) => recipient.response === "declined").map((recipient) => String(recipient.member_id || ""))
+      };
+    });
+
+    const invites = (inviteRows || []).map((row) => ({
+      id: String(row.id || ""),
+      eventId: String(row.event_id || ""),
+      channel: String(row.channel || "email"),
+      sentAt: String(row.sent_at || ""),
+      recipients: Number(row.recipient_count || 0),
+      opens: 0,
+      confirmations: 0
+    }));
+
+    const currentUserRoles = (memberRoleRows || [])
+      .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
+      .map((row) => String(row.role_code || "").trim())
+      .filter(Boolean);
+    if (currentUserRoles.length) {
+      currentAccessRole = primaryRoleFromRoles(currentUserRoles);
+      saveStoredValue(ACCESS_KEY, currentAccessRole);
+    }
+
+    applyBootstrap({
+      source: "supabase",
+      permissionsModel: demoData.permissionsModel,
+      members,
+      fees,
+      events,
+      invites
+    });
+    authState.status = `Supabase data loaded for ${authDisplayName() || authState.user.email}.`;
+  }
+
+  async function loadBootstrapData() {
+    if (shouldUseSupabaseData()) {
+      await loadSupabaseBootstrap();
+      return;
+    }
+    await loadLocalBootstrap();
+  }
+
   async function loadLocalBootstrap() {
+    if (shouldRequireAuth() && !authState.user) {
+      authState.status = "Sign in with email and password to continue.";
+      return;
+    }
     if (!window.location.hostname.includes("localhost") && window.location.hostname !== "127.0.0.1") {
       authState.status = "Static mode active. Local API is only available on localhost.";
       return;
@@ -549,7 +1096,186 @@
     }
   }
 
+  function normalizeFeeStatusValue(value) {
+    const normalized = String(value || "pending").trim().toLowerCase();
+    const aliases = {
+      paid: "paid",
+      partial: "partial",
+      pending: "pending",
+      "not paid": "pending",
+      not_collected: "not_collected",
+      "not collected": "not_collected",
+      exempt: "exempt",
+      exit: "exit",
+      not_applicable: "not_applicable",
+      "not applicable": "not_applicable"
+    };
+    return aliases[normalized] || "pending";
+  }
+
+  function fullNameFromPayload(firstName, lastName) {
+    const fullName = `${String(firstName || "").trim()} ${String(lastName || "").trim()}`.trim();
+    return fullName || "Unknown member";
+  }
+
+  async function saveMemberViaSupabase(memberPayload) {
+    if (!supabaseClient) throw new Error("Supabase client is not available.");
+
+    const memberId = String(memberPayload.memberId || "").trim();
+    const firstName = String(memberPayload.firstName || "").trim();
+    const lastName = String(memberPayload.lastName || "").trim();
+    const displayName = fullNameFromPayload(firstName, lastName);
+    const positions = Array.isArray(memberPayload.positions)
+      ? Array.from(new Set(memberPayload.positions.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)))
+      : [];
+    const roles = Array.isArray(memberPayload.roles)
+      ? Array.from(new Set(memberPayload.roles.map((entry) => String(entry || "").trim()).filter(Boolean)))
+      : ["player"];
+    const jerseyRaw = String(memberPayload.jerseyNumber ?? "").trim();
+    const jerseyNumber = jerseyRaw === "" ? null : Number(jerseyRaw);
+
+    const patch = {
+      first_name: firstName || null,
+      last_name: lastName || null,
+      display_name: displayName,
+      email: String(memberPayload.email || "").trim(),
+      positions_json: positions,
+      roles_json: roles.length ? roles : ["player"],
+      jersey_number: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+      membership_status: String(memberPayload.membershipStatus || "pending").trim() || "pending",
+      notes: String(memberPayload.notes || "").trim(),
+      deleted_at: null
+    };
+
+    if (memberId) {
+      const updateResponse = await supabaseClient.from("members").update(patch).eq("id", memberId).select("id, profile_id").single();
+      if (updateResponse.error) throw updateResponse.error;
+
+      if (currentAccessRole === "admin" && updateResponse.data?.profile_id) {
+        const profileId = String(updateResponse.data.profile_id);
+        const deleteResponse = await supabaseClient.from("member_roles").delete().eq("profile_id", profileId);
+        if (deleteResponse.error) throw deleteResponse.error;
+        const insertRows = (roles.length ? roles : ["player"]).map((role) => ({ profile_id: profileId, role_code: role }));
+        const insertResponse = await supabaseClient.from("member_roles").insert(insertRows);
+        if (insertResponse.error) throw insertResponse.error;
+      }
+    } else {
+      const insertResponse = await supabaseClient.from("members").insert([patch]);
+      if (insertResponse.error) throw insertResponse.error;
+    }
+
+    await loadBootstrapData();
+  }
+
+  async function removeMemberViaSupabase(memberId) {
+    const response = await supabaseClient
+      .from("members")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", memberId);
+    if (response.error) throw response.error;
+    await loadBootstrapData();
+  }
+
+  async function undeleteMemberViaSupabase(memberId) {
+    const response = await supabaseClient.from("members").update({ deleted_at: null }).eq("id", memberId);
+    if (response.error) throw response.error;
+    await loadBootstrapData();
+  }
+
+  async function mergeMembersViaSupabase({ keepMemberId, removeMemberId }) {
+    if (!supabaseClient) throw new Error("Supabase client is not available.");
+
+    const keepId = String(keepMemberId || "").trim();
+    const removeId = String(removeMemberId || "").trim();
+    if (!keepId || !removeId || keepId === removeId) {
+      throw new Error("Keep and remove member must be different.");
+    }
+
+    const feeMove = await supabaseClient.from("membership_fees").update({ member_id: keepId }).eq("member_id", removeId);
+    if (feeMove.error) throw feeMove.error;
+
+    const keepPass = await supabaseClient.from("player_passes").select("id").eq("member_id", keepId).maybeSingle();
+    if (keepPass.error) throw keepPass.error;
+    const removePass = await supabaseClient.from("player_passes").select("id").eq("member_id", removeId).maybeSingle();
+    if (removePass.error) throw removePass.error;
+    if (removePass.data?.id) {
+      if (keepPass.data?.id) {
+        const deletePass = await supabaseClient.from("player_passes").delete().eq("member_id", removeId);
+        if (deletePass.error) throw deletePass.error;
+      } else {
+        const movePass = await supabaseClient.from("player_passes").update({ member_id: keepId }).eq("member_id", removeId);
+        if (movePass.error) throw movePass.error;
+      }
+    }
+
+    const deleteMember = await supabaseClient.from("members").delete().eq("id", removeId);
+    if (deleteMember.error) throw deleteMember.error;
+
+    await loadBootstrapData();
+  }
+
+  async function updateFeeStatusesBulkViaSupabase({ feePeriod, status, memberIds }) {
+    if (!supabaseClient) throw new Error("Supabase client is not available.");
+
+    const normalizedStatus = normalizeFeeStatusValue(status);
+    const ids = (Array.isArray(memberIds) ? memberIds : []).map((id) => String(id || "").trim()).filter(Boolean);
+    if (!ids.length) throw new Error("Select at least one member.");
+
+    const query = await supabaseClient
+      .from("membership_fees")
+      .select("id, amount_cents, paid_cents")
+      .eq("fee_period", String(feePeriod || ""))
+      .in("member_id", ids);
+    if (query.error) throw query.error;
+
+    const rows = query.data || [];
+    for (const row of rows) {
+      const amountCents = Number(row.amount_cents || 0);
+      let paidCents = Number(row.paid_cents || 0);
+      if (normalizedStatus === "paid") paidCents = amountCents;
+      else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
+      else paidCents = 0;
+
+      const update = await supabaseClient
+        .from("membership_fees")
+        .update({ status: normalizedStatus, paid_cents: paidCents })
+        .eq("id", row.id);
+      if (update.error) throw update.error;
+    }
+
+    await loadBootstrapData();
+  }
+
+  async function updateFeeRowViaSupabase({ feeId, status, amount, paidAmount, note, iban }) {
+    if (!supabaseClient) throw new Error("Supabase client is not available.");
+
+    const normalizedStatus = normalizeFeeStatusValue(status);
+    const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
+    let paidCents = Math.max(0, Math.round(Number(paidAmount || 0) * 100));
+
+    if (normalizedStatus === "paid") paidCents = amountCents;
+    else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
+
+    const response = await supabaseClient
+      .from("membership_fees")
+      .update({
+        status: normalizedStatus,
+        amount_cents: amountCents,
+        paid_cents: paidCents,
+        status_note: String(note || "").trim() || null,
+        iban: String(iban || "").trim() || null
+      })
+      .eq("id", String(feeId || ""));
+    if (response.error) throw response.error;
+
+    await loadBootstrapData();
+  }
+
   async function saveMember(memberPayload) {
+    if (shouldUseSupabaseData()) {
+      await saveMemberViaSupabase(memberPayload);
+      return;
+    }
     const memberId = String(memberPayload.memberId || "").trim();
     const url = memberId ? `/api/members/${memberId}` : "/api/members";
     const method = memberId ? "PUT" : "POST";
@@ -573,6 +1299,10 @@
   }
 
   async function removeMember(memberId) {
+    if (shouldUseSupabaseData()) {
+      await removeMemberViaSupabase(memberId);
+      return;
+    }
     const response = await fetch(`/api/members/${memberId}`, { method: "DELETE" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not delete member.");
@@ -580,6 +1310,10 @@
   }
 
   async function undeleteMember(memberId) {
+    if (shouldUseSupabaseData()) {
+      await undeleteMemberViaSupabase(memberId);
+      return;
+    }
     const response = await fetch(`/api/members/${memberId}/undelete`, { method: "POST" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not undelete member.");
@@ -587,6 +1321,10 @@
   }
 
   async function mergeMemberRecords({ keepMemberId, removeMemberId, firstName, lastName }) {
+    if (shouldUseSupabaseData()) {
+      await mergeMembersViaSupabase({ keepMemberId, removeMemberId, firstName, lastName });
+      return;
+    }
     const response = await fetch("/api/members/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -598,6 +1336,10 @@
   }
 
   async function updateFeeStatusesBulk({ feePeriod, status, memberIds }) {
+    if (shouldUseSupabaseData()) {
+      await updateFeeStatusesBulkViaSupabase({ feePeriod, status, memberIds });
+      return;
+    }
     const response = await fetch("/api/fees/bulk-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -608,15 +1350,37 @@
     applyBootstrap(payload);
   }
 
-  async function updateFeeRow({ feeId, status, amount, paidAmount, note }) {
+  async function updateFeeRow({ feeId, status, amount, paidAmount, note, iban }) {
+    if (shouldUseSupabaseData()) {
+      await updateFeeRowViaSupabase({ feeId, status, amount, paidAmount, note, iban });
+      return;
+    }
     const response = await fetch(`/api/fees/${feeId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, amount, paidAmount, note })
+      body: JSON.stringify({ status, amount, paidAmount, note, iban })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not update fee row.");
     applyBootstrap(payload);
+  }
+
+  async function updateMemberSensitiveFinance({ memberId, iban, statusByFeeId }) {
+    if (currentAccessRole !== "admin") {
+      throw new Error("Only admins can change IBAN or quarter payment statuses.");
+    }
+    const memberFees = state.fees.filter((fee) => String(fee.memberId) === String(memberId));
+    const ibanValue = String(iban || "").trim();
+    for (const fee of memberFees) {
+      await updateFeeRow({
+        feeId: fee.id,
+        status: statusByFeeId[String(fee.id)] || fee.status,
+        amount: Number(fee.amount || 0),
+        paidAmount: Number(fee.paidAmount || 0),
+        note: "",
+        iban: ibanValue
+      });
+    }
   }
 
   function computeDashboardStats() {
@@ -631,7 +1395,12 @@
   function renderHeroNotice() {
     const heroActions = document.querySelector(".hero-actions");
     if (!heroActions) return;
-    const sourceLabel = bootstrapMeta.source === "local-sqlite" ? "SQLite localhost" : "Saved local data";
+    const sourceLabel = bootstrapMeta.source === "supabase"
+      ? "Supabase"
+      : bootstrapMeta.source === "local-sqlite"
+        ? "SQLite localhost"
+        : "Saved local data";
+    const signedInLabel = authState.user ? authDisplayName() || authState.user.email : "Not signed in";
     heroActions.innerHTML = `
       <div class="hero-stack">
         <div class="notice is-live">
@@ -639,32 +1408,48 @@
           <span>${authState.status} Source: ${sourceLabel}.</span>
         </div>
         <div class="toolbar-row">
-          <label class="role-switcher">
-            <span>Access preview</span>
-            <select id="access-role-select">
-              ${accessRoleOptions.map((role) => `<option value="${role}" ${role === currentAccessRole ? "selected" : ""}>${role}</option>`).join("")}
-            </select>
-          </label>
+          ${authState.user ? `<div class="role-switcher"><span>Signed in</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : `<label class="role-switcher"><span>Access preview</span><select id="access-role-select">${accessRoleOptions.map((role) => `<option value="${role}" ${role === currentAccessRole ? "selected" : ""}>${roleLabel(role)}</option>`).join("")}</select></label>`}
           <div class="button-row">
-            <button id="reload-local" class="ghost-button" type="button">Reload Local Data</button>
+            ${authState.user ? `<button id="auth-sign-out-header" class="ghost-button" type="button">Sign out</button>` : `<button id="reload-local" class="ghost-button" type="button">Reload Local Data</button>`}
             <button id="export-demo" class="ghost-button" type="button">Export JSON</button>
           </div>
         </div>
       </div>
     `;
-    document.getElementById("access-role-select").onchange = function (event) {
-      currentAccessRole = event.target.value;
-      saveStoredValue(ACCESS_KEY, currentAccessRole);
-      mount();
-    };
-    document.getElementById("reload-local").onclick = async function () {
-      await loadLocalBootstrap();
-      mount();
-    };
+    const accessRoleSelect = document.getElementById("access-role-select");
+    if (accessRoleSelect) {
+      accessRoleSelect.onchange = function (event) {
+        currentAccessRole = event.target.value;
+        saveStoredValue(ACCESS_KEY, currentAccessRole);
+        mount();
+      };
+    }
+    const reloadLocalButton = document.getElementById("reload-local");
+    if (reloadLocalButton) {
+      reloadLocalButton.onclick = async function () {
+        await loadBootstrapData();
+        mount();
+      };
+    }
+    const signOutHeaderButton = document.getElementById("auth-sign-out-header");
+    if (signOutHeaderButton) {
+      signOutHeaderButton.onclick = async function () {
+        try {
+          await signOut();
+          authState.status = "Signed out.";
+          mount();
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+        }
+      };
+    }
     document.getElementById("export-demo").onclick = exportState;
   }
-
   function renderDashboard() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
     const stats = computeDashboardStats();
     const attentionMembers = state.members.filter((member) => ["expiring", "expired", "missing", "pending"].includes(member.passStatus) || member.feeStatus !== "paid").slice(0, 8);
     return `
@@ -708,8 +1493,13 @@
   }
 
   function renderMembers() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
     const rows = sortedMembers();
     const options = memberFilterOptions();
+    const canManageMembers = currentAccessRole === "admin" || currentAccessRole === "coach";
+    const canSeeSensitiveMemberColumns = canManageMembers;
     const adminActionsEnabled = currentAccessRole === "admin" && memberMergeMode;
     const mergeControls = currentAccessRole === "admin"
       ? `<button class="ghost-button" id="toggle-member-admin-mode" type="button">${memberMergeMode ? "Disable admin mode" : "Enable admin mode"}</button>`
@@ -719,10 +1509,33 @@
       : "";
     const showMergeButton = adminActionsEnabled;
     const showMemberIdColumn = showMergeButton;
+    const showActionColumn = canManageMembers;
+    const showProfileColumn = true;
+    const visibleColumnCount =
+      (showMemberIdColumn ? 1 : 0) +
+      1 +
+      1 +
+      1 +
+      1 +
+      1 +
+      (showProfileColumn ? 1 : 0) +
+      (canSeeSensitiveMemberColumns ? 1 : 0) +
+      (canSeeSensitiveMemberColumns ? 1 : 0) +
+      (showActionColumn ? 1 : 0);
     return `
       <div class="section-head">
         <div><p class="eyebrow">Roster</p><h3>Members, roles, and positions</h3></div>
-        <div class="button-row"><button class="primary-button" id="open-member-dialog" type="button">Add member</button>${mergeControls}</div>
+        <div class="button-row">
+          <details class="export-menu">
+            <summary class="ghost-button export-menu-trigger">Export</summary>
+            <div class="export-menu-list">
+              <button class="ghost-button small-button" id="export-members-csv-option" type="button">CSV</button>
+              <button class="ghost-button small-button" id="export-members-excel-option" type="button">Excel</button>
+            </div>
+          </details>
+          ${canManageMembers ? `<button class="primary-button" id="open-member-dialog" type="button">Add member</button>` : ""}
+          ${mergeControls}
+        </div>
       </div>
       ${mergeHint}
       <article class="card filter-card members-filter-sticky members-filter-card" style="margin-bottom: 14px;">
@@ -749,7 +1562,7 @@
                 ${options.roles.map((value) => `
                   <label class="status-check">
                     <input type="checkbox" class="member-filter-checkbox" data-member-filter="roles" value="${value}" ${memberFilters.roles.includes(value) ? "checked" : ""} />
-                    <span>${value}</span>
+                    <span>${roleLabel(value)}</span>
                   </label>
                 `).join("") || `<span class="meta">No roles</span>`}
               </div>
@@ -779,10 +1592,11 @@
       </article>
       <div class="table-wrap">
         <table>
-          <thead><tr>${showMemberIdColumn ? `<th>${renderSortButton("members", "id", "ID")}</th>` : ""}<th>${renderSortButton("members", "firstName", "First name")}</th><th>${renderSortButton("members", "lastName", "Last name")}</th><th>Positions</th><th>Roles</th><th>${renderSortButton("members", "jerseyNumber", "Jersey")}</th><th>Membership</th><th>${renderSortButton("members", "passStatus", "Pass")}</th><th>Actions</th></tr></thead>
+          <thead><tr>${showProfileColumn ? `<th>Profile</th>` : ""}${showMemberIdColumn ? `<th>${renderSortButton("members", "id", "ID")}</th>` : ""}<th>${renderSortButton("members", "firstName", "First name")}</th><th>${renderSortButton("members", "lastName", "Last name")}</th><th>Positions</th><th>Roles</th><th>${renderSortButton("members", "jerseyNumber", "Jersey")}</th>${canSeeSensitiveMemberColumns ? `<th>Membership</th><th>${renderSortButton("members", "passStatus", "Pass")}</th>` : ""}${showActionColumn ? `<th>Actions</th>` : ""}</tr></thead>
           <tbody>
             ${rows.map((member) => `
               <tr>
+                ${showProfileColumn ? `<td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${member.id}" aria-label="Open profile"></button></td>` : ""}
                 ${showMemberIdColumn ? `<td><span class="meta">${member.id}</span></td>` : ""}
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
@@ -801,45 +1615,182 @@
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<details class="member-inline-multiselect" data-member-id="${member.id}" data-member-multi="roles"><summary>${(member.roles || []).length ? `${(member.roles || []).length} selected` : "Select roles"}</summary><div class="member-inline-multiselect-options">${Array.from(new Set([...memberRoleOptions, ...(member.roles || [])])).map((value) => `<label class="status-check"><input type="checkbox" class="member-inline-option" data-member-id="${member.id}" data-member-multi="roles" value="${value}" ${(member.roles || []).includes(value) ? "checked" : ""} /><span>${value}</span></label>`).join("")}</div></details>`
-                    : `<div class="pill-row dense-row">${member.roles.length ? member.roles.map(plainPill).join(" ") : `<span class="meta">-</span>`}</div>`}
+                    ? `<details class="member-inline-multiselect" data-member-id="${member.id}" data-member-multi="roles"><summary>${(member.roles || []).length ? `${(member.roles || []).length} selected` : "Select roles"}</summary><div class="member-inline-multiselect-options">${Array.from(new Set([...memberRoleOptions, ...(member.roles || [])])).map((value) => `<label class="status-check"><input type="checkbox" class="member-inline-option" data-member-id="${member.id}" data-member-multi="roles" value="${value}" ${(member.roles || []).includes(value) ? "checked" : ""} /><span>${roleLabel(value)}</span></label>`).join("")}</div></details>`
+                    : `<div class="pill-row dense-row">${member.roles.length ? member.roles.map(rolePill).join(" ") : `<span class="meta">-</span>`}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
                     ? `<input type="number" min="0" class="member-inline-input member-inline-jersey" data-member-id="${member.id}" value="${member.jerseyNumber ?? ""}" />`
                     : (member.jerseyNumber ?? "-")}
                 </td>
-                <td>
-                  ${adminActionsEnabled && !member.deletedAt
-                    ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${member.membershipStatus === "active" ? "selected" : ""}>active</option><option value="pending" ${member.membershipStatus === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${member.membershipStatus === "inactive" ? "selected" : ""}>inactive</option></select>`
-                    : (member.deletedAt ? statusPill("deleted", "deleted") : statusPill(member.membershipStatus))}
-                </td>
-                <td>${statusPill(member.passStatus)}<div class="meta">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : member.licenseName || "No pass data"}</div></td>
-                <td>
-                  <div class="action-row">
-                    ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button member-inline-save-button" type="button" data-member-id="${member.id}">Save</button>` : `<button class="ghost-button small-button edit-member-button" type="button" data-member-id="${member.id}">Edit</button>`}
-                    ${showMergeButton ? `<button class="ghost-button small-button merge-member-button" type="button" data-member-id="${member.id}">Merge</button>` : ""}
-                    ${adminActionsEnabled && member.deletedAt ? `<button class="ghost-button small-button undelete-member-button" type="button" data-member-id="${member.id}">Undelete</button>` : ""}
-                    ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button danger-button delete-member-button" type="button" data-member-id="${member.id}">Delete</button>` : ""}
-                  </div>
-                </td>
+                ${canSeeSensitiveMemberColumns ? `
+                  <td>
+                    ${adminActionsEnabled && !member.deletedAt
+                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${member.membershipStatus === "active" ? "selected" : ""}>active</option><option value="pending" ${member.membershipStatus === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${member.membershipStatus === "inactive" ? "selected" : ""}>inactive</option></select>`
+                      : (member.deletedAt ? statusPill("deleted", "deleted") : statusPill(member.membershipStatus))}
+                  </td>
+                  <td>${statusPill(member.passStatus)}<div class="meta">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : member.licenseName || "No pass data"}</div></td>
+                ` : ""}
+                ${showActionColumn ? `
+                  <td>
+                    <div class="action-row">
+                      ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button member-inline-save-button" type="button" data-member-id="${member.id}">Save</button>` : `<button class="ghost-button small-button edit-member-button" type="button" data-member-id="${member.id}">Edit</button>`}
+                      ${currentAccessRole === "admin" && !member.deletedAt && member.email ? `<button class="ghost-button small-button invite-member-button" type="button" data-member-id="${member.id}">Invite</button>` : ""}
+                      ${showMergeButton ? `<button class="ghost-button small-button merge-member-button" type="button" data-member-id="${member.id}">Merge</button>` : ""}
+                      ${adminActionsEnabled && member.deletedAt ? `<button class="ghost-button small-button undelete-member-button" type="button" data-member-id="${member.id}">Undelete</button>` : ""}
+                      ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button danger-button delete-member-button" type="button" data-member-id="${member.id}">Delete</button>` : ""}
+                    </div>
+                  </td>
+                ` : ""}
               </tr>
-            `).join("") || `<tr><td colspan="${showMemberIdColumn ? 9 : 8}" class="meta">No members match the selected filters.</td></tr>`}
+            `).join("") || `<tr><td colspan="${visibleColumnCount}" class="meta">No members match the selected filters.</td></tr>`}
           </tbody>
         </table>
       </div>
     `;
   }
 
+  function renderUserPage() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
+    const hashMemberId = userPageMemberIdFromHash();
+    const memberId = hashMemberId || selectedUserMemberId;
+    const member = memberById(memberId);
+
+    if (!member) {
+      return emptyState("No member selected", "Open a profile from Members or Membership Finance to view and edit details.");
+    }
+
+    const canEditProfile = canEditMemberProfile(member);
+    const editDisabled = canEditProfile ? "" : "disabled";
+    const canViewSensitive = canViewSensitiveProfileFields(member);
+    const canEditSensitive = currentAccessRole === "admin";
+    const sensitiveDisabled = canEditSensitive ? "" : "disabled";
+    const canEditRolePosition = currentAccessRole === "admin";
+    const rolePositionDisabled = canEditRolePosition ? "" : "disabled";
+    const canEditNotes = currentAccessRole === "admin";
+    const notesDisabled = canEditNotes ? "" : "disabled";
+    const feeMap = memberFeesByPeriod(member.id);
+    const periods = profileQuarterWindowTokens();
+    const firstIban = memberIban(member.id);
+    const sensitiveSection = canViewSensitive
+      ? `
+      <article class="card compact-card" style="display:grid; gap: 10px;">
+        <div>
+          <p class="eyebrow">Sensitive finance</p>
+          <h3 style="margin-top: 4px;">IBAN and quarter payment statuses</h3>
+        </div>
+        ${canEditSensitive ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIban}" ${sensitiveDisabled} /></label>` : ""}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Quarter</th><th>Status</th></tr></thead>
+            <tbody>
+              ${periods.map((period) => {
+                const fee = feeMap.get(period);
+                if (!fee) {
+                  return `<tr><td>${formatFeePeriod(period)}</td><td><span class="meta">No record</span></td></tr>`;
+                }
+                return `<tr><td>${formatFeePeriod(period)}</td><td><select class="user-sensitive-fee-status" data-fee-id="${fee.id}" ${sensitiveDisabled}><option value="paid" ${fee.status === "paid" ? "selected" : ""}>paid</option><option value="partial" ${fee.status === "partial" ? "selected" : ""}>partial</option><option value="pending" ${fee.status === "pending" ? "selected" : ""}>pending</option><option value="not_collected" ${fee.status === "not_collected" ? "selected" : ""}>not collected</option><option value="exempt" ${fee.status === "exempt" ? "selected" : ""}>exempt</option><option value="exit" ${fee.status === "exit" ? "selected" : ""}>exit</option><option value="not_applicable" ${fee.status === "not_applicable" ? "selected" : ""}>not in team</option></select></td></tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+        ${canEditSensitive ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-sensitive" data-member-id="${member.id}">Save finance fields</button></div>` : ""}
+      </article>
+      `
+      : "";
+    const rolePositionSection = `
+      <article class="card compact-card" style="display:grid; gap: 10px;">
+        <div>
+          <p class="eyebrow">Club profile</p>
+          <h3 style="margin-top: 4px;">Role and position</h3>
+        </div>
+        <div class="pill-row dense-row">
+          ${member.roles.length ? member.roles.map(rolePill).join(" ") : `<span class="meta">No role set</span>`}
+          ${member.positions.length ? member.positions.map(plainPill).join(" ") : `<span class="meta">No position set</span>`}
+        </div>
+        ${canEditRolePosition ? `
+          <div class="form-grid">
+            <div>
+              <label>Roles</label>
+              <details class="member-inline-multiselect" id="user-role-multiselect">
+                <summary>${member.roles.length ? `${member.roles.length} selected` : "Select roles"}</summary>
+                <div class="member-inline-multiselect-options">
+                  ${Array.from(new Set([...memberRoleOptions, ...(member.roles || [])])).map((role) => `<label class="status-check"><input type="checkbox" class="user-role-option" value="${role}" ${(member.roles || []).includes(role) ? "checked" : ""} ${rolePositionDisabled} /><span>${roleLabel(role)}</span></label>`).join("")}
+                </div>
+              </details>
+            </div>
+            <div>
+              <label>Positions</label>
+              <details class="member-inline-multiselect" id="user-position-multiselect">
+                <summary>${member.positions.length ? `${member.positions.length} selected` : "Select positions"}</summary>
+                <div class="member-inline-multiselect-options">
+                  ${Array.from(new Set([...memberPositionOptions, ...(member.positions || [])])).map((position) => `<label class="status-check"><input type="checkbox" class="user-position-option" value="${position}" ${(member.positions || []).includes(position) ? "checked" : ""} ${rolePositionDisabled} /><span>${position}</span></label>`).join("")}
+                </div>
+              </details>
+            </div>
+          </div>
+          <div class="button-row"><button type="button" class="primary-button" id="save-user-role-position" data-member-id="${member.id}">Save role and position</button></div>
+        ` : ""}
+      </article>
+    `;
+    const notesSection = `
+      <article class="card compact-card" style="display:grid; gap: 10px;">
+        <div>
+          <p class="eyebrow">Notes</p>
+          <h3 style="margin-top: 4px;">Member notes</h3>
+        </div>
+        <label>Notes<textarea id="user-notes" rows="3" placeholder="No notes yet" ${notesDisabled}>${member.notes || ""}</textarea></label>
+        ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
+      </article>
+    `;
+
+    return `
+      <div class="section-head">
+        <div><p class="eyebrow">User</p><h3>Member profile</h3></div>
+        <div class="button-row"><button type="button" id="back-to-members" class="ghost-button">Back to members</button></div>
+      </div>
+      <div class="profile-layout">
+        <article class="card profile-main-card" style="display:grid; gap: 12px;">
+        <div style="display:flex; align-items:center; gap: 14px;">
+          <img src="./assets/emperors-mark.png" alt="Profile placeholder" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          <div>
+            <h3 style="margin:0;">${member.name}</h3>
+            <p class="meta" style="margin:4px 0 0;">${member.email || "No email yet"}</p>
+          </div>
+        </div>
+        <div class="form-grid">
+          <label>First name<input id="user-first-name" value="${member.firstName || ""}" ${editDisabled} /></label>
+          <label>Last name<input id="user-last-name" value="${member.lastName || ""}" ${editDisabled} /></label>
+        </div>
+        <div class="form-grid">
+          <label>Email<input id="user-email" type="email" value="${member.email || ""}" ${editDisabled} /></label>
+          <label>Jersey number<input id="user-jersey" type="number" min="0" value="${member.jerseyNumber ?? ""}" ${editDisabled} /></label>
+        </div>
+        ${canEditProfile ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-profile" data-member-id="${member.id}">Save profile</button></div>` : ""}
+        </article>
+        <div class="profile-side-column">
+          ${rolePositionSection}
+          ${notesSection}
+          ${sensitiveSection}
+        </div>
+      </div>
+    `;
+  }
+
   function renderFees() {
-    if (!canAccess("fees")) {
-      return lockedState("Membership fees are hidden for this role.", "Only admins and finance admins should see payment data.");
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
+    if (currentAccessRole !== "admin") {
+      return lockedState("Membership finance is hidden for this role.", "Only admins should see and manage membership finance data.");
     }
 
     const periods = getFeePeriods();
     const visibleFees = sortedVisibleFees();
     const statuses = availableFeeStatuses();
-    const collectibleRows = visibleFees.filter((fee) => !["exempt", "exit"].includes(fee.status));
+    const collectibleRows = visibleFees.filter((fee) => ["paid", "pending"].includes(fee.status));
     const totalTarget = collectibleRows.reduce((sum, fee) => sum + fee.amount, 0);
     const totalPaid = collectibleRows.reduce((sum, fee) => sum + fee.paidAmount, 0);
     const selectedLabel = currentFeePeriod();
@@ -851,15 +1802,31 @@
 
     return `
       <div class="section-head">
-        <div><p class="eyebrow">Fees</p><h3>Membership fee management</h3></div>
-        <button id="toggle-fee-edit-mode" class="ghost-button" type="button">${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
+        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3></div>
+        <div class="button-row">
+          <details class="export-menu">
+            <summary class="ghost-button export-menu-trigger">Export</summary>
+            <div class="export-menu-list">
+              <button id="export-fees-csv-option" class="ghost-button small-button" type="button">CSV</button>
+              <button id="export-fees-excel-option" class="ghost-button small-button" type="button">Excel</button>
+              <button id="export-fees-sepa-xml-option" class="ghost-button small-button" type="button">SEPA XML</button>
+            </div>
+          </details>
+          <button id="toggle-fee-edit-mode" class="ghost-button" type="button">${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
+        </div>
       </div>
       <div class="grid two-up">
-        <article class="card"><p class="eyebrow">Quarterly fees</p><h3>${selectedLabel ? formatFeePeriod(selectedLabel) : "No fee period"}</h3><p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target.</p></article>
-        <article class="card filter-card">
-          <p class="eyebrow">Filter</p>
-          <h3>Quarter selection</h3>
-          <label class="filter-label">Choose fee quarter<select id="fee-period-select">${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
+        <article class="card finance-summary-card">
+          <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target.</p>
+          <label class="filter-label" style="margin-top: 8px;">Choose fee quarter<select id="fee-period-select">${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
+        </article>
+      </div>
+      <article class="card filter-card fees-filter-sticky fees-filter-card" style="margin-bottom: 14px;">
+        <details class="fee-filters-dropdown" ${feeFiltersExpanded ? "open" : ""}>
+          <summary>
+            <span class="member-filter-summary-label">Filters</span>
+            <span class="member-filter-summary-meta">Status</span>
+          </summary>
           <fieldset class="status-filter-group">
             <legend>Fee status</legend>
             <div class="status-filter-options">
@@ -871,9 +1838,11 @@
               `).join("") || `<span class="meta">No statuses for this quarter.</span>`}
             </div>
           </fieldset>
-          <p class="muted">Current quarter: ${formatFeePeriod(currentQuarter)}.</p>
-        </article>
-      </div>
+          <div class="button-row" style="margin-top: 10px;">
+            <button id="clear-fee-filters" type="button" class="ghost-button">Reset fee filters</button>
+          </div>
+        </details>
+      </article>
       ${feeEditMode ? `
         <article class="card filter-card" style="margin-bottom: 12px;">
           <p class="eyebrow">Bulk edit</p>
@@ -895,10 +1864,11 @@
       ` : ""}
       <div class="table-wrap">
         <table>
-          <thead><tr>${feeEditMode ? "<th>Select</th>" : ""}<th>${renderSortButton("fees", "firstName", "First name")}</th><th>${renderSortButton("fees", "lastName", "Last name")}</th><th>${renderSortButton("fees", "amount", "Amount")}</th><th>${renderSortButton("fees", "paid", "Paid")}</th><th>${renderSortButton("fees", "status", "Status")}</th><th>${renderSortButton("fees", "note", "Note")}</th></tr></thead>
+          <thead><tr><th>Profile</th>${feeEditMode ? "<th>Select</th>" : ""}<th>${renderSortButton("fees", "firstName", "First name")}</th><th>${renderSortButton("fees", "lastName", "Last name")}</th><th>${renderSortButton("fees", "amount", "Amount")}</th><th>${renderSortButton("fees", "paid", "Paid")}</th><th>${renderSortButton("fees", "status", "Status")}</th></tr></thead>
           <tbody>
             ${visibleFees.map((fee) => `
               <tr>
+                <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${fee.memberId}" aria-label="Open profile"></button></td>
                 ${feeEditMode ? `<td><input type="checkbox" class="fee-member-select" data-member-id="${fee.memberId}" ${selectedSet.has(String(fee.memberId)) ? "checked" : ""} /></td>` : ""}
                 <td>${memberFirstName(fee.memberId) || "-"}</td>
                 <td>${memberLastName(fee.memberId) || "-"}</td>
@@ -914,13 +1884,8 @@
                 </td>
                 <td>
                   ${String(feeInlineEditId) === String(fee.id)
-                    ? `<select class="fee-row-status-select" data-fee-id="${fee.id}">${editableStatuses.map((status) => `<option value="${status}" ${status === fee.status ? "selected" : ""}>${statusLabel(status)}</option>`).join("")}</select>`
+                    ? `<select class="fee-row-status-select" data-fee-id="${fee.id}">${editableStatuses.map((status) => `<option value="${status}" ${status === fee.status ? "selected" : ""}>${statusLabel(status)}</option>`).join("")}</select><div class="action-row" style="margin-top: 8px;"><button type="button" class="primary-button small-button fee-row-save" data-fee-id="${fee.id}">Save</button><button type="button" class="ghost-button small-button fee-row-cancel">Cancel</button></div>`
                     : `<button type="button" class="status ${fee.status} fee-row-edit-trigger status-button" data-fee-id="${fee.id}" title="Click to edit">${statusLabel(fee.status)}</button>`}
-                </td>
-                <td class="meta">
-                  ${String(feeInlineEditId) === String(fee.id)
-                    ? `<textarea class="fee-row-note" data-fee-id="${fee.id}" rows="2" placeholder="Add note (optional)">${fee.note || ""}</textarea><div class="action-row"><button type="button" class="primary-button small-button fee-row-save" data-fee-id="${fee.id}">Save</button><button type="button" class="ghost-button small-button fee-row-cancel">Cancel</button></div>`
-                    : (fee.note || "")}
                 </td>
               </tr>
             `).join("") || `<tr><td colspan="${feeEditMode ? 7 : 6}" class="meta">No fee rows for this quarter.</td></tr>`}
@@ -931,6 +1896,9 @@
   }
 
   function renderPasses() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
     if (!canAccess("playerPasses")) {
       return lockedState("Player pass data is hidden for this role.", "Only admins, coaches, and technical admins should see player pass details.");
     }
@@ -953,16 +1921,25 @@
   }
 
   function renderEvents() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
     if (!state.events.length) return emptyState("No practices or games yet", "Next we can add local event CRUD and attendance invites.");
     return `...`;
   }
 
   function renderInvites() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
     if (!state.invites.length) return emptyState("No invite history yet", "Once events are editable, we can add attendance invitation tracking here.");
     return `...`;
   }
 
   function renderSettings() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
     const restrictions = bootstrapMeta.permissionsModel?.restrictedAreas || {};
     return `
       <div class="grid two-up">
@@ -970,7 +1947,7 @@
           <p class="eyebrow">Current mode</p>
           <h3>Local-first development</h3>
           <p>The app runs against the local SQLite API so we can move quickly before real auth and hosting are finalized.</p>
-          <div class="pill-row">${plainPill(`Source: ${bootstrapMeta.source}`)}${plainPill(`Preview role: ${currentAccessRole}`)}</div>
+          <div class="pill-row">${plainPill(`Source: ${bootstrapMeta.source}`)}${plainPill(`Preview role: ${roleLabel(currentAccessRole)}`)}</div>
         </article>
         <article class="setup-card">
           <p class="eyebrow">Future auth</p>
@@ -981,6 +1958,18 @@
             <div class="setup-step"><span>2</span><div><strong>Player passes</strong><p>${formatList(restrictions.playerPasses, "No restriction")}</p></div></div>
           </div>
         </article>
+        ${currentAccessRole === "admin" ? `
+        <article class="setup-card">
+          <p class="eyebrow">Invitations</p>
+          <h3>Invite an admin</h3>
+          <p>Send an email invitation so the admin can set a password and sign in.</p>
+          <div class="inline-form">
+            <label>Email<input id="admin-invite-email" type="email" placeholder="admin@example.com" /></label>
+            <label>Role<select id="admin-invite-role">${INVITE_ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === authInviteRole ? "selected" : ""}>${roleLabel(role)}</option>`).join("")}</select></label>
+          </div>
+          <div class="button-row"><button type="button" class="primary-button" id="send-admin-invite">Send invite</button></div>
+        </article>
+        ` : ""}
       </div>
     `;
   }
@@ -1008,6 +1997,7 @@
 
   function getRouteView() {
     const hash = window.location.hash.replace("#", "").trim();
+    if (/^user\//i.test(hash)) return "user";
     return viewIds.includes(hash) ? hash : "dashboard";
   }
 
@@ -1040,6 +2030,7 @@
   }
 
   function bindMemberActions() {
+    const canManageMembers = currentAccessRole === "admin" || currentAccessRole === "coach";
     const openButton = document.getElementById("open-member-dialog");
     const toggleMergeModeButton = document.getElementById("toggle-member-admin-mode");
     const dialog = document.getElementById("member-dialog");
@@ -1116,6 +2107,7 @@
     }
     document.querySelectorAll(".edit-member-button").forEach((button) => {
       button.onclick = function () {
+        if (!canManageMembers) return;
         const member = state.members.find((entry) => String(entry.id) === String(button.dataset.memberId));
         if (member) openMemberDialog(member);
       };
@@ -1313,7 +2305,208 @@
     }
   }
 
+  function bindUserPageActions() {
+    document.querySelectorAll(".open-user-page-button").forEach((button) => {
+      button.onclick = function () {
+        const memberId = String(button.dataset.memberId || "").trim();
+        if (!memberId) return;
+        selectedUserMemberId = memberId;
+        window.location.hash = `user/${encodeURIComponent(memberId)}`;
+        mount();
+        switchView("user");
+      };
+    });
+
+    const backButton = document.getElementById("back-to-members");
+    if (backButton) {
+      backButton.onclick = function () {
+        window.location.hash = "members";
+        switchView("members");
+      };
+    }
+
+    const saveButton = document.getElementById("save-user-profile");
+    if (saveButton) {
+      saveButton.onclick = async function () {
+        const member = memberById(saveButton.dataset.memberId);
+        if (!member) return;
+        if (!canEditMemberProfile(member)) {
+          authState.status = "You can only edit your own profile unless you are an admin.";
+          mount();
+          switchView("user");
+          return;
+        }
+        const firstNameInput = document.getElementById("user-first-name");
+        const lastNameInput = document.getElementById("user-last-name");
+        const emailInput = document.getElementById("user-email");
+        const jerseyInput = document.getElementById("user-jersey");
+        if (!firstNameInput || !lastNameInput || !emailInput || !jerseyInput) return;
+        try {
+          await saveMember({
+            memberId: member.id,
+            firstName: String(firstNameInput.value || "").trim(),
+            lastName: String(lastNameInput.value || "").trim(),
+            email: String(emailInput.value || "").trim(),
+            positions: member.positions || [],
+            roles: member.roles && member.roles.length ? member.roles : ["player"],
+            jerseyNumber: String(jerseyInput.value || "").trim(),
+            membershipStatus: member.membershipStatus || "active",
+            notes: member.notes || ""
+          });
+          authState.status = "User profile updated.";
+          selectedUserMemberId = String(member.id);
+          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          mount();
+          switchView("user");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("user");
+        }
+      };
+    }
+
+    const saveSensitiveButton = document.getElementById("save-user-sensitive");
+    if (saveSensitiveButton) {
+      saveSensitiveButton.onclick = async function () {
+        const member = memberById(saveSensitiveButton.dataset.memberId);
+        if (!member) return;
+        if (currentAccessRole !== "admin") {
+          authState.status = "Only admins can update IBAN and quarter payment statuses.";
+          mount();
+          switchView("user");
+          return;
+        }
+        const ibanInput = document.getElementById("user-sensitive-iban");
+        const statusInputs = Array.from(document.querySelectorAll(".user-sensitive-fee-status"));
+        const statusByFeeId = {};
+        statusInputs.forEach((input) => {
+          const feeId = String(input.dataset.feeId || "").trim();
+          if (feeId) statusByFeeId[feeId] = input.value;
+        });
+        try {
+          await updateMemberSensitiveFinance({
+            memberId: member.id,
+            iban: String(ibanInput?.value || "").trim(),
+            statusByFeeId
+          });
+          authState.status = "Sensitive finance fields updated.";
+          selectedUserMemberId = String(member.id);
+          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          mount();
+          switchView("user");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("user");
+        }
+      };
+    }
+
+    const saveRolePositionButton = document.getElementById("save-user-role-position");
+    if (saveRolePositionButton) {
+      saveRolePositionButton.onclick = async function () {
+        const member = memberById(saveRolePositionButton.dataset.memberId);
+        if (!member) return;
+        if (currentAccessRole !== "admin") {
+          authState.status = "Only admins can update role and position.";
+          mount();
+          switchView("user");
+          return;
+        }
+        const selectedRoles = Array.from(document.querySelectorAll(".user-role-option:checked"))
+          .map((input) => String(input.value || "").trim())
+          .filter(Boolean);
+        const selectedPositions = Array.from(document.querySelectorAll(".user-position-option:checked"))
+          .map((input) => String(input.value || "").trim().toUpperCase())
+          .filter(Boolean);
+        try {
+          await saveMember({
+            memberId: member.id,
+            firstName: member.firstName || "",
+            lastName: member.lastName || "",
+            email: member.email || "",
+            positions: Array.from(new Set(selectedPositions)),
+            roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
+            jerseyNumber: member.jerseyNumber ?? "",
+            membershipStatus: member.membershipStatus || "active",
+            notes: member.notes || ""
+          });
+          authState.status = "Role and position updated.";
+          selectedUserMemberId = String(member.id);
+          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          mount();
+          switchView("user");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("user");
+        }
+      };
+    }
+
+    const saveNotesButton = document.getElementById("save-user-notes");
+    if (saveNotesButton) {
+      saveNotesButton.onclick = async function () {
+        const member = memberById(saveNotesButton.dataset.memberId);
+        if (!member) return;
+        if (currentAccessRole !== "admin") {
+          authState.status = "Only admins can update notes.";
+          mount();
+          switchView("user");
+          return;
+        }
+        const notesInput = document.getElementById("user-notes");
+        try {
+          await saveMember({
+            memberId: member.id,
+            firstName: member.firstName || "",
+            lastName: member.lastName || "",
+            email: member.email || "",
+            positions: member.positions || [],
+            roles: member.roles && member.roles.length ? member.roles : ["player"],
+            jerseyNumber: member.jerseyNumber ?? "",
+            membershipStatus: member.membershipStatus || "active",
+            notes: String(notesInput?.value || "").trim()
+          });
+          authState.status = "Notes updated.";
+          selectedUserMemberId = String(member.id);
+          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          mount();
+          switchView("user");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("user");
+        }
+      };
+    }
+
+    document.querySelectorAll(".invite-member-button").forEach((button) => {
+      button.onclick = async function () {
+        const member = memberById(button.dataset.memberId);
+        if (!member || !member.email) return;
+        try {
+          await inviteMember(member.id);
+          authState.status = `Invite sent to ${member.email}.`;
+          mount();
+          switchView("members");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("members");
+        }
+      };
+    });
+  }
+
   function bindFeeFilters() {
+    const filtersDropdown = document.querySelector(".fee-filters-dropdown");
+    if (filtersDropdown) {
+      filtersDropdown.ontoggle = function () {
+        feeFiltersExpanded = filtersDropdown.open;
+      };
+    }
     const select = document.getElementById("fee-period-select");
     if (select) {
       select.onchange = function (event) {
@@ -1337,6 +2530,167 @@
     });
   }
 
+  function bindTableExports() {
+    const exportMembersCsvButton = document.getElementById("export-members-csv-option");
+    if (exportMembersCsvButton) {
+      exportMembersCsvButton.onclick = function () {
+        const columns = [
+          { key: "id", label: "ID" },
+          { key: "firstName", label: "First name" },
+          { key: "lastName", label: "Last name" },
+          { key: "email", label: "Email" },
+          { key: "positions", label: "Positions" },
+          { key: "roles", label: "Roles" },
+          { key: "jerseyNumber", label: "Jersey" },
+          { key: "membershipStatus", label: "Membership" },
+          { key: "passStatus", label: "Pass status" },
+          { key: "passExpiry", label: "Pass expiry" },
+          { key: "deletedAt", label: "Deleted at" }
+        ];
+        downloadCsv(columns, memberExportRows(), "members.csv");
+      };
+    }
+
+    const exportMembersExcelButton = document.getElementById("export-members-excel-option");
+    if (exportMembersExcelButton) {
+      exportMembersExcelButton.onclick = function () {
+        const columns = [
+          { key: "id", label: "ID" },
+          { key: "firstName", label: "First name" },
+          { key: "lastName", label: "Last name" },
+          { key: "email", label: "Email" },
+          { key: "positions", label: "Positions" },
+          { key: "roles", label: "Roles" },
+          { key: "jerseyNumber", label: "Jersey" },
+          { key: "membershipStatus", label: "Membership" },
+          { key: "passStatus", label: "Pass status" },
+          { key: "passExpiry", label: "Pass expiry" },
+          { key: "deletedAt", label: "Deleted at" }
+        ];
+        downloadExcel(columns, memberExportRows(), "members.xls");
+      };
+    }
+
+    const exportFeesCsvButton = document.getElementById("export-fees-csv-option");
+    if (exportFeesCsvButton) {
+      exportFeesCsvButton.onclick = function () {
+        const columns = [
+          { key: "memberId", label: "Member ID" },
+          { key: "firstName", label: "First name" },
+          { key: "lastName", label: "Last name" },
+          { key: "feePeriod", label: "Quarter" },
+          { key: "amount", label: "Amount" },
+          { key: "paidAmount", label: "Paid" },
+          { key: "status", label: "Status" },
+          { key: "iban", label: "IBAN" }
+        ];
+        downloadCsv(columns, feeExportRows(), "membership-finance.csv");
+      };
+    }
+
+    const exportFeesExcelButton = document.getElementById("export-fees-excel-option");
+    if (exportFeesExcelButton) {
+      exportFeesExcelButton.onclick = function () {
+        const columns = [
+          { key: "memberId", label: "Member ID" },
+          { key: "firstName", label: "First name" },
+          { key: "lastName", label: "Last name" },
+          { key: "feePeriod", label: "Quarter" },
+          { key: "amount", label: "Amount" },
+          { key: "paidAmount", label: "Paid" },
+          { key: "status", label: "Status" },
+          { key: "iban", label: "IBAN" }
+        ];
+        downloadExcel(columns, feeExportRows(), "membership-finance.xls");
+      };
+    }
+
+    const exportFeesSepaXmlButton = document.getElementById("export-fees-sepa-xml-option");
+    if (exportFeesSepaXmlButton) {
+      exportFeesSepaXmlButton.onclick = async function () {
+        try {
+          const period = currentFeePeriod();
+          if (!period) {
+            throw new Error("Please select a quarter first.");
+          }
+          await downloadFromApi(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`, `SEPA_Lastschrift_${period}.xml`);
+          authState.status = "SEPA XML exported.";
+          mount();
+          switchView("fees");
+        } catch (error) {
+          const isGithubPages = /\.github\.io$/i.test(window.location.hostname || "");
+          const baseMessage = String(error?.message || "SEPA export failed.");
+          authState.status = isGithubPages
+            ? `${baseMessage} SEPA XML requires a running backend API (the /api route is not available on static GitHub Pages alone).`
+            : baseMessage;
+          mount();
+          switchView("fees");
+        }
+      };
+    }
+  }
+
+  function bindAuthActions() {
+    const signInButton = document.getElementById("auth-sign-in");
+    if (signInButton) {
+      signInButton.onclick = async function () {
+        const emailInput = document.getElementById("auth-email");
+        const passwordInput = document.getElementById("auth-password");
+        try {
+          await signInWithEmailPassword(String(emailInput?.value || ""), String(passwordInput?.value || ""));
+          await loadBootstrapData();
+          authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
+          mount();
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+        }
+      };
+    }
+
+    const signOutButton = document.getElementById("auth-sign-out");
+    if (signOutButton) {
+      signOutButton.onclick = async function () {
+        try {
+          await signOut();
+          authState.status = "Signed out.";
+          mount();
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+        }
+      };
+    }
+
+    const adminInviteRoleSelect = document.getElementById("admin-invite-role");
+    if (adminInviteRoleSelect) {
+      adminInviteRoleSelect.onchange = function (event) {
+        authInviteRole = String(event.target.value || "admin");
+      };
+    }
+
+    const adminInviteButton = document.getElementById("send-admin-invite");
+    if (adminInviteButton) {
+      adminInviteButton.onclick = async function () {
+        const emailInput = document.getElementById("admin-invite-email");
+        const email = String(emailInput?.value || "").trim();
+        if (!email) {
+          authState.status = "Enter an email address first.";
+          mount();
+          return;
+        }
+        try {
+          await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
+          authState.status = `Invite sent to ${email}.`;
+          mount();
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+        }
+      };
+    }
+  }
+
   function bindFeeEditModeActions() {
     const toggleButton = document.getElementById("toggle-fee-edit-mode");
     if (toggleButton) {
@@ -1345,6 +2699,16 @@
         if (!feeEditMode) {
           selectedFeeMemberIds = [];
         }
+        mount();
+        switchView("fees");
+      };
+    }
+    const clearButton = document.getElementById("clear-fee-filters");
+    if (clearButton) {
+      clearButton.onclick = function () {
+        selectedFeeStatuses = defaultFeeStatuses();
+        feeInlineEditId = null;
+        saveStatusFilter();
         mount();
         switchView("fees");
       };
@@ -1464,7 +2828,6 @@
         const statusSelect = document.querySelector(`.fee-row-status-select[data-fee-id="${feeId}"]`);
         const amountInput = document.querySelector(`.fee-row-amount[data-fee-id="${feeId}"]`);
         const paidInput = document.querySelector(`.fee-row-paid[data-fee-id="${feeId}"]`);
-        const noteInput = document.querySelector(`.fee-row-note[data-fee-id="${feeId}"]`);
         if (!feeId || !statusSelect || !amountInput || !paidInput) return;
         try {
           await updateFeeRow({
@@ -1472,7 +2835,7 @@
             status: statusSelect.value,
             amount: Number(amountInput.value || 0),
             paidAmount: Number(paidInput.value || 0),
-            note: noteInput ? String(noteInput.value || "").trim() : ""
+            note: ""
           });
           authState.status = `${memberName(sortedVisibleFees().find((fee) => Number(fee.id) === feeId)?.memberId)} fee updated.`;
           feeInlineEditId = null;
@@ -1622,6 +2985,75 @@
     };
   }
 
+  function setupFeesStickyHeader() {
+    if (typeof teardownFeesStickyHeader === "function") {
+      teardownFeesStickyHeader();
+      teardownFeesStickyHeader = null;
+    }
+
+    const feesView = document.getElementById("fees");
+    if (!feesView || !feesView.classList.contains("active")) return;
+    const tableWrap = feesView.querySelector(".table-wrap");
+    const table = tableWrap ? tableWrap.querySelector("table") : null;
+    const thead = table ? table.querySelector("thead") : null;
+    if (!tableWrap || !table || !thead) return;
+
+    const sticky = document.createElement("div");
+    sticky.className = "fees-sticky-header";
+    const stickyTable = document.createElement("table");
+    stickyTable.className = "fees-sticky-header-table";
+    const clonedHead = thead.cloneNode(true);
+    stickyTable.appendChild(clonedHead);
+    sticky.appendChild(stickyTable);
+    document.body.appendChild(sticky);
+
+    const sync = function () {
+      const wrapRect = tableWrap.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      const topOffset = 0;
+      const headHeight = thead.getBoundingClientRect().height || 0;
+      const show = tableRect.top < topOffset && tableRect.bottom > topOffset + headHeight;
+
+      sticky.style.display = show ? "block" : "none";
+      if (!show) return;
+
+      sticky.style.left = `${wrapRect.left}px`;
+      sticky.style.width = `${wrapRect.width}px`;
+
+      const originalCells = thead.querySelectorAll("th");
+      const clonedCells = clonedHead.querySelectorAll("th");
+      originalCells.forEach((cell, index) => {
+        const width = cell.getBoundingClientRect().width;
+        if (!clonedCells[index]) return;
+        clonedCells[index].style.width = `${width}px`;
+        clonedCells[index].style.minWidth = `${width}px`;
+        clonedCells[index].style.maxWidth = `${width}px`;
+      });
+
+      stickyTable.style.width = `${table.getBoundingClientRect().width}px`;
+      stickyTable.style.transform = `translateX(${-tableWrap.scrollLeft}px)`;
+    };
+
+    const onScroll = function () {
+      sync();
+    };
+    const onResize = function () {
+      sync();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    tableWrap.addEventListener("scroll", onScroll, { passive: true });
+    sync();
+
+    teardownFeesStickyHeader = function () {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      tableWrap.removeEventListener("scroll", onScroll);
+      sticky.remove();
+    };
+  }
+
   function mount() {
     try {
       ensureValidFeeFilter();
@@ -1638,17 +3070,22 @@
       document.getElementById("dashboard").innerHTML = renderDashboard();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
+      document.getElementById("user").innerHTML = renderUserPage();
       document.getElementById("passes").innerHTML = renderPasses();
       document.getElementById("events").innerHTML = renderEvents();
       document.getElementById("invites").innerHTML = renderInvites();
       document.getElementById("settings").innerHTML = renderSettings();
       bindMemberActions();
+      bindUserPageActions();
       bindMemberFilters();
       bindFeeFilters();
       bindFeeEditModeActions();
+      bindAuthActions();
+      bindTableExports();
       bindTableSorts();
       switchView(getRouteView());
       setupMembersStickyHeader();
+      setupFeesStickyHeader();
     } catch (error) {
       console.error("Emperors bundle mount failed", error);
       const dashboard = document.getElementById("dashboard");
@@ -1667,17 +3104,24 @@
   window.addEventListener("hashchange", function () {
     switchView(getRouteView());
     setupMembersStickyHeader();
+    setupFeesStickyHeader();
   });
-  await loadLocalBootstrap();
+  if (supabaseClient) {
+    const { data } = await supabaseClient.auth.getSession();
+    syncAuthSession(data?.session || null);
+    supabaseClient.auth.onAuthStateChange(function (_event, session) {
+      syncAuthSession(session || null);
+      loadBootstrapData()
+        .then(() => mount())
+        .catch((error) => {
+          authState.status = error.message;
+          mount();
+        });
+    });
+  } else {
+    syncAuthSession(null);
+  }
+  await loadBootstrapData();
   mount();
   unregisterServiceWorkers();
-
-  if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange(function (_event, session) {
-      if (session && session.user) {
-        authState.mode = "ready";
-        authState.user = session.user;
-      }
-    });
-  }
 })();

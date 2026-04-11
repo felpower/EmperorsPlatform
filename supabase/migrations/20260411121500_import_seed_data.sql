@@ -78,7 +78,7 @@ imported_fees(fee_import_id, normalized_key, season_label, fee_period, amount_ce
     ('DEMO_IBAN_' || right(mk.id::text, 4)) as iban,
     null::text as mandate_id,
     null::text as sepa_link,
-    'Synthetic payment row' as status_note
+    null::text as status_note
   from member_keys mk
   cross join quarter_periods qp
 )

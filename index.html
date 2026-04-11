@@ -34,7 +34,7 @@
         <nav class="nav" aria-label="Primary">
           <a class="nav-link active" href="#dashboard" data-view="dashboard">Dashboard</a>
           <a class="nav-link" href="#members" data-view="members">Members</a>
-          <a class="nav-link" href="#fees" data-view="fees">Fees</a>
+          <a class="nav-link" href="#fees" data-view="fees">Membership Finance</a>
           <a class="nav-link" href="#passes" data-view="passes">Player Passes</a>
           <a class="nav-link" href="#events" data-view="events">Practices &amp; Games</a>
           <a class="nav-link" href="#invites" data-view="invites">Invites</a>
@@ -54,7 +54,8 @@
 
         <section id="dashboard" class="view active" aria-label="Dashboard"></section>
         <section id="members" class="view" aria-label="Members"></section>
-        <section id="fees" class="view" aria-label="Fees"></section>
+        <section id="fees" class="view" aria-label="Membership finance"></section>
+        <section id="user" class="view" aria-label="User profile"></section>
         <section id="passes" class="view" aria-label="Player passes"></section>
         <section id="events" class="view" aria-label="Events"></section>
         <section id="invites" class="view" aria-label="Invites"></section>
@@ -105,12 +106,12 @@
             <button type="button" class="ghost-button small-button" id="roles-clear-all">Clear roles</button>
           </div>
           <div class="status-filter-options">
-            <label class="status-check"><input type="checkbox" name="roles" value="player" checked /><span>player</span></label>
-            <label class="status-check"><input type="checkbox" name="roles" value="coach" /><span>coach</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="player" checked /><span>Athlete</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="coach" /><span>Coach</span></label>
             <label class="status-check"><input type="checkbox" name="roles" value="admin" /><span>admin</span></label>
-            <label class="status-check"><input type="checkbox" name="roles" value="finance_admin" /><span>finance_admin</span></label>
-            <label class="status-check"><input type="checkbox" name="roles" value="tech_admin" /><span>tech_admin</span></label>
-            <label class="status-check"><input type="checkbox" name="roles" value="staff" /><span>staff</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="finance_admin" /><span>Finance</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="tech_admin" /><span>Tech</span></label>
+            <label class="status-check"><input type="checkbox" name="roles" value="staff" /><span>Staff</span></label>
           </div>
         </fieldset>
 

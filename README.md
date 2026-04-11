@@ -105,3 +105,28 @@ GitHub Pages is a static host. That means:
 5. Add login and invitation flow
 
 When you want, I can do the next step and wire this starter to a real Supabase backend.
+
+## Authentication and invites
+
+The current build now includes:
+
+- Email/password sign-in with Supabase Auth
+- Admin invitation emails for new admins
+- Member invitation emails for existing roster entries
+- Automatic profile and role provisioning when an invited user first signs in
+- Hosted deployments load app data from Supabase
+- Localhost still uses the local SQLite API for development
+
+Server-side invite emails require these environment variables on the Node server:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `PUBLIC_SITE_URL` if you want invite links to point to a specific deployed site
+
+The frontend only needs the public Supabase URL and anon key.
+
+Important:
+
+- GitHub Pages can host the static frontend
+- Invite emails still need a backend with the Supabase service role key
+- The local demo mode still works on `localhost`
