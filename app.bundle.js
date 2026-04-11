@@ -107,16 +107,17 @@
   function loadMemberFilters() {
     try {
       const saved = localStorage.getItem(MEMBER_FILTER_KEY);
-      if (!saved) return { positions: [], roles: [], membership: ["active"], showDeleted: false };
+      if (!saved) return { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
       const parsed = JSON.parse(saved);
       return {
         positions: Array.isArray(parsed?.positions) ? parsed.positions : [],
         roles: Array.isArray(parsed?.roles) ? parsed.roles : [],
         membership: Array.isArray(parsed?.membership) && parsed.membership.length ? parsed.membership : ["active"],
-        showDeleted: Boolean(parsed?.showDeleted)
+        showDeleted: Boolean(parsed?.showDeleted),
+        search: String(parsed?.search || "").trim()
       };
     } catch {
-      return { positions: [], roles: [], membership: ["active"], showDeleted: false };
+      return { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
     }
   }
 
@@ -325,7 +326,7 @@
       data = {};
     }
     if (!response.ok) {
-      if (response.status === 404) {
+      if (response.status === 404 || response.status === 405) {
         throw new Error("Invite API is not reachable. Start the backend server (or deploy the API) and try again.");
       }
       throw new Error(data.error || data.message || `Could not send invite (${response.status}).`);
@@ -838,6 +839,19 @@
 
   function filteredMembers() {
     return state.members.filter((member) => {
+      const query = String(memberFilters.search || "").trim().toLowerCase();
+      if (query) {
+        const haystack = [
+          member.name,
+          member.firstName,
+          member.lastName,
+          member.email,
+          member.id
+        ].map((value) => String(value || "").toLowerCase()).join(" ");
+        if (!haystack.includes(query)) {
+          return false;
+        }
+      }
       if (member.deletedAt && !memberFilters.showDeleted) {
         return false;
       }
@@ -1594,6 +1608,11 @@
             <span class="member-filter-summary-label">Filters</span>
             <span class="member-filter-summary-meta">Positions, roles, membership</span>
           </summary>
+          <div style="margin-top: 10px;">
+            <label>Search by name or email
+              <input id="member-search-input" type="search" placeholder="e.g. test test" value="${String(memberFilters.search || "").replaceAll('"', '&quot;')}" />
+            </label>
+          </div>
           <div class="split" style="grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px;">
             <fieldset class="status-filter-group">
               <legend>Positions</legend>
@@ -2929,7 +2948,7 @@
     }
     document.querySelectorAll(".member-filter-checkbox").forEach((checkbox) => {
       checkbox.onchange = function () {
-        const next = { positions: [], roles: [], membership: [], showDeleted: memberFilters.showDeleted };
+        const next = { positions: [], roles: [], membership: [], showDeleted: memberFilters.showDeleted, search: memberFilters.search };
         document.querySelectorAll(".member-filter-checkbox:checked").forEach((input) => {
           const target = input.dataset.memberFilter;
           if (target && next[target]) {
@@ -2957,10 +2976,22 @@
         switchView("members");
       };
     }
+    const searchInput = document.getElementById("member-search-input");
+    if (searchInput) {
+      searchInput.oninput = function () {
+        memberFilters = {
+          ...memberFilters,
+          search: String(searchInput.value || "").trim()
+        };
+        saveMemberFilters();
+        mount();
+        switchView("members");
+      };
+    }
     const clearButton = document.getElementById("clear-member-filters");
     if (clearButton) {
       clearButton.onclick = function () {
-        memberFilters = { positions: [], roles: [], membership: ["active"], showDeleted: false };
+        memberFilters = { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
         saveMemberFilters();
         mount();
         switchView("members");
