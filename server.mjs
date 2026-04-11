@@ -71,7 +71,7 @@ async function sendSupabaseInvite({ email, fullName, roles, memberId, req }) {
     throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server to send invites.");
   }
 
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/invite`, {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/invite`, {
     method: "POST",
     headers: supabaseAdminHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
