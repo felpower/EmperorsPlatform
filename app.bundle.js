@@ -266,7 +266,7 @@
       }
       saveStoredValue(ACCESS_KEY, currentAccessRole);
       authState.mode = "supabase";
-      authState.status = `Signed in as ${authDisplayName() || authState.user.email}.`;
+      authState.status = `Signed in as ${authDisplayName() || authState.user.full_name}.`;
       return;
     }
     currentAccessRole = loadStoredValue(ACCESS_KEY, "admin");
@@ -1766,7 +1766,8 @@
       return renderAuthGate();
     }
     const hashMemberId = userPageMemberIdFromHash();
-    const memberId = hashMemberId || selectedUserMemberId;
+    const ownMemberId = signedInMemberRecord()?.id || "";
+    const memberId = hashMemberId || ownMemberId || selectedUserMemberId;
     const member = memberById(memberId);
 
     if (!member) {
@@ -2115,10 +2116,12 @@
         }
         const ownMember = signedInMemberRecord();
         if (ownMember?.id) {
+          selectedUserMemberId = String(ownMember.id);
           window.location.hash = `user/${encodeURIComponent(ownMember.id)}`;
           switchView("user");
           return;
         }
+        selectedUserMemberId = "";
         window.location.hash = "user";
         switchView("user");
       };
