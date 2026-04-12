@@ -39,17 +39,25 @@ npx serve .
 
 Then open the shown local address in your browser.
 
-## Clubee pass sync review (local backend)
+## Clubee pass sync review
 
-The local Node backend supports a safe two-step Clubee pass sync flow:
+The Node backend supports a safe two-step Clubee pass sync flow:
 
 1. Preview changes (read-only)
 2. Apply only selected changes (explicit admin action)
+
+You can provide the Clubee source in two ways:
+
+1. Upload an `.xlsx` file from the Pass Sync Review page
+2. Leave upload empty to use the server's default Clubee file path
 
 - Default file path:
   - `assets/uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx`
 - No automatic overwrite on bootstrap.
 - Updates are written only through the explicit apply endpoint.
+- Works in both modes:
+  - local SQLite backend
+  - hosted backend connected to Supabase (requires server-side `SUPABASE_SERVICE_ROLE_KEY`)
 
 Optional environment variables:
 

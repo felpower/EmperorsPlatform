@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import xlsx from "xlsx";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +50,273 @@ function requireLocalDb(res, featureLabel = "This endpoint") {
     error: `${featureLabel} is unavailable on this deployment. ${localDbUnavailableReason || "Local SQLite module is not available."}`
   });
   return false;
+}
+
+function hasSupabaseAdminConfig() {
+  return Boolean(String(SUPABASE_URL || "").trim() && String(SUPABASE_SERVICE_ROLE_KEY || "").trim());
+}
+
+function normalizeNamePart(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function normalizeFullName(firstName, lastName) {
+  return `${normalizeNamePart(firstName)}|${normalizeNamePart(lastName)}`;
+}
+
+function parseClubeeLicense(rawLicense) {
+  const text = String(rawLicense || "").trim();
+  if (!text) {
+    return { passStatus: "missing", passExpiry: null, licenseName: "", note: "No license text in Clubee export." };
+  }
+  const match = text.match(/^(.*?)\s*\(\d+\)\s*:?\s*Spielberechtigt bis\s+(\d{2}\/\d{2}\/\d{4})/i);
+  if (!match) return { passStatus: "missing", passExpiry: null, licenseName: text, note: text };
+  const [, licenseName, expiryText] = match;
+  const [day, month, year] = expiryText.split("/");
+  const passExpiry = `${year}-${month}-${day}`;
+  const expiryDate = new Date(`${passExpiry}T00:00:00`);
+  const diffDays = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const passStatus = diffDays < 0 ? "expired" : "valid";
+  return {
+    passStatus,
+    passExpiry,
+    licenseName: String(licenseName || "").trim(),
+    note: text
+  };
+}
+
+function parseClubeePassRecord(row) {
+  const firstName = String(row?.Vorname || "").trim();
+  const lastName = String(row?.Nachname || "").trim();
+  if (!firstName && !lastName) return null;
+  const normalizedKey = normalizeFullName(firstName, lastName);
+  if (!normalizedKey) return null;
+  const license = parseClubeeLicense(row?.Lizenz);
+  return {
+    firstName,
+    lastName,
+    normalizedKey,
+    passStatus: license.passStatus,
+    passExpiry: license.passExpiry,
+    licenseName: license.licenseName,
+    note: license.note
+  };
+}
+
+function readClubeeWorkbook(filePath) {
+  const workbook = xlsx.readFile(filePath);
+  const firstSheet = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheet];
+  return xlsx.utils.sheet_to_json(sheet, { defval: "" });
+}
+
+function readClubeeWorkbookFromBuffer(buffer) {
+  const workbook = xlsx.read(buffer, { type: "buffer" });
+  const firstSheet = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheet];
+  return xlsx.utils.sheet_to_json(sheet, { defval: "" });
+}
+
+function decodeBase64FilePayload(fileBase64) {
+  const raw = String(fileBase64 || "").trim();
+  if (!raw) return null;
+  const cleaned = raw.replace(/^data:.*;base64,/, "");
+  const buffer = Buffer.from(cleaned, "base64");
+  if (!buffer.length) {
+    throw new Error("Uploaded file payload is empty.");
+  }
+  if (buffer.length > 15 * 1024 * 1024) {
+    throw new Error("Uploaded Clubee file is too large (max 15MB).");
+  }
+  return buffer;
+}
+
+async function loadSupabaseMembersAndPasses() {
+  if (!hasSupabaseAdminConfig()) {
+    throw new Error("Supabase admin config is missing on the server.");
+  }
+
+  const membersResponse = await fetch(
+    `${SUPABASE_URL}/rest/v1/members?select=${encodeURIComponent("id,first_name,last_name,display_name,email")}`,
+    { method: "GET", headers: supabaseAdminHeaders() }
+  );
+  const membersPayload = await membersResponse.json().catch(() => []);
+  if (!membersResponse.ok) {
+    const message = membersPayload?.message || membersPayload?.error || `Could not fetch members (${membersResponse.status}).`;
+    throw new Error(message);
+  }
+
+  const passesResponse = await fetch(
+    `${SUPABASE_URL}/rest/v1/player_passes?select=${encodeURIComponent("member_id,pass_status,expires_on,federation_reference,notes")}`,
+    { method: "GET", headers: supabaseAdminHeaders() }
+  );
+  const passesPayload = await passesResponse.json().catch(() => []);
+  if (!passesResponse.ok) {
+    const message = passesPayload?.message || passesPayload?.error || `Could not fetch player passes (${passesResponse.status}).`;
+    throw new Error(message);
+  }
+
+  const members = Array.isArray(membersPayload) ? membersPayload : [];
+  const passes = Array.isArray(passesPayload) ? passesPayload : [];
+  return { members, passes };
+}
+
+async function buildSupabaseClubeePassSyncPlan({ clubeeRows, sourceLabel, sourceMtimeMs } = {}) {
+  let rows = Array.isArray(clubeeRows) ? clubeeRows : null;
+  let finalSourceLabel = String(sourceLabel || "").trim();
+  let finalSourceMtimeMs = Number(sourceMtimeMs || 0);
+
+  if (!rows) {
+    let stats;
+    try {
+      stats = await fs.stat(CLUBEE_XLSX_PATH);
+    } catch {
+      throw new Error(`Clubee export file was not found at ${CLUBEE_XLSX_PATH}.`);
+    }
+    rows = readClubeeWorkbook(CLUBEE_XLSX_PATH);
+    finalSourceLabel = finalSourceLabel || CLUBEE_XLSX_PATH;
+    finalSourceMtimeMs = finalSourceMtimeMs || Number(stats.mtimeMs || 0);
+  }
+
+  const clubeeRowsLocal = rows;
+  const { members, passes } = await loadSupabaseMembersAndPasses();
+
+  const memberByKey = new Map();
+  members.forEach((member) => {
+    const key = normalizeFullName(member?.first_name || "", member?.last_name || "");
+    if (!key || key === "|") return;
+    memberByKey.set(key, member);
+  });
+
+  const passByMemberId = new Map();
+  passes.forEach((pass) => {
+    passByMemberId.set(String(pass?.member_id || ""), pass);
+  });
+
+  const changes = [];
+  let processedRows = 0;
+  let matchedRows = 0;
+  let unmatchedRows = 0;
+  const unmatchedNames = [];
+
+  for (const row of clubeeRowsLocal) {
+    const record = parseClubeePassRecord(row);
+    if (!record) continue;
+    processedRows += 1;
+
+    const member = memberByKey.get(record.normalizedKey);
+    if (!member) {
+      unmatchedRows += 1;
+      unmatchedNames.push(`${record.firstName} ${record.lastName}`.trim());
+      continue;
+    }
+    matchedRows += 1;
+
+    const currentPass = passByMemberId.get(String(member.id || ""));
+    const currentStatus = String(currentPass?.pass_status || "");
+    const currentExpiry = String(currentPass?.expires_on || "");
+    const currentLicense = String(currentPass?.federation_reference || "");
+    const currentNote = String(currentPass?.notes || "");
+
+    const fieldChanges = [];
+    if (currentStatus !== String(record.passStatus || "")) {
+      fieldChanges.push({ field: "pass_status", current: currentStatus, next: String(record.passStatus || "") });
+    }
+    if (currentExpiry !== String(record.passExpiry || "")) {
+      fieldChanges.push({ field: "expiry_date", current: currentExpiry, next: String(record.passExpiry || "") });
+    }
+    if (currentLicense !== String(record.licenseName || "")) {
+      fieldChanges.push({ field: "license_name", current: currentLicense, next: String(record.licenseName || "") });
+    }
+    if (currentNote !== String(record.note || "")) {
+      fieldChanges.push({ field: "note", current: currentNote, next: String(record.note || "") });
+    }
+    if (!fieldChanges.length) continue;
+
+    changes.push({
+      memberId: Number(member.id),
+      memberName: String(member.display_name || `${member.first_name || ""} ${member.last_name || ""}`).trim(),
+      memberEmail: String(member.email || "").trim(),
+      existingPass: Boolean(currentPass),
+      fieldChanges,
+      proposed: {
+        passStatus: String(record.passStatus || "missing"),
+        passExpiry: String(record.passExpiry || "") || null,
+        licenseName: String(record.licenseName || ""),
+        note: String(record.note || "")
+      }
+    });
+  }
+
+  return {
+    sourceFilePath: finalSourceLabel || CLUBEE_XLSX_PATH,
+    sourceMtimeMs: finalSourceMtimeMs,
+    processedRows,
+    matchedRows,
+    unmatchedRows,
+    createdPasses: changes.filter((entry) => !entry.existingPass).length,
+    updatedPasses: changes.filter((entry) => entry.existingPass).length,
+    unmatchedNames: unmatchedNames.slice(0, 20),
+    changes
+  };
+}
+
+async function previewSupabaseClubeePassSync(options = {}) {
+  return buildSupabaseClubeePassSyncPlan(options);
+}
+
+async function applySupabaseClubeePassSync({ memberIds, clubeeRows, sourceLabel, sourceMtimeMs } = {}) {
+  const plan = await buildSupabaseClubeePassSyncPlan({ clubeeRows, sourceLabel, sourceMtimeMs });
+  const selectedSet = new Set(
+    (Array.isArray(memberIds) ? memberIds : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+  );
+  const selected = selectedSet.size
+    ? plan.changes.filter((change) => selectedSet.has(Number(change.memberId)))
+    : [];
+
+  if (selected.length) {
+    const rows = selected.map((change) => ({
+      member_id: change.memberId,
+      pass_status: change.proposed.passStatus,
+      expires_on: change.proposed.passExpiry,
+      federation_reference: change.proposed.licenseName || null,
+      notes: change.proposed.note || null
+    }));
+
+    const upsertResponse = await fetch(`${SUPABASE_URL}/rest/v1/player_passes?on_conflict=member_id`, {
+      method: "POST",
+      headers: supabaseAdminHeaders({
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal"
+      }),
+      body: JSON.stringify(rows)
+    });
+
+    if (!upsertResponse.ok) {
+      const payload = await upsertResponse.json().catch(() => ({}));
+      const message = payload?.message || payload?.error || `Could not apply Clubee pass sync (${upsertResponse.status}).`;
+      throw new Error(message);
+    }
+  }
+
+  return {
+    selectedCount: selected.length,
+    skippedCount: Math.max(0, plan.changes.length - selected.length),
+    appliedCount: selected.length,
+    createdPasses: selected.filter((entry) => !entry.existingPass).length,
+    updatedPasses: selected.filter((entry) => entry.existingPass).length,
+    processedRows: plan.processedRows,
+    matchedRows: plan.matchedRows,
+    unmatchedRows: plan.unmatchedRows,
+    unmatchedNames: plan.unmatchedNames
+  };
 }
 
 function supabaseAdminHeaders(extra = {}) {
@@ -283,7 +551,7 @@ async function latestXmlFilePath(directoryPath) {
 
 await initializeOptionalLocalDatabase();
 
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
 app.use((req, res, next) => {
   const requestOrigin = String(req.headers.origin || "").trim();
   if (CORS_ORIGIN) {
@@ -333,8 +601,31 @@ app.get("/api/bootstrap", async (_req, res) => {
 
 app.post("/api/passes/sync-clubee", async (req, res) => {
   try {
-    if (!requireLocalDb(res, "Clubee pass sync API")) return;
-    const preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
+    const body = req.body || {};
+    const uploadedBuffer = decodeBase64FilePayload(body.fileBase64);
+    const uploadedRows = uploadedBuffer ? readClubeeWorkbookFromBuffer(uploadedBuffer) : null;
+    const sourceLabel = uploadedBuffer ? String(body.fileName || "uploaded-clubee.xlsx") : CLUBEE_XLSX_PATH;
+    const sourceMtimeMs = uploadedBuffer ? Date.now() : undefined;
+
+    let preview;
+    if (localDbApi?.previewClubeePassSync) {
+      if (uploadedBuffer) {
+        const tempPath = path.join(__dirname, "data", `clubee-upload-${Date.now()}.xlsx`);
+        await fs.writeFile(tempPath, uploadedBuffer);
+        try {
+          preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: tempPath });
+        } finally {
+          await fs.rm(tempPath, { force: true });
+        }
+      } else {
+        preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
+      }
+    } else if (hasSupabaseAdminConfig()) {
+      preview = await previewSupabaseClubeePassSync({ clubeeRows: uploadedRows, sourceLabel, sourceMtimeMs });
+    } else {
+      res.status(503).json({ error: "Clubee sync API is unavailable. Configure local DB or Supabase service-role settings on the server." });
+      return;
+    }
     res.json({
       warning: "This endpoint is preview-only now. Use /api/passes/sync-clubee/apply to commit.",
       preview
@@ -348,8 +639,31 @@ app.post("/api/passes/sync-clubee", async (req, res) => {
 
 app.post("/api/passes/sync-clubee/preview", async (_req, res) => {
   try {
-    if (!requireLocalDb(res, "Clubee pass sync preview API")) return;
-    const preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
+    const body = _req.body || {};
+    const uploadedBuffer = decodeBase64FilePayload(body.fileBase64);
+    const uploadedRows = uploadedBuffer ? readClubeeWorkbookFromBuffer(uploadedBuffer) : null;
+    const sourceLabel = uploadedBuffer ? String(body.fileName || "uploaded-clubee.xlsx") : CLUBEE_XLSX_PATH;
+    const sourceMtimeMs = uploadedBuffer ? Date.now() : undefined;
+
+    let preview;
+    if (localDbApi?.previewClubeePassSync) {
+      if (uploadedBuffer) {
+        const tempPath = path.join(__dirname, "data", `clubee-upload-${Date.now()}.xlsx`);
+        await fs.writeFile(tempPath, uploadedBuffer);
+        try {
+          preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: tempPath });
+        } finally {
+          await fs.rm(tempPath, { force: true });
+        }
+      } else {
+        preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
+      }
+    } else if (hasSupabaseAdminConfig()) {
+      preview = await previewSupabaseClubeePassSync({ clubeeRows: uploadedRows, sourceLabel, sourceMtimeMs });
+    } else {
+      res.status(503).json({ error: "Clubee sync preview is unavailable. Configure local DB or Supabase service-role settings on the server." });
+      return;
+    }
     res.json({ preview });
   } catch (error) {
     res.status(400).json({
@@ -360,13 +674,38 @@ app.post("/api/passes/sync-clubee/preview", async (_req, res) => {
 
 app.post("/api/passes/sync-clubee/apply", async (req, res) => {
   try {
-    if (!requireLocalDb(res, "Clubee pass sync apply API")) return;
     const body = req.body || {};
+    const uploadedBuffer = decodeBase64FilePayload(body.fileBase64);
+    const uploadedRows = uploadedBuffer ? readClubeeWorkbookFromBuffer(uploadedBuffer) : null;
+    const sourceLabel = uploadedBuffer ? String(body.fileName || "uploaded-clubee.xlsx") : CLUBEE_XLSX_PATH;
+    const sourceMtimeMs = uploadedBuffer ? Date.now() : undefined;
     const memberIds = Array.isArray(body.memberIds) ? body.memberIds : [];
-    const applySummary = await localDbApi.applyClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH, memberIds });
-    const data = await localDbApi.getBootstrapData();
-    data.passSyncApply = applySummary;
-    res.json(data);
+    if (localDbApi?.applyClubeePassSync && localDbApi?.getBootstrapData) {
+      let applySummary;
+      if (uploadedBuffer) {
+        const tempPath = path.join(__dirname, "data", `clubee-upload-${Date.now()}.xlsx`);
+        await fs.writeFile(tempPath, uploadedBuffer);
+        try {
+          applySummary = await localDbApi.applyClubeePassSync({ clubeeXlsxPath: tempPath, memberIds });
+        } finally {
+          await fs.rm(tempPath, { force: true });
+        }
+      } else {
+        applySummary = await localDbApi.applyClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH, memberIds });
+      }
+      const data = await localDbApi.getBootstrapData();
+      data.passSyncApply = applySummary;
+      res.json(data);
+      return;
+    }
+
+    if (hasSupabaseAdminConfig()) {
+      const applySummary = await applySupabaseClubeePassSync({ memberIds, clubeeRows: uploadedRows, sourceLabel, sourceMtimeMs });
+      res.json({ passSyncApply: applySummary });
+      return;
+    }
+
+    res.status(503).json({ error: "Clubee sync apply is unavailable. Configure local DB or Supabase service-role settings on the server." });
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Could not apply pass sync from Clubee export."

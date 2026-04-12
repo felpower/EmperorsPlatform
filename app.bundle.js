@@ -76,6 +76,7 @@
   let passFilters = loadPassFilters();
   let passSyncPreview = null;
   let selectedPassSyncMemberIds = [];
+  let passSyncUpload = null;
   let authState = {
     mode: "local",
     status: "Local development mode active.",
@@ -1532,7 +1533,9 @@
       if (value === "expired") return "expired";
       return "valid";
     })();
-    const normalizedPassExpiry = String(memberPayload.passExpiry || "").trim();
+    const normalizedPassExpiry = normalizedPassStatus === "missing"
+      ? ""
+      : String(memberPayload.passExpiry || "").trim();
 
     const patch = {
       first_name: firstName || null,
@@ -1781,13 +1784,26 @@
     applyBootstrap(payload);
   }
 
+  async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        resolve(result.includes(",") ? result.split(",").pop() || "" : result);
+      };
+      reader.onerror = () => reject(new Error("Could not read the selected file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function previewClubeePassSync() {
-    if (shouldUseSupabaseData()) {
-      throw new Error("Clubee file preview is only available in local backend mode.");
-    }
     const response = await fetch(apiUrl("/api/passes/sync-clubee/preview"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: passSyncUpload?.fileName || "",
+        fileBase64: passSyncUpload?.fileBase64 || ""
+      })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not build Clubee pass preview.");
@@ -1795,17 +1811,22 @@
   }
 
   async function applyClubeePassSync(memberIds) {
-    if (shouldUseSupabaseData()) {
-      throw new Error("Clubee file sync apply is only available in local backend mode.");
-    }
     const response = await fetch(apiUrl("/api/passes/sync-clubee/apply"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ memberIds })
+      body: JSON.stringify({
+        memberIds,
+        fileName: passSyncUpload?.fileName || "",
+        fileBase64: passSyncUpload?.fileBase64 || ""
+      })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not apply Clubee pass sync.");
-    applyBootstrap(payload);
+    if (Array.isArray(payload?.members) || Array.isArray(payload?.fees)) {
+      applyBootstrap(payload);
+    } else {
+      await loadBootstrapData();
+    }
     return payload.passSyncApply || null;
   }
 
@@ -2358,7 +2379,7 @@
           <p class="eyebrow">Eligibility</p>
           <h3>Player passes</h3>
         </div>
-        ${!shouldUseSupabaseData() && currentAccessRole === "admin" ? `<div class="button-row"><button type="button" class="ghost-button" id="open-pass-sync-review">Sync review</button></div>` : ""}
+        ${currentAccessRole === "admin" ? `<div class="button-row"><button type="button" class="ghost-button" id="open-pass-sync-review">Sync review</button></div>` : ""}
       </div>
       <article class="card filter-card members-filter-sticky members-filter-card" style="margin-bottom: 14px;">
         <details class="pass-filters-dropdown" ${passFiltersExpanded ? "open" : ""}>
@@ -2455,10 +2476,6 @@
     if (currentAccessRole !== "admin") {
       return lockedState("Pass sync review is admin-only.", "Only admins can preview and approve Clubee updates.");
     }
-    if (shouldUseSupabaseData()) {
-      return lockedState("Clubee file sync review needs local backend mode.", "This review reads from the local Clubee export file and is unavailable in hosted Supabase-only mode.");
-    }
-
     const preview = passSyncPreview;
     const changes = Array.isArray(preview?.changes) ? preview.changes : [];
     const selectedSet = new Set(selectedPassSyncMemberIds.map((id) => String(id)));
@@ -2476,8 +2493,15 @@
         </div>
       </div>
       <article class="card" style="margin-bottom: 14px;">
+        <div class="form-grid" style="margin-bottom: 10px;">
+          <label>Clubee XLSX file
+            <input id="pass-sync-file-input" type="file" accept=".xlsx,.xls" />
+          </label>
+        </div>
+        <p class="meta" id="pass-sync-file-label">${passSyncUpload?.fileName ? `Selected file: ${passSyncUpload.fileName}` : "No file selected. If empty, server uses its configured default file path."}</p>
         ${preview ? `
           <div class="pill-row">
+            ${plainPill(`Source: ${preview.sourceFilePath || "default"}`)}
             ${plainPill(`Rows read: ${preview.processedRows || 0}`)}
             ${plainPill(`Matched: ${preview.matchedRows || 0}`)}
             ${plainPill(`Changes: ${changes.length}`)}
@@ -2755,13 +2779,22 @@
         const membershipInput = document.querySelector(`.member-inline-membership[data-member-id="${memberId}"]`);
         const passStatusInput = document.querySelector(`.member-inline-pass-status[data-member-id="${memberId}"]`);
         const passExpiryInput = document.querySelector(`.member-inline-pass-expiry[data-member-id="${memberId}"]`);
-        if (!firstNameInput || !lastNameInput || !emailInput || !jerseyInput || !membershipInput || !passStatusInput || !passExpiryInput) return;
+        if (!firstNameInput || !lastNameInput || !emailInput || !jerseyInput || !membershipInput || !passStatusInput || !passExpiryInput) {
+          authState.status = "Could not save this row because required inline fields are missing. Try reopening Members view.";
+          mount();
+          switchView("members");
+          return;
+        }
         const selectedPositions = Array.from(document.querySelectorAll(`.member-inline-option[data-member-id="${memberId}"][data-member-multi="positions"]:checked`))
           .map((input) => String(input.value || "").trim().toUpperCase())
           .filter(Boolean);
         const selectedRoles = Array.from(document.querySelectorAll(`.member-inline-option[data-member-id="${memberId}"][data-member-multi="roles"]:checked`))
           .map((input) => String(input.value || "").trim())
           .filter(Boolean);
+        const normalizedPassStatus = String(passStatusInput.value || "missing").trim().toLowerCase();
+        const normalizedPassExpiry = normalizedPassStatus === "missing"
+          ? ""
+          : String(passExpiryInput.value || "").trim();
         try {
           await saveMember({
             memberId,
@@ -2772,8 +2805,8 @@
             roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
             jerseyNumber: String(jerseyInput.value || "").trim(),
             membershipStatus: String(membershipInput.value || "active").trim(),
-            passStatus: String(passStatusInput.value || "missing").trim(),
-            passExpiry: String(passExpiryInput.value || "").trim(),
+            passStatus: normalizedPassStatus,
+            passExpiry: normalizedPassExpiry,
             notes: member.notes || ""
           });
           authState.status = `${member.name} was updated.`;
@@ -2796,6 +2829,20 @@
         const summary = details ? details.querySelector("summary") : null;
         if (summary) {
           summary.textContent = selectedCount ? `${selectedCount} selected` : `Select ${kind}`;
+        }
+      };
+    });
+    document.querySelectorAll(".member-inline-pass-status").forEach((select) => {
+      select.onchange = function () {
+        const memberId = String(select.dataset.memberId || "").trim();
+        if (!memberId) return;
+        const expiryInput = document.querySelector(`.member-inline-pass-expiry[data-member-id="${memberId}"]`);
+        if (!expiryInput) return;
+        const status = String(select.value || "").trim().toLowerCase();
+        const shouldClear = status === "missing";
+        if (shouldClear) {
+          expiryInput.value = "";
+          expiryInput.classList.remove("is-expiring-soon");
         }
       };
     });
@@ -3817,6 +3864,33 @@
   }
 
   function bindPassSyncActions() {
+    const fileInput = document.getElementById("pass-sync-file-input");
+    if (fileInput) {
+      fileInput.onchange = async function () {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+          passSyncUpload = null;
+          return;
+        }
+        try {
+          const fileBase64 = await fileToBase64(file);
+          passSyncUpload = {
+            fileName: String(file.name || "clubee.xlsx"),
+            fileBase64
+          };
+          passSyncPreview = null;
+          selectedPassSyncMemberIds = [];
+          authState.status = `Loaded sync source file: ${passSyncUpload.fileName}`;
+          mount();
+          switchView("pass-sync");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("pass-sync");
+        }
+      };
+    }
+
     const previewButton = document.getElementById("preview-pass-sync-button");
     if (previewButton) {
       previewButton.onclick = async function () {
