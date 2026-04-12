@@ -2154,6 +2154,7 @@
         selectedUserMemberId = "";
         if (!authState.user) {
           window.location.hash = "dashboard";
+          mount();
           switchView("dashboard");
           return;
         }
@@ -2161,10 +2162,12 @@
         if (ownMember?.id) {
           selectedUserMemberId = String(ownMember.id);
           window.location.hash = "user/me";
+          mount();
           switchView("user");
           return;
         }
         window.location.hash = "user";
+        mount();
         switchView("user");
       };
     }
