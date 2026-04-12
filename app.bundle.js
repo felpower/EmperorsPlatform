@@ -28,6 +28,7 @@
   const FEE_STATUS_FILTER_KEY = "emperors-fee-status-filter";
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
+  const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
   const viewIds = ["dashboard", "members", "fees", "user", "passes", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
@@ -61,6 +62,7 @@
   let memberMergeMode = false;
   let memberFiltersExpanded = false;
   let feeFiltersExpanded = false;
+  let passFiltersExpanded = false;
   let feeBulkStatus = "paid";
   let selectedFeeMemberIds = [];
   let selectedUserMemberId = "";
@@ -68,8 +70,10 @@
   let authInviteRole = "admin";
   let teardownMembersStickyHeader = null;
   let teardownFeesStickyHeader = null;
+  let teardownPassesStickyHeader = null;
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
+  let passFilters = loadPassFilters();
   let authState = {
     mode: "local",
     status: "Local development mode active.",
@@ -137,6 +141,44 @@
 
   function saveMemberFilters() {
     sessionStorage.setItem(MEMBER_FILTER_KEY, JSON.stringify(memberFilters));
+  }
+
+  function loadPassFilters() {
+    try {
+      const saved = sessionStorage.getItem(PASS_FILTER_KEY);
+      if (!saved) {
+        return {
+          search: "",
+          from: "",
+          to: "",
+          statuses: [],
+          positions: [],
+          membership: ["active"]
+        };
+      }
+      const parsed = JSON.parse(saved);
+      return {
+        search: String(parsed?.search || "").trim(),
+        from: String(parsed?.from || "").trim(),
+        to: String(parsed?.to || "").trim(),
+        statuses: Array.isArray(parsed?.statuses) ? parsed.statuses.filter(Boolean) : [],
+        positions: Array.isArray(parsed?.positions) ? parsed.positions.filter(Boolean) : [],
+        membership: Array.isArray(parsed?.membership) && parsed.membership.length ? parsed.membership.filter(Boolean) : ["active"]
+      };
+    } catch {
+      return {
+        search: "",
+        from: "",
+        to: "",
+        statuses: [],
+        positions: [],
+        membership: ["active"]
+      };
+    }
+  }
+
+  function savePassFilters() {
+    sessionStorage.setItem(PASS_FILTER_KEY, JSON.stringify(passFilters));
   }
 
   function defaultTableSort() {
@@ -774,6 +816,18 @@
     return diffDays >= 0 && diffDays <= 90;
   }
 
+  function isIsoDateText(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
+  }
+
+  function normalizePassFilterDate(value) {
+    const text = String(value || "").trim();
+    if (!isIsoDateText(text)) return "";
+    const year = Number(text.slice(0, 4));
+    if (!Number.isFinite(year) || year < 2020) return "";
+    return text;
+  }
+
   function formatFeePeriod(period) {
     return String(period || "-").replace("_", " ");
   }
@@ -1014,6 +1068,69 @@
       if (memberFilters.membership.length && !memberFilters.membership.includes(member.membershipStatus)) {
         return false;
       }
+      return true;
+    });
+  }
+
+  function passFilterOptions() {
+    const playerMembers = state.members.filter((member) => (member.roles || []).includes("player"));
+    return {
+      statuses: ["valid", "missing", "expired"],
+      positions: Array.from(new Set(playerMembers.flatMap((member) => member.positions || []).filter(Boolean))).sort(),
+      membership: Array.from(new Set(playerMembers.map((member) => member.membershipStatus).filter(Boolean))).sort()
+    };
+  }
+
+  function filteredPassMembers() {
+    return state.members.filter((member) => {
+      if (!(member.roles || []).includes("player")) {
+        return false;
+      }
+
+      const query = String(passFilters.search || "").trim().toLowerCase();
+      if (query) {
+        const haystack = [
+          member.firstName,
+          member.lastName,
+          member.name,
+          member.email
+        ].map((value) => String(value || "").toLowerCase()).join(" ");
+        if (!haystack.includes(query)) {
+          return false;
+        }
+      }
+
+      if (passFilters.statuses.length) {
+        const status = displayPassStatus(member.passStatus);
+        if (!passFilters.statuses.includes(status)) {
+          return false;
+        }
+      }
+
+      if (passFilters.positions.length && !passFilters.positions.some((position) => (member.positions || []).includes(position))) {
+        return false;
+      }
+
+      if (passFilters.membership.length && !passFilters.membership.includes(member.membershipStatus)) {
+        return false;
+      }
+
+      const fromDate = normalizePassFilterDate(passFilters.from);
+      const toDate = normalizePassFilterDate(passFilters.to);
+      const hasFrom = Boolean(fromDate);
+      const hasTo = Boolean(toDate);
+      if (hasFrom || hasTo) {
+        if (!member.passExpiry) {
+          return false;
+        }
+        if (hasFrom && member.passExpiry < fromDate) {
+          return false;
+        }
+        if (hasTo && member.passExpiry > toDate) {
+          return false;
+        }
+      }
+
       return true;
     });
   }
@@ -2157,20 +2274,108 @@
     if (!canAccess("playerPasses")) {
       return lockedState("Player pass data is hidden for this role.", "Only admins, coaches, and technical admins should see player pass details.");
     }
-    const playerMembers = state.members.filter((member) => member.roles.includes("player"));
-    if (!playerMembers.length) return emptyState("No player pass data yet", "Import the roster and Clubee export to populate this area.");
+    const allPlayerMembers = state.members.filter((member) => (member.roles || []).includes("player"));
+    const playerMembers = filteredPassMembers();
+    const options = passFilterOptions();
+    if (!allPlayerMembers.length) return emptyState("No player pass data yet", "Import the roster and Clubee export to populate this area.");
+
+    const rows = [...playerMembers].sort((left, right) => {
+      const leftDate = left.passExpiry ? new Date(`${left.passExpiry}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
+      const rightDate = right.passExpiry ? new Date(`${right.passExpiry}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
+      return leftDate - rightDate;
+    });
+
     return `
-      <div class="section-head"><div><p class="eyebrow">Eligibility</p><h3>Player pass overview</h3></div></div>
-      <div class="grid two-up">
-        ${playerMembers.map((member) => `
-          <article class="card member-card">
-            <div class="member-card-top"><div><p class="eyebrow">${member.jerseyNumber ? `#${member.jerseyNumber}` : "No jersey"}</p><h3>${member.name}</h3></div>${statusPill(displayPassStatus(member.passStatus))}</div>
-            <p class="meta">Positions: ${formatList(member.positions, "Not assigned")}</p>
-            <p class="meta">License: ${member.licenseName || "No license text"}</p>
-            <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">Expiry: ${member.passExpiry ? formatDate(member.passExpiry) : "No expiry date"}</p>
-            <p class="muted">${member.notes || "No additional eligibility note for this player yet."}</p>
-          </article>
-        `).join("")}
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Eligibility</p>
+          <h3>Player passes</h3>
+        </div>
+      </div>
+      <article class="card filter-card members-filter-sticky members-filter-card" style="margin-bottom: 14px;">
+        <details class="pass-filters-dropdown" ${passFiltersExpanded ? "open" : ""}>
+          <summary>
+            <span class="member-filter-summary-label">Filters</span>
+            <span class="member-filter-summary-meta">Name, expiry, status, position, membership</span>
+          </summary>
+          <div style="margin-top: 10px;">
+            <label>Search name
+              <input id="pass-search-input" type="search" placeholder="e.g. Max Mustermann" value="${String(passFilters.search || "").replaceAll('"', '&quot;')}" />
+            </label>
+          </div>
+          <div class="form-grid" style="margin-top: 10px;">
+            <label>Expiry from
+              <input id="pass-expiry-from" type="date" value="${String(passFilters.from || "")}" />
+            </label>
+            <label>Expiry to
+              <input id="pass-expiry-to" type="date" value="${String(passFilters.to || "")}" />
+            </label>
+          </div>
+          <div class="split" style="grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px;">
+            <fieldset class="status-filter-group">
+              <legend>Status</legend>
+              <div class="status-filter-options">
+                ${options.statuses.map((value) => `
+                  <label class="status-check">
+                    <input type="checkbox" class="pass-filter-checkbox" data-pass-filter="statuses" value="${value}" ${passFilters.statuses.includes(value) ? "checked" : ""} />
+                    <span>${value}</span>
+                  </label>
+                `).join("")}
+              </div>
+            </fieldset>
+            <fieldset class="status-filter-group">
+              <legend>Position</legend>
+              <div class="status-filter-options">
+                ${options.positions.map((value) => `
+                  <label class="status-check">
+                    <input type="checkbox" class="pass-filter-checkbox" data-pass-filter="positions" value="${value}" ${passFilters.positions.includes(value) ? "checked" : ""} />
+                    <span>${value}</span>
+                  </label>
+                `).join("") || `<span class="meta">No positions</span>`}
+              </div>
+            </fieldset>
+            <fieldset class="status-filter-group">
+              <legend>Membership</legend>
+              <div class="status-filter-options">
+                ${options.membership.map((value) => `
+                  <label class="status-check">
+                    <input type="checkbox" class="pass-filter-checkbox" data-pass-filter="membership" value="${value}" ${passFilters.membership.includes(value) ? "checked" : ""} />
+                    <span>${value.replaceAll("_", " ")}</span>
+                  </label>
+                `).join("") || `<span class="meta">No membership states</span>`}
+              </div>
+            </fieldset>
+          </div>
+          <div class="button-row" style="margin-top: 10px;">
+            <button id="clear-pass-filters" type="button" class="ghost-button">Clear pass filters</button>
+          </div>
+        </details>
+      </article>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>First name</th>
+              <th>Last name</th>
+              <th>Position</th>
+              <th>Expiry</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((member) => `
+              <tr>
+                <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${member.id}" aria-label="Open profile"></button></td>
+                <td><strong>${member.firstName || "-"}</strong></td>
+                <td><strong>${member.lastName || "-"}</strong></td>
+                <td>${formatList(member.positions, "-")}</td>
+                <td class="${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? formatDate(member.passExpiry) : "No expiry date"}</td>
+                <td>${statusPill(displayPassStatus(member.passStatus))}</td>
+              </tr>
+            `).join("") || `<tr><td colspan="6" class="meta">No pass rows match the selected filters.</td></tr>`}
+          </tbody>
+        </table>
       </div>
     `;
   }
@@ -3350,6 +3555,114 @@
     }
   }
 
+  function bindPassFilters() {
+    const filtersDropdown = document.querySelector(".pass-filters-dropdown");
+    if (filtersDropdown) {
+      filtersDropdown.ontoggle = function () {
+        passFiltersExpanded = filtersDropdown.open;
+      };
+    }
+
+    document.querySelectorAll(".pass-filter-checkbox").forEach((checkbox) => {
+      checkbox.onchange = function () {
+        const next = { statuses: [], positions: [], membership: [] };
+        document.querySelectorAll(".pass-filter-checkbox:checked").forEach((input) => {
+          const target = input.dataset.passFilter;
+          if (target && next[target]) {
+            next[target].push(input.value);
+          }
+        });
+        passFilters = {
+          ...passFilters,
+          statuses: next.statuses,
+          positions: next.positions,
+          membership: next.membership
+        };
+        savePassFilters();
+        mount();
+        switchView("passes");
+      };
+    });
+
+    const searchInput = document.getElementById("pass-search-input");
+    if (searchInput) {
+      searchInput.oninput = function () {
+        const rawValue = String(searchInput.value || "");
+        const cursorStart = Number.isFinite(searchInput.selectionStart) ? searchInput.selectionStart : rawValue.length;
+        const cursorEnd = Number.isFinite(searchInput.selectionEnd) ? searchInput.selectionEnd : rawValue.length;
+        passFilters = {
+          ...passFilters,
+          search: rawValue
+        };
+        savePassFilters();
+        mount();
+        switchView("passes");
+        const nextSearchInput = document.getElementById("pass-search-input");
+        if (nextSearchInput) {
+          nextSearchInput.focus();
+          const safeStart = Math.min(cursorStart, nextSearchInput.value.length);
+          const safeEnd = Math.min(cursorEnd, nextSearchInput.value.length);
+          nextSearchInput.setSelectionRange(safeStart, safeEnd);
+        }
+      };
+    }
+
+    const fromInput = document.getElementById("pass-expiry-from");
+    if (fromInput) {
+      fromInput.onchange = function () {
+        const rawValue = String(fromInput.value || "").trim();
+        const normalizedDate = normalizePassFilterDate(rawValue);
+        const isCleared = rawValue === "";
+        if (!normalizedDate && !isCleared) {
+          return;
+        }
+        passFilters = {
+          ...passFilters,
+          from: isCleared ? "" : normalizedDate
+        };
+        savePassFilters();
+        mount();
+        switchView("passes");
+      };
+    }
+
+    const toInput = document.getElementById("pass-expiry-to");
+    if (toInput) {
+      toInput.onchange = function () {
+        const rawValue = String(toInput.value || "").trim();
+        const normalizedDate = normalizePassFilterDate(rawValue);
+        const isCleared = rawValue === "";
+        if (!normalizedDate && !isCleared) {
+          return;
+        }
+        passFilters = {
+          ...passFilters,
+          to: isCleared ? "" : normalizedDate
+        };
+        savePassFilters();
+        mount();
+        switchView("passes");
+      };
+    }
+
+    const clearButton = document.getElementById("clear-pass-filters");
+    if (clearButton) {
+      clearButton.onclick = function () {
+        passFilters = {
+          search: "",
+          from: "",
+          to: "",
+          statuses: [],
+          positions: [],
+          membership: ["active"]
+        };
+        savePassFilters();
+        mount();
+        switchView("passes");
+      };
+    }
+  }
+
   function bindTableSorts() {
     document.querySelectorAll(".sort-button").forEach((button) => {
       button.onclick = function () {
@@ -3506,6 +3819,75 @@
     };
   }
 
+  function setupPassesStickyHeader() {
+    if (typeof teardownPassesStickyHeader === "function") {
+      teardownPassesStickyHeader();
+      teardownPassesStickyHeader = null;
+    }
+
+    const passesView = document.getElementById("passes");
+    if (!passesView || !passesView.classList.contains("active")) return;
+    const tableWrap = passesView.querySelector(".table-wrap");
+    const table = tableWrap ? tableWrap.querySelector("table") : null;
+    const thead = table ? table.querySelector("thead") : null;
+    if (!tableWrap || !table || !thead) return;
+
+    const sticky = document.createElement("div");
+    sticky.className = "passes-sticky-header";
+    const stickyTable = document.createElement("table");
+    stickyTable.className = "passes-sticky-header-table";
+    const clonedHead = thead.cloneNode(true);
+    stickyTable.appendChild(clonedHead);
+    sticky.appendChild(stickyTable);
+    document.body.appendChild(sticky);
+
+    const sync = function () {
+      const wrapRect = tableWrap.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      const topOffset = 0;
+      const headHeight = thead.getBoundingClientRect().height || 0;
+      const show = tableRect.top < topOffset && tableRect.bottom > topOffset + headHeight;
+
+      sticky.style.display = show ? "block" : "none";
+      if (!show) return;
+
+      sticky.style.left = `${wrapRect.left}px`;
+      sticky.style.width = `${wrapRect.width}px`;
+
+      const originalCells = thead.querySelectorAll("th");
+      const clonedCells = clonedHead.querySelectorAll("th");
+      originalCells.forEach((cell, index) => {
+        const width = cell.getBoundingClientRect().width;
+        if (!clonedCells[index]) return;
+        clonedCells[index].style.width = `${width}px`;
+        clonedCells[index].style.minWidth = `${width}px`;
+        clonedCells[index].style.maxWidth = `${width}px`;
+      });
+
+      stickyTable.style.width = `${table.getBoundingClientRect().width}px`;
+      stickyTable.style.transform = `translateX(${-tableWrap.scrollLeft}px)`;
+    };
+
+    const onScroll = function () {
+      sync();
+    };
+    const onResize = function () {
+      sync();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    tableWrap.addEventListener("scroll", onScroll, { passive: true });
+    sync();
+
+    teardownPassesStickyHeader = function () {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      tableWrap.removeEventListener("scroll", onScroll);
+      sticky.remove();
+    };
+  }
+
   function mount() {
     try {
       ensureValidFeeFilter();
@@ -3532,6 +3914,7 @@
       bindUserPageActions();
       bindMemberFilters();
       bindFeeFilters();
+      bindPassFilters();
       bindFeeEditModeActions();
       bindAuthActions();
       bindRecoveryActions();
@@ -3541,6 +3924,7 @@
       switchView(getRouteView());
       setupMembersStickyHeader();
       setupFeesStickyHeader();
+      setupPassesStickyHeader();
     } catch (error) {
       console.error("Emperors bundle mount failed", error);
       const dashboard = document.getElementById("dashboard");
@@ -3570,6 +3954,7 @@
     switchView(getRouteView());
     setupMembersStickyHeader();
     setupFeesStickyHeader();
+    setupPassesStickyHeader();
   });
   if (supabaseClient) {
     const { data } = await supabaseClient.auth.getSession();

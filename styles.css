@@ -474,6 +474,27 @@ table thead th {
   border-bottom: 1px solid var(--line);
 }
 
+.passes-sticky-header {
+  position: fixed;
+  top: 0;
+  z-index: 60;
+  display: none;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--paper-strong);
+  border-bottom: 1px solid var(--line);
+}
+
+.passes-sticky-header-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.passes-sticky-header th {
+  background: var(--paper-strong);
+  border-bottom: 1px solid var(--line);
+}
+
 tbody tr:hover {
   background: rgba(84, 184, 229, 0.06);
 }
@@ -1050,6 +1071,19 @@ code {
   display: none;
 }
 
+.pass-filters-dropdown summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pass-filters-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
 .members-filter-card {
   padding: 10px 12px;
 }
@@ -1089,6 +1123,17 @@ code {
 }
 
 .fee-filters-dropdown[open] summary::after {
+  content: "▴";
+}
+
+.pass-filters-dropdown summary::after {
+  content: "▾";
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.pass-filters-dropdown[open] summary::after {
   content: "▴";
 }
 
