@@ -82,7 +82,7 @@ async function sendSupabaseInvite({ email, fullName, roles, memberId, req }) {
         roles: Array.isArray(roles) ? roles : [],
         member_id: memberId ? String(memberId) : ""
       },
-      redirectTo: `${resolvePublicSiteUrl(req)}/#dashboard`
+      redirectTo: `${resolvePublicSiteUrl(req)}/#recovery`
     })
   });
 

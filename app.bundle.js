@@ -76,7 +76,8 @@
     user: null,
     ready: false,
     loading: true,
-    roles: []
+    roles: [],
+    pendingAction: ""
   };
   let recoveryState = {
     show: false,
@@ -260,6 +261,10 @@
     return String(metadata.full_name || metadata.name || authState.user?.email || "").trim();
   }
 
+  function authActionActive(action) {
+    return String(authState.pendingAction || "") === String(action || "");
+  }
+
   function syncAuthSession(session) {
     authState.ready = true;
     authState.loading = false;
@@ -286,6 +291,9 @@
   }
 
   function renderAuthGate() {
+    const signInBusy = authActionActive("sign-in");
+    const resetBusy = authActionActive("reset-password");
+    const signOutBusy = authActionActive("sign-out");
     const authMessage = authState.loading
       ? "Checking your session..."
       : shouldRequireAuth()
@@ -299,15 +307,17 @@
           <h3 style="margin-top: 4px;">Sign in</h3>
           <p class="muted">${authMessage}</p>
         </div>
+        ${signInBusy || resetBusy || signOutBusy ? `<div class="auth-progress"><span class="auth-spinner" aria-hidden="true"></span><span>${authState.status || "Working..."}</span></div>` : ""}
         <div class="form-grid">
-          <label>Email<input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+          <label>Email<input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" ${signInBusy || resetBusy ? "disabled" : ""} /></label>
           <label>Password<input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
         </div>
         <div class="button-row">
-          <button id="auth-sign-in" type="button" class="primary-button">Sign in</button>
-          <button id="auth-sign-out" type="button" class="ghost-button">Sign out</button>
+          <button id="auth-sign-in" type="button" class="primary-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signInBusy ? "Signing in..." : "Sign in"}</button>
+          <button id="auth-reset-password" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${resetBusy ? "Sending reset email..." : "Send reset email"}</button>
+          <button id="auth-sign-out" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signOutBusy ? "Signing out..." : "Sign out"}</button>
         </div>
-        <p class="meta">Members receive an invite email first, then set their password during registration. Admin accounts can be invited the same way.</p>
+        <p class="meta">Invited users must set their password first before normal sign-in. Password reset emails also return users to the password setup screen.</p>
       </article>
     `;
   }
@@ -323,7 +333,31 @@
     if (response.error) {
       throw response.error;
     }
+    if (response.data?.user && !response.data.user?.user_metadata?.password_set) {
+      await supabaseClient.auth.updateUser({
+        data: {
+          ...(response.data.user.user_metadata || {}),
+          password_set: true
+        }
+      });
+    }
     syncAuthSession(response.data.session || null);
+  }
+
+  async function sendResetPasswordEmail(email) {
+    if (!supabaseClient) {
+      throw new Error("Supabase auth is not configured.");
+    }
+    const normalizedEmail = String(email || "").trim();
+    if (!normalizedEmail) {
+      throw new Error("Enter your email address first.");
+    }
+    const response = await supabaseClient.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
+    });
+    if (response.error) {
+      throw response.error;
+    }
   }
 
   async function signOut() {
@@ -342,11 +376,20 @@
     recoveryState.loading = true;
     recoveryState.status = "Setting password...";
     try {
-      const response = await supabaseClient.auth.updateUser({ password: String(password || "") });
+      const response = await supabaseClient.auth.updateUser({
+        password: String(password || ""),
+        data: {
+          ...(authState.user?.user_metadata || {}),
+          password_set: true
+        }
+      });
       if (response.error) {
         throw response.error;
       }
-      recoveryState.status = "Password set successfully! Redirecting to sign in...";
+      if (response.data?.user) {
+        syncAuthSession({ user: response.data.user });
+      }
+      recoveryState.status = "Password set successfully! Redirecting...";
       setTimeout(() => {
         window.location.href = window.location.origin + window.location.pathname + "#dashboard";
       }, 1500);
@@ -376,7 +419,7 @@
           <label>Confirm Password<input id="recovery-password-confirm" type="password" autocomplete="new-password" placeholder="••••••••" minlength="6" /></label>
         </div>
         <div class="button-row">
-          <button id="recovery-submit" type="button" class="primary-button" ${recoveryState.loading ? "disabled" : ""}>Set Password</button>
+          <button id="recovery-submit" type="button" class="primary-button" ${recoveryState.loading ? "disabled" : ""}>${recoveryState.loading ? "Setting password..." : "Set Password"}</button>
           ${!isFirstTime ? `<button id="recovery-cancel" type="button" class="ghost-button">Cancel</button>` : ""}
         </div>
         ${recoveryState.status ? `<p class="meta" style="color: ${recoveryState.status.includes("successfully") ? "#00aa00" : "#ff6b6b"};">${recoveryState.status}</p>` : ""}
@@ -2853,15 +2896,40 @@
     const signInButton = document.getElementById("auth-sign-in");
     if (signInButton) {
       signInButton.onclick = async function () {
+        if (authState.pendingAction) return;
         const emailInput = document.getElementById("auth-email");
         const passwordInput = document.getElementById("auth-password");
         try {
+          authState.pendingAction = "sign-in";
+          authState.status = "Signing you in...";
+          mount();
           await signInWithEmailPassword(String(emailInput?.value || ""), String(passwordInput?.value || ""));
           await loadBootstrapData();
           authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
-          mount();
         } catch (error) {
           authState.status = error.message;
+        } finally {
+          authState.pendingAction = "";
+          mount();
+        }
+      };
+    }
+
+    const resetPasswordButton = document.getElementById("auth-reset-password");
+    if (resetPasswordButton) {
+      resetPasswordButton.onclick = async function () {
+        if (authState.pendingAction) return;
+        const emailInput = document.getElementById("auth-email");
+        try {
+          authState.pendingAction = "reset-password";
+          authState.status = "Sending password reset email...";
+          mount();
+          await sendResetPasswordEmail(String(emailInput?.value || ""));
+          authState.status = `Password reset email sent to ${String(emailInput?.value || "").trim()}.`;
+        } catch (error) {
+          authState.status = error.message;
+        } finally {
+          authState.pendingAction = "";
           mount();
         }
       };
@@ -2870,12 +2938,17 @@
     const signOutButton = document.getElementById("auth-sign-out");
     if (signOutButton) {
       signOutButton.onclick = async function () {
+        if (authState.pendingAction) return;
         try {
+          authState.pendingAction = "sign-out";
+          authState.status = "Signing out...";
+          mount();
           await signOut();
           authState.status = "Signed out.";
-          mount();
         } catch (error) {
           authState.status = error.message;
+        } finally {
+          authState.pendingAction = "";
           mount();
         }
       };
@@ -2886,6 +2959,7 @@
     const submitButton = document.getElementById("recovery-submit");
     if (submitButton) {
       submitButton.onclick = async function () {
+        if (recoveryState.loading) return;
         const passwordInput = document.getElementById("recovery-password");
         const confirmInput = document.getElementById("recovery-password-confirm");
         const password = String(passwordInput?.value || "").trim();
@@ -2967,6 +3041,7 @@
     const adminInviteButton = document.getElementById("send-admin-invite");
     if (adminInviteButton) {
       adminInviteButton.onclick = async function () {
+        if (authState.pendingAction) return;
         const emailInput = document.getElementById("admin-invite-email");
         const email = String(emailInput?.value || "").trim();
         if (!email) {
@@ -2975,11 +3050,15 @@
           return;
         }
         try {
-          await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
-          authState.status = `Invite sent to ${email}.`;
+          authState.pendingAction = "invite-admin";
+          authState.status = `Sending invite to ${email}...`;
           mount();
+          await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
+          authState.status = `Invite sent to ${email}. They must set their password before signing in.`;
         } catch (error) {
           authState.status = error.message;
+        } finally {
+          authState.pendingAction = "";
           mount();
         }
       };
