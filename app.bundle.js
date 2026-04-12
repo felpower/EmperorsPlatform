@@ -1346,8 +1346,16 @@
       const memberId = String(row.id || "");
       const pass = passesByMember.get(memberId) || null;
       const legacyPass = legacyPassesByMember.get(memberId) || null;
-      const passExpiry = pass?.expires_on || legacyPass?.player_pass_expires_on || "";
-      const licenseName = pass?.federation_reference || "";
+      const hasPassRow = Boolean(pass);
+      const passExpiry = hasPassRow
+        ? String(pass?.expires_on || "")
+        : String(legacyPass?.player_pass_expires_on || "");
+      const licenseName = hasPassRow
+        ? String(pass?.federation_reference || "")
+        : "";
+      const rawPassStatus = hasPassRow
+        ? String(pass?.pass_status || "")
+        : String(legacyPass?.player_pass_status || "");
       const memberFees = feesByMember.get(memberId) || [];
       const latestFee = memberFees[0] || null;
       return {
@@ -1367,7 +1375,7 @@
         profileId: row.profile_id || null,
         inviteSentAt: row.invite_sent_at || null,
         passStatus: normalizePassStatus({
-          status: pass?.pass_status || legacyPass?.player_pass_status,
+          status: rawPassStatus,
           expiry: passExpiry,
           licenseName
         }),
@@ -1709,6 +1717,8 @@
         roles: memberPayload.roles,
         jerseyNumber: memberPayload.jerseyNumber,
         membershipStatus: memberPayload.membershipStatus,
+        passStatus: memberPayload.passStatus,
+        passExpiry: memberPayload.passExpiry,
         notes: memberPayload.notes
       })
     });
