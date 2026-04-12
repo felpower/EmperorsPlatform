@@ -1243,6 +1243,7 @@
       const hasLicense = Boolean(String(licenseName || "").trim());
       if (!normalized) return "missing";
       if (normalized === "valid" && !hasExpiry && !hasLicense) return "missing";
+      if (normalized === "expired" && !hasExpiry && !hasLicense) return "missing";
       return normalized;
     }
 
@@ -1580,14 +1581,34 @@
     }
 
     if (passFieldsProvided && savedMemberId) {
-      const passResponse = await supabaseClient.from("player_passes").upsert(
-        {
-          member_id: savedMemberId,
-          pass_status: normalizedPassStatus,
-          expires_on: normalizedPassExpiry || null
-        },
-        { onConflict: "member_id" }
-      );
+      const passPayload = {
+        member_id: savedMemberId,
+        pass_status: normalizedPassStatus,
+        expires_on: normalizedPassExpiry || null
+      };
+
+      let passResponse = await supabaseClient.from("player_passes").upsert(passPayload, { onConflict: "member_id" });
+
+      if (passResponse.error && normalizedPassStatus === "missing") {
+        const message = String(passResponse.error?.message || "").toLowerCase();
+        const likelyOldStatusConstraint =
+          message.includes("player_passes_pass_status_check") ||
+          message.includes("violates check constraint") ||
+          message.includes("pass_status");
+
+        if (likelyOldStatusConstraint) {
+          // Compatibility mode for older schemas that don't accept 'missing'.
+          passResponse = await supabaseClient.from("player_passes").upsert(
+            {
+              member_id: savedMemberId,
+              pass_status: "expired",
+              expires_on: null
+            },
+            { onConflict: "member_id" }
+          );
+        }
+      }
+
       if (passResponse.error) throw passResponse.error;
     }
 
