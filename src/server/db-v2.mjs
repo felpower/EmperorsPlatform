@@ -288,6 +288,55 @@ function capabilitySet(roles) {
   return Array.from(new Set((roles || []).filter(Boolean)));
 }
 
+function normalizePassStatusInput(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (["valid", "expiring"].includes(normalized)) return "valid";
+  if (["expired"].includes(normalized)) return "expired";
+  if (["missing", "pending", "unknown"].includes(normalized)) return "missing";
+  return "missing";
+}
+
+function normalizePassExpiryInput(value) {
+  if (value === undefined) return null;
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+async function upsertPlayerPass(memberId, payload) {
+  const passStatusProvided = Object.prototype.hasOwnProperty.call(payload, "passStatus");
+  const passExpiryProvided = Object.prototype.hasOwnProperty.call(payload, "passExpiry");
+  if (!passStatusProvided && !passExpiryProvided) {
+    return;
+  }
+
+  const passStatus = normalizePassStatusInput(payload.passStatus) || "missing";
+  const passExpiry = normalizePassExpiryInput(payload.passExpiry);
+
+  await run(
+    `
+      insert into player_passes (
+        member_id, pass_status, expiry_date, license_name, medical_status,
+        docs_json, clubee_email, clubee_phone, note
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      on conflict(member_id) do update set
+        pass_status = excluded.pass_status,
+        expiry_date = excluded.expiry_date
+    `,
+    [
+      memberId,
+      passStatus,
+      passExpiry,
+      null,
+      null,
+      "[]",
+      null,
+      null,
+      null
+    ]
+  );
+}
+
 function normalizeMemberPayload(payload) {
   const payloadFirstName = String(payload.firstName || "").trim();
   const payloadLastName = String(payload.lastName || "").trim();
@@ -304,6 +353,12 @@ function normalizeMemberPayload(payload) {
   const positions = Array.isArray(payload.positions)
     ? Array.from(new Set(payload.positions.map((entry) => String(entry).trim().toUpperCase()).filter(Boolean)))
     : parsePositionsInput(payload.positions);
+  const passStatus = Object.prototype.hasOwnProperty.call(payload, "passStatus")
+    ? normalizePassStatusInput(payload.passStatus)
+    : null;
+  const passExpiry = Object.prototype.hasOwnProperty.call(payload, "passExpiry")
+    ? normalizePassExpiryInput(payload.passExpiry)
+    : null;
   return {
     normalizedKey: normalizeFullName(firstName, lastName || displayName),
     email: String(payload.email || "").trim(),
@@ -317,7 +372,9 @@ function normalizeMemberPayload(payload) {
     rookie: Boolean(payload.rookie),
     inClubee: Boolean(payload.inClubee),
     membershipStatus,
-    notes: String(payload.notes || "").trim()
+    notes: String(payload.notes || "").trim(),
+    passStatus,
+    passExpiry
   };
 }
 
@@ -1010,27 +1067,36 @@ export async function createMember(payload) {
   if (existing) {
     throw new Error("A member with that name already exists.");
   }
-  await run(`
-    insert into members (
-      normalized_key, email, first_name, last_name, display_name, positions_json,
-      roles_json, jersey_number, active, rookie, in_clubee, membership_status, notes, deleted_at
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    member.normalizedKey,
-    member.email,
-    member.firstName,
-    member.lastName,
-    member.displayName,
-    JSON.stringify(member.positions),
-    JSON.stringify(member.roles),
-    member.jerseyNumber,
-    member.active ? 1 : 0,
-    member.rookie ? 1 : 0,
-    member.inClubee ? 1 : 0,
-    member.membershipStatus,
-    member.notes,
-    null
-  ]);
+  await run("begin transaction");
+  try {
+    const insertResult = await run(`
+      insert into members (
+        normalized_key, email, first_name, last_name, display_name, positions_json,
+        roles_json, jersey_number, active, rookie, in_clubee, membership_status, notes, deleted_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      member.normalizedKey,
+      member.email,
+      member.firstName,
+      member.lastName,
+      member.displayName,
+      JSON.stringify(member.positions),
+      JSON.stringify(member.roles),
+      member.jerseyNumber,
+      member.active ? 1 : 0,
+      member.rookie ? 1 : 0,
+      member.inClubee ? 1 : 0,
+      member.membershipStatus,
+      member.notes,
+      null
+    ]);
+
+    await upsertPlayerPass(insertResult.lastID, member);
+    await run("commit");
+  } catch (error) {
+    await run("rollback");
+    throw error;
+  }
 }
 
 export async function updateMember(memberId, payload) {
@@ -1043,28 +1109,37 @@ export async function updateMember(memberId, payload) {
   if (duplicate) {
     throw new Error("Another member already uses that name.");
   }
-  await run(`
-    update members
-    set normalized_key = ?, email = ?, first_name = ?, last_name = ?, display_name = ?,
-        positions_json = ?, roles_json = ?, jersey_number = ?, active = ?, rookie = ?,
-        in_clubee = ?, membership_status = ?, notes = ?
-    where id = ?
-  `, [
-    member.normalizedKey,
-    member.email,
-    member.firstName,
-    member.lastName,
-    member.displayName,
-    JSON.stringify(member.positions),
-    JSON.stringify(member.roles),
-    member.jerseyNumber,
-    member.active ? 1 : 0,
-    member.rookie ? 1 : 0,
-    member.inClubee ? 1 : 0,
-    member.membershipStatus,
-    member.notes,
-    memberId
-  ]);
+  await run("begin transaction");
+  try {
+    await run(`
+      update members
+      set normalized_key = ?, email = ?, first_name = ?, last_name = ?, display_name = ?,
+          positions_json = ?, roles_json = ?, jersey_number = ?, active = ?, rookie = ?,
+          in_clubee = ?, membership_status = ?, notes = ?
+      where id = ?
+    `, [
+      member.normalizedKey,
+      member.email,
+      member.firstName,
+      member.lastName,
+      member.displayName,
+      JSON.stringify(member.positions),
+      JSON.stringify(member.roles),
+      member.jerseyNumber,
+      member.active ? 1 : 0,
+      member.rookie ? 1 : 0,
+      member.inClubee ? 1 : 0,
+      member.membershipStatus,
+      member.notes,
+      memberId
+    ]);
+
+    await upsertPlayerPass(memberId, member);
+    await run("commit");
+  } catch (error) {
+    await run("rollback");
+    throw error;
+  }
 }
 
 export async function deleteMember(memberId) {

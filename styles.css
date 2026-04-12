@@ -979,6 +979,24 @@ code {
   border-radius: 10px;
 }
 
+.member-inline-pass-status {
+  min-width: 122px;
+  width: auto;
+}
+
+.member-inline-pass-expiry {
+  min-width: 160px;
+}
+
+.member-inline-pass-expiry {
+  width: 100%;
+}
+
+.is-expiring-soon {
+  background: rgba(207, 75, 54, 0.12) !important;
+  border-color: rgba(207, 75, 54, 0.28) !important;
+}
+
 .member-inline-select {
   width: 100%;
   min-width: 120px;

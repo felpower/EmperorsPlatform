@@ -158,6 +158,22 @@
           </select>
         </label>
 
+        <div class="form-grid">
+          <label>
+            Pass status
+            <select name="passStatus" class="member-inline-pass-status">
+              <option value="valid" selected>valid</option>
+              <option value="missing">missing</option>
+              <option value="expired">expired</option>
+            </select>
+          </label>
+
+          <label>
+            Pass expiry
+            <input name="passExpiry" type="date" class="member-inline-pass-expiry" />
+          </label>
+        </div>
+
         <label>
           Notes
           <textarea name="notes" rows="3"></textarea>
