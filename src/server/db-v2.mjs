@@ -284,6 +284,40 @@ function parseLicense(rawLicense) {
   return { status, expiry, licenseName: licenseName.trim(), note: text };
 }
 
+function parseClubeePassRecord(row) {
+  const firstName = String(row?.Vorname || "").trim();
+  const lastName = String(row?.Nachname || "").trim();
+  if (!firstName && !lastName) return null;
+
+  const normalizedKey = normalizeFullName(firstName, lastName);
+  if (!normalizedKey) return null;
+
+  const license = parseLicense(row?.Lizenz);
+  const docs = [
+    { type: "application", value: String(row?.["Antragsformular Lizenz (ID43284)"] || "").trim() },
+    { type: "medical", value: String(row?.["Ärztliches Attest (ID43286)"] || "").trim() },
+    { type: "nada", value: String(row?.["NADA-Formular (ID43287)"] || "").trim() },
+    { type: "identity", value: String(row?.["Identitätsnachweis (ID43288)"] || "").trim() },
+    { type: "registration", value: String(row?.["Meldezettel (ID43289)"] || "").trim() },
+    { type: "itc", value: String(row?.["ITC (ID43290)"] || "").trim() },
+    { type: "education", value: String(row?.["Ausbildungsnachweis (ID43418)"] || "").trim() }
+  ].filter((doc) => doc.value);
+
+  return {
+    firstName,
+    lastName,
+    normalizedKey,
+    clubeeEmail: String(row?.["E-Mail"] || "").trim(),
+    clubeePhone: String(row?.["Telefonnnummer"] || "").trim(),
+    medicalStatus: String(row?.["Medizinische Untersuchung"] || "").trim(),
+    passStatus: license.status,
+    passExpiry: license.expiry,
+    licenseName: license.licenseName,
+    note: license.note,
+    docs
+  };
+}
+
 function capabilitySet(roles) {
   return Array.from(new Set((roles || []).filter(Boolean)));
 }
@@ -879,6 +913,205 @@ export async function ensureImported({ playerCsvPath, feesCsvPath, clubeeXlsxPat
     throw error;
   }
   await deduplicateMembers();
+}
+
+export async function syncClubeePassData({ clubeeXlsxPath }) {
+  const preview = await previewClubeePassSync({ clubeeXlsxPath });
+  const selectedMemberIds = preview.changes.map((change) => Number(change.memberId));
+  const result = await applyClubeePassSync({ clubeeXlsxPath, memberIds: selectedMemberIds });
+  return {
+    processedRows: preview.processedRows,
+    matchedRows: preview.matchedRows,
+    unmatchedRows: preview.unmatchedRows,
+    createdPasses: result.createdPasses,
+    updatedPasses: result.updatedPasses,
+    unmatchedNames: preview.unmatchedNames
+  };
+}
+
+async function buildClubeePassSyncPlan({ clubeeXlsxPath }) {
+  if (!clubeeXlsxPath) {
+    throw new Error("clubeeXlsxPath is required.");
+  }
+
+  const clubeeRows = await readClubeeWorkbook(clubeeXlsxPath);
+  const members = await all(`
+    select
+      m.id,
+      m.normalized_key as normalizedKey,
+      m.first_name as firstName,
+      m.last_name as lastName,
+      m.display_name as displayName,
+      m.email,
+      m.in_clubee as inClubee,
+      pp.id as passId,
+      pp.pass_status as passStatus,
+      pp.expiry_date as passExpiry,
+      pp.license_name as licenseName,
+      pp.medical_status as medicalStatus,
+      pp.docs_json as docsJson,
+      pp.clubee_email as clubeeEmail,
+      pp.clubee_phone as clubeePhone,
+      pp.note as note
+    from members m
+    left join player_passes pp on pp.member_id = m.id
+    where m.deleted_at is null
+  `);
+
+  const memberByKey = new Map(members.map((member) => [String(member.normalizedKey || ""), member]));
+  const changes = [];
+  let processedRows = 0;
+  let matchedRows = 0;
+  let unmatchedRows = 0;
+  const unmatchedNames = [];
+
+  for (const row of clubeeRows) {
+    const record = parseClubeePassRecord(row);
+    if (!record) continue;
+    processedRows += 1;
+
+    const member = memberByKey.get(record.normalizedKey);
+    if (!member) {
+      unmatchedRows += 1;
+      unmatchedNames.push(`${record.firstName} ${record.lastName}`.trim());
+      continue;
+    }
+
+    matchedRows += 1;
+
+    const currentDocsJson = JSON.stringify(parseJsonArray(member.docsJson || "[]"));
+    const nextDocsJson = JSON.stringify(record.docs);
+    const fieldChanges = [];
+
+    if (!Number(member.inClubee)) {
+      fieldChanges.push({ field: "in_clubee", current: "0", next: "1" });
+    }
+    if (String(member.passStatus || "") !== String(record.passStatus || "")) {
+      fieldChanges.push({ field: "pass_status", current: member.passStatus || "", next: record.passStatus || "" });
+    }
+    if (String(member.passExpiry || "") !== String(record.passExpiry || "")) {
+      fieldChanges.push({ field: "expiry_date", current: member.passExpiry || "", next: record.passExpiry || "" });
+    }
+    if (String(member.licenseName || "") !== String(record.licenseName || "")) {
+      fieldChanges.push({ field: "license_name", current: member.licenseName || "", next: record.licenseName || "" });
+    }
+    if (String(member.medicalStatus || "") !== String(record.medicalStatus || "")) {
+      fieldChanges.push({ field: "medical_status", current: member.medicalStatus || "", next: record.medicalStatus || "" });
+    }
+    if (currentDocsJson !== nextDocsJson) {
+      fieldChanges.push({ field: "docs_json", current: currentDocsJson, next: nextDocsJson });
+    }
+    if (String(member.clubeeEmail || "") !== String(record.clubeeEmail || "")) {
+      fieldChanges.push({ field: "clubee_email", current: member.clubeeEmail || "", next: record.clubeeEmail || "" });
+    }
+    if (String(member.clubeePhone || "") !== String(record.clubeePhone || "")) {
+      fieldChanges.push({ field: "clubee_phone", current: member.clubeePhone || "", next: record.clubeePhone || "" });
+    }
+    if (String(member.note || "") !== String(record.note || "")) {
+      fieldChanges.push({ field: "note", current: member.note || "", next: record.note || "" });
+    }
+
+    if (!fieldChanges.length) continue;
+
+    changes.push({
+      memberId: Number(member.id),
+      memberName: String(member.displayName || `${member.firstName || ""} ${member.lastName || ""}`).trim(),
+      memberEmail: String(member.email || "").trim(),
+      existingPass: Boolean(member.passId),
+      fieldChanges,
+      proposed: {
+        passStatus: record.passStatus,
+        passExpiry: record.passExpiry,
+        licenseName: record.licenseName,
+        medicalStatus: record.medicalStatus,
+        docsJson: nextDocsJson,
+        clubeeEmail: record.clubeeEmail,
+        clubeePhone: record.clubeePhone,
+        note: record.note
+      }
+    });
+  }
+
+  const createdPasses = changes.filter((change) => !change.existingPass).length;
+  const updatedPasses = changes.filter((change) => change.existingPass).length;
+
+  return {
+    processedRows,
+    matchedRows,
+    unmatchedRows,
+    createdPasses,
+    updatedPasses,
+    unmatchedNames: unmatchedNames.slice(0, 20),
+    changes
+  };
+}
+
+export async function previewClubeePassSync({ clubeeXlsxPath }) {
+  return buildClubeePassSyncPlan({ clubeeXlsxPath });
+}
+
+export async function applyClubeePassSync({ clubeeXlsxPath, memberIds }) {
+  const plan = await buildClubeePassSyncPlan({ clubeeXlsxPath });
+  const selectedSet = new Set(
+    (Array.isArray(memberIds) ? memberIds : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+  );
+  const selectedChanges = selectedSet.size
+    ? plan.changes.filter((change) => selectedSet.has(Number(change.memberId)))
+    : [];
+
+  await run("begin transaction");
+  try {
+    for (const change of selectedChanges) {
+      await run("update members set in_clubee = 1 where id = ?", [change.memberId]);
+      await run(
+        `
+          insert into player_passes (
+            member_id, pass_status, expiry_date, license_name, medical_status,
+            docs_json, clubee_email, clubee_phone, note
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          on conflict(member_id) do update set
+            pass_status = excluded.pass_status,
+            expiry_date = excluded.expiry_date,
+            license_name = excluded.license_name,
+            medical_status = excluded.medical_status,
+            docs_json = excluded.docs_json,
+            clubee_email = excluded.clubee_email,
+            clubee_phone = excluded.clubee_phone,
+            note = excluded.note
+        `,
+        [
+          change.memberId,
+          change.proposed.passStatus,
+          change.proposed.passExpiry,
+          change.proposed.licenseName,
+          change.proposed.medicalStatus,
+          change.proposed.docsJson,
+          change.proposed.clubeeEmail,
+          change.proposed.clubeePhone,
+          change.proposed.note
+        ]
+      );
+    }
+
+    await run("commit");
+  } catch (error) {
+    await run("rollback");
+    throw error;
+  }
+
+  return {
+    selectedCount: selectedChanges.length,
+    skippedCount: Math.max(0, plan.changes.length - selectedChanges.length),
+    appliedCount: selectedChanges.length,
+    createdPasses: selectedChanges.filter((change) => !change.existingPass).length,
+    updatedPasses: selectedChanges.filter((change) => change.existingPass).length,
+    processedRows: plan.processedRows,
+    matchedRows: plan.matchedRows,
+    unmatchedRows: plan.unmatchedRows,
+    unmatchedNames: plan.unmatchedNames
+  };
 }
 
 export async function ensureFeeCoverage() {

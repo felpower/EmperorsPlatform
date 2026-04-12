@@ -39,6 +39,27 @@ npx serve .
 
 Then open the shown local address in your browser.
 
+## Clubee pass sync review (local backend)
+
+The local Node backend supports a safe two-step Clubee pass sync flow:
+
+1. Preview changes (read-only)
+2. Apply only selected changes (explicit admin action)
+
+- Default file path:
+  - `assets/uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx`
+- No automatic overwrite on bootstrap.
+- Updates are written only through the explicit apply endpoint.
+
+Optional environment variables:
+
+- `CLUBEE_XLSX_PATH` to override the Clubee export file location
+
+Manual API endpoints:
+
+- `POST /api/passes/sync-clubee/preview` (read-only preview)
+- `POST /api/passes/sync-clubee/apply` (writes selected changes)
+
 ## Suggested production architecture
 
 ### Phase 1

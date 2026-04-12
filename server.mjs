@@ -16,6 +16,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || proce
 const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
 const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
 const SERVE_STATIC_FRONTEND = String(process.env.SERVE_STATIC_FRONTEND || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
+const CLUBEE_XLSX_PATH = String(process.env.CLUBEE_XLSX_PATH || path.join(__dirname, "assets", "uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx")).trim();
 
 let localDbApi = null;
 let localDbUnavailableReason = "";
@@ -30,7 +31,7 @@ async function initializeOptionalLocalDatabase() {
     const dbModule = await import("./src/server/db-v2.mjs");
     await dbModule.initializeDatabase(path.join(__dirname, "data", "emperors.db"));
     await dbModule.ensureImported({
-      clubeeXlsxPath: path.join(__dirname, "assets", "uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx"),
+      clubeeXlsxPath: CLUBEE_XLSX_PATH,
       feesCsvPath: path.join(__dirname, "membership-fees.csv"),
       playerCsvPath: path.join(__dirname, "player-list.csv")
     });
@@ -326,6 +327,49 @@ app.get("/api/bootstrap", async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Unknown bootstrap error"
+    });
+  }
+});
+
+app.post("/api/passes/sync-clubee", async (req, res) => {
+  try {
+    if (!requireLocalDb(res, "Clubee pass sync API")) return;
+    const preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
+    res.json({
+      warning: "This endpoint is preview-only now. Use /api/passes/sync-clubee/apply to commit.",
+      preview
+    });
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Could not build pass sync preview from Clubee export."
+    });
+  }
+});
+
+app.post("/api/passes/sync-clubee/preview", async (_req, res) => {
+  try {
+    if (!requireLocalDb(res, "Clubee pass sync preview API")) return;
+    const preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
+    res.json({ preview });
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Could not build pass sync preview from Clubee export."
+    });
+  }
+});
+
+app.post("/api/passes/sync-clubee/apply", async (req, res) => {
+  try {
+    if (!requireLocalDb(res, "Clubee pass sync apply API")) return;
+    const body = req.body || {};
+    const memberIds = Array.isArray(body.memberIds) ? body.memberIds : [];
+    const applySummary = await localDbApi.applyClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH, memberIds });
+    const data = await localDbApi.getBootstrapData();
+    data.passSyncApply = applySummary;
+    res.json(data);
+  } catch (error) {
+    res.status(400).json({
+      error: error instanceof Error ? error.message : "Could not apply pass sync from Clubee export."
     });
   }
 });

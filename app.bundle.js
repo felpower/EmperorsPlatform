@@ -30,7 +30,7 @@
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
-  const viewIds = ["dashboard", "members", "fees", "user", "passes", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "members", "fees", "user", "passes", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -74,6 +74,8 @@
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
   let passFilters = loadPassFilters();
+  let passSyncPreview = null;
+  let selectedPassSyncMemberIds = [];
   let authState = {
     mode: "local",
     status: "Local development mode active.",
@@ -1779,6 +1781,49 @@
     applyBootstrap(payload);
   }
 
+  async function previewClubeePassSync() {
+    if (shouldUseSupabaseData()) {
+      throw new Error("Clubee file preview is only available in local backend mode.");
+    }
+    const response = await fetch(apiUrl("/api/passes/sync-clubee/preview"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not build Clubee pass preview.");
+    return payload.preview || null;
+  }
+
+  async function applyClubeePassSync(memberIds) {
+    if (shouldUseSupabaseData()) {
+      throw new Error("Clubee file sync apply is only available in local backend mode.");
+    }
+    const response = await fetch(apiUrl("/api/passes/sync-clubee/apply"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memberIds })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not apply Clubee pass sync.");
+    applyBootstrap(payload);
+    return payload.passSyncApply || null;
+  }
+
+  function passSyncFieldLabel(field) {
+    const labels = {
+      in_clubee: "In Clubee",
+      pass_status: "Pass status",
+      expiry_date: "Expiry date",
+      license_name: "License",
+      medical_status: "Medical status",
+      docs_json: "Documents",
+      clubee_email: "Clubee email",
+      clubee_phone: "Clubee phone",
+      note: "Clubee note"
+    };
+    return labels[String(field || "")] || String(field || "");
+  }
+
   async function updateMemberSensitiveFinance({ memberId, iban, statusByFeeId }) {
     if (currentAccessRole !== "admin") {
       throw new Error("Only admins can change IBAN or quarter payment statuses.");
@@ -2313,6 +2358,7 @@
           <p class="eyebrow">Eligibility</p>
           <h3>Player passes</h3>
         </div>
+        ${!shouldUseSupabaseData() && currentAccessRole === "admin" ? `<div class="button-row"><button type="button" class="ghost-button" id="open-pass-sync-review">Sync review</button></div>` : ""}
       </div>
       <article class="card filter-card members-filter-sticky members-filter-card" style="margin-bottom: 14px;">
         <details class="pass-filters-dropdown" ${passFiltersExpanded ? "open" : ""}>
@@ -2396,6 +2442,73 @@
                 <td>${statusPill(displayPassStatus(member.passStatus))}</td>
               </tr>
             `).join("") || `<tr><td colspan="6" class="meta">No pass rows match the selected filters.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function renderPassSyncReview() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
+    if (currentAccessRole !== "admin") {
+      return lockedState("Pass sync review is admin-only.", "Only admins can preview and approve Clubee updates.");
+    }
+    if (shouldUseSupabaseData()) {
+      return lockedState("Clubee file sync review needs local backend mode.", "This review reads from the local Clubee export file and is unavailable in hosted Supabase-only mode.");
+    }
+
+    const preview = passSyncPreview;
+    const changes = Array.isArray(preview?.changes) ? preview.changes : [];
+    const selectedSet = new Set(selectedPassSyncMemberIds.map((id) => String(id)));
+
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Clubee Sync</p>
+          <h3>Review pass updates</h3>
+          <p class="meta">Nothing is written until you click apply.</p>
+        </div>
+        <div class="button-row">
+          <button type="button" class="ghost-button" id="preview-pass-sync-button">Preview changes</button>
+          <button type="button" class="primary-button" id="apply-pass-sync-button" ${!changes.length || !selectedPassSyncMemberIds.length ? "disabled" : ""}>Apply selected</button>
+        </div>
+      </div>
+      <article class="card" style="margin-bottom: 14px;">
+        ${preview ? `
+          <div class="pill-row">
+            ${plainPill(`Rows read: ${preview.processedRows || 0}`)}
+            ${plainPill(`Matched: ${preview.matchedRows || 0}`)}
+            ${plainPill(`Changes: ${changes.length}`)}
+            ${plainPill(`Unmatched: ${preview.unmatchedRows || 0}`)}
+          </div>
+          <div class="button-row" style="margin-top: 10px;">
+            <button type="button" class="ghost-button small-button" id="select-all-pass-sync">Select all changes</button>
+            <button type="button" class="ghost-button small-button" id="clear-pass-sync-selection">Clear selection</button>
+          </div>
+        ` : `<p class="meta">Click <strong>Preview changes</strong> to see exactly what would be updated.</p>`}
+      </article>
+      ${preview && preview.unmatchedNames?.length ? `<article class="card" style="margin-bottom: 14px;"><h3>Unmatched names</h3><p class="meta">${preview.unmatchedNames.join(", ")}</p></article>` : ""}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Select</th>
+              <th>Member</th>
+              <th>Type</th>
+              <th>Field changes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${changes.map((change) => `
+              <tr>
+                <td><input type="checkbox" class="pass-sync-select" data-member-id="${change.memberId}" ${selectedSet.has(String(change.memberId)) ? "checked" : ""} /></td>
+                <td><strong>${change.memberName || "Unknown"}</strong><div class="meta">${change.memberEmail || "No email"}</div></td>
+                <td>${statusPill(change.existingPass ? "pending" : "exempt", change.existingPass ? "update" : "create")}</td>
+                <td>${(change.fieldChanges || []).map((fieldChange) => `<div class="meta">${passSyncFieldLabel(fieldChange.field)}: ${fieldChange.current || "-"} -> ${fieldChange.next || "-"}</div>`).join("")}</td>
+              </tr>
+            `).join("") || `<tr><td colspan="4" class="meta">No updates needed based on current Clubee export.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -3693,6 +3806,97 @@
         switchView("passes");
       };
     }
+
+    const openSyncReviewButton = document.getElementById("open-pass-sync-review");
+    if (openSyncReviewButton) {
+      openSyncReviewButton.onclick = function () {
+        window.location.hash = "pass-sync";
+        switchView("pass-sync");
+      };
+    }
+  }
+
+  function bindPassSyncActions() {
+    const previewButton = document.getElementById("preview-pass-sync-button");
+    if (previewButton) {
+      previewButton.onclick = async function () {
+        if (authState.pendingAction) return;
+        try {
+          authState.pendingAction = "preview-pass-sync";
+          authState.status = "Loading Clubee pass changes...";
+          mount();
+          passSyncPreview = await previewClubeePassSync();
+          selectedPassSyncMemberIds = (passSyncPreview?.changes || []).map((change) => Number(change.memberId));
+          authState.status = `Preview ready: ${(passSyncPreview?.changes || []).length} change(s).`;
+        } catch (error) {
+          authState.status = error.message;
+        } finally {
+          authState.pendingAction = "";
+          mount();
+          switchView("pass-sync");
+        }
+      };
+    }
+
+    const applyButton = document.getElementById("apply-pass-sync-button");
+    if (applyButton) {
+      applyButton.onclick = async function () {
+        if (authState.pendingAction) return;
+        const memberIds = Array.from(new Set(selectedPassSyncMemberIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
+        if (!memberIds.length) {
+          authState.status = "Select at least one change to apply.";
+          mount();
+          switchView("pass-sync");
+          return;
+        }
+        const confirmed = window.confirm(`Apply ${memberIds.length} selected Clubee pass update(s)?`);
+        if (!confirmed) return;
+        try {
+          authState.pendingAction = "apply-pass-sync";
+          authState.status = "Applying selected Clubee pass updates...";
+          mount();
+          const summary = await applyClubeePassSync(memberIds);
+          passSyncPreview = await previewClubeePassSync();
+          selectedPassSyncMemberIds = (passSyncPreview?.changes || []).map((change) => Number(change.memberId));
+          authState.status = `Applied ${Number(summary?.appliedCount || 0)} update(s).`;
+        } catch (error) {
+          authState.status = error.message;
+        } finally {
+          authState.pendingAction = "";
+          mount();
+          switchView("pass-sync");
+        }
+      };
+    }
+
+    document.querySelectorAll(".pass-sync-select").forEach((checkbox) => {
+      checkbox.onchange = function () {
+        const memberId = Number(checkbox.dataset.memberId || 0);
+        if (!Number.isFinite(memberId) || memberId <= 0) return;
+        const selected = new Set(selectedPassSyncMemberIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0));
+        if (checkbox.checked) selected.add(memberId);
+        else selected.delete(memberId);
+        selectedPassSyncMemberIds = Array.from(selected);
+      };
+    });
+
+    const selectAllButton = document.getElementById("select-all-pass-sync");
+    if (selectAllButton) {
+      selectAllButton.onclick = function () {
+        selectedPassSyncMemberIds = (passSyncPreview?.changes || []).map((change) => Number(change.memberId));
+        mount();
+        switchView("pass-sync");
+      };
+    }
+
+    const clearSelectionButton = document.getElementById("clear-pass-sync-selection");
+    if (clearSelectionButton) {
+      clearSelectionButton.onclick = function () {
+        selectedPassSyncMemberIds = [];
+        mount();
+        switchView("pass-sync");
+      };
+    }
   }
 
   function bindTableSorts() {
@@ -3938,6 +4142,7 @@
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
       document.getElementById("passes").innerHTML = renderPasses();
+      document.getElementById("pass-sync").innerHTML = renderPassSyncReview();
       document.getElementById("events").innerHTML = renderEvents();
       document.getElementById("invites").innerHTML = renderInvites();
       document.getElementById("settings").innerHTML = renderSettings();
@@ -3947,6 +4152,7 @@
       bindMemberFilters();
       bindFeeFilters();
       bindPassFilters();
+      bindPassSyncActions();
       bindFeeEditModeActions();
       bindAuthActions();
       bindRecoveryActions();
