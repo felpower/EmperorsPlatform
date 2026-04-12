@@ -734,8 +734,8 @@
   }
 
   function memberInviteState(member) {
-    if (member?.profileId) return "activated";
     if (member?.inviteSentAt) return "invited";
+    if (member?.profileId) return "activated";
     return "ready";
   }
 
@@ -760,7 +760,29 @@
     if (currentAccessRole !== "admin") return "";
     if (member?.deletedAt) return "";
     if (!String(member?.email || "").trim()) return `<span class="meta">No email</span>`;
-    return plainPill(memberInviteStateLabel(member));
+    const state = memberInviteState(member);
+    if (state === "activated") return statusPill("activated", "Activated");
+    if (state === "invited") return statusPill("invited", "Invited");
+    return statusPill("not_invited", "Not invited");
+  }
+
+  async function promoteInvitedMemberOnFirstSignIn() {
+    if (!supabaseClient) return;
+    const profileId = String(authState.user?.id || "").trim();
+    if (!profileId) return;
+
+    const updateResponse = await supabaseClient
+      .from("members")
+      .update({ invite_sent_at: null })
+      .eq("profile_id", profileId)
+      .not("invite_sent_at", "is", null);
+
+    if (updateResponse.error) {
+      if (/invite_sent_at/i.test(String(updateResponse.error?.message || ""))) {
+        return;
+      }
+      throw updateResponse.error;
+    }
   }
 
   function userPageMemberIdFromHash() {
@@ -2765,6 +2787,8 @@
       button.onclick = async function (event) {
         event.preventDefault();
         event.stopPropagation();
+        const previousScrollY = window.scrollY || 0;
+        const previousScrollX = window.scrollX || 0;
         const member = memberById(button.dataset.memberId);
         if (!member || !member.email) return;
         const inviteState = memberInviteState(member);
@@ -2778,6 +2802,7 @@
         }
         button.disabled = true;
         try {
+          button.blur();
           await inviteMember(member.id);
           authState.status = `Invite sent to ${member.email}.`;
           if (shouldUseSupabaseData()) {
@@ -2787,10 +2812,16 @@
           }
           mount();
           switchView("members");
+          requestAnimationFrame(() => {
+            window.scrollTo(previousScrollX, previousScrollY);
+          });
         } catch (error) {
           authState.status = error.message;
           mount();
           switchView("members");
+          requestAnimationFrame(() => {
+            window.scrollTo(previousScrollX, previousScrollY);
+          });
         } finally {
           button.disabled = false;
         }
@@ -3268,6 +3299,7 @@
         const passwordInput = document.getElementById("auth-password");
         try {
           await signInWithEmailPassword(String(emailInput?.value || ""), String(passwordInput?.value || ""));
+          await promoteInvitedMemberOnFirstSignIn();
           await loadBootstrapData();
           authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
           mount();
@@ -3961,7 +3993,9 @@
     syncAuthSession(data?.session || null);
     supabaseClient.auth.onAuthStateChange(function (_event, session) {
       syncAuthSession(session || null);
-      loadBootstrapData()
+      Promise.resolve()
+        .then(() => promoteInvitedMemberOnFirstSignIn())
+        .then(() => loadBootstrapData())
         .then(() => mount())
         .catch((error) => {
           authState.status = error.message;

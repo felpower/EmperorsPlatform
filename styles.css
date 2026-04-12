@@ -334,6 +334,7 @@ button {
 }
 
 .status.active,
+.status.activated,
 .status.paid,
 .status.valid,
 .status.confirmed {
@@ -342,12 +343,18 @@ button {
 }
 
 .status.pending,
+.status.invited,
 .status.due,
 .status.expiring,
 .status.not_collected,
 .status.maybe {
   background: rgba(179, 108, 16, 0.12);
   color: var(--warning);
+}
+
+.status.not_invited {
+  background: rgba(33, 104, 153, 0.12);
+  color: #216899;
 }
 
 .status.exempt {

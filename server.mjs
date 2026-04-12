@@ -346,15 +346,15 @@ app.post("/api/auth/invites", async (req, res) => {
         return;
       }
 
-      if (member.profile_id) {
-        res.status(409).json({ error: "This member already activated their account." });
-        return;
-      }
-
       if (member.invite_sent_at) {
         res.status(409).json({
           error: `You already invited this member on ${new Date(member.invite_sent_at).toLocaleString("de-AT")}.`
         });
+        return;
+      }
+
+      if (member.profile_id) {
+        res.status(409).json({ error: "This member already activated their account." });
         return;
       }
 
