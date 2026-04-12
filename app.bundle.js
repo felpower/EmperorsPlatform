@@ -2728,6 +2728,8 @@
     const rolesClearAll = document.getElementById("roles-clear-all");
     const positionsSelectAll = document.getElementById("positions-select-all");
     const positionsClearAll = document.getElementById("positions-clear-all");
+    const dialogPassStatusInput = form?.elements?.passStatus || null;
+    const dialogPassExpiryInput = form?.elements?.passExpiry || null;
     if (openButton) {
       openButton.onclick = function () {
         openMemberDialog(null);
@@ -2789,6 +2791,18 @@
         form.querySelectorAll('input[name="positions"]').forEach((input) => {
           input.checked = false;
         });
+      };
+    }
+    if (dialogPassStatusInput && dialogPassExpiryInput) {
+      dialogPassStatusInput.onchange = function () {
+        const status = String(dialogPassStatusInput.value || "").trim().toLowerCase();
+        if (status === "missing") {
+          dialogPassExpiryInput.value = "";
+          return;
+        }
+        if (status === "valid" && !String(dialogPassExpiryInput.value || "").trim()) {
+          dialogPassExpiryInput.value = defaultPassExpiryDate();
+        }
       };
     }
     document.querySelectorAll(".edit-member-button").forEach((button) => {
@@ -2870,10 +2884,13 @@
         const expiryInput = document.querySelector(`.member-inline-pass-expiry[data-member-id="${memberId}"]`);
         if (!expiryInput) return;
         const status = String(select.value || "").trim().toLowerCase();
-        const shouldClear = status === "missing";
-        if (shouldClear) {
+        if (status === "missing") {
           expiryInput.value = "";
           expiryInput.classList.remove("is-expiring-soon");
+          return;
+        }
+        if (status === "valid" && !String(expiryInput.value || "").trim()) {
+          expiryInput.value = defaultPassExpiryDate();
         }
       };
     });
