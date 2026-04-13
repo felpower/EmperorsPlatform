@@ -1351,7 +1351,7 @@
       return;
     }
 
-    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin" || currentAccessRole === "player";
     const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin" || currentAccessRole === "player";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
 
