@@ -3563,6 +3563,11 @@
           authState.status = "Signing you in...";
           mount();
           await signInWithEmailPassword(email, password);
+          try {
+            await promoteInvitedMemberOnFirstSignIn();
+          } catch {
+            // Non-blocking: login should still complete even if invite flag cleanup fails.
+          }
           await loadBootstrapData();
           authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
           showToast(authState.status, "success");
@@ -3625,6 +3630,41 @@
         }
       };
     }
+
+    const adminInviteRoleSelect = document.getElementById("admin-invite-role");
+    if (adminInviteRoleSelect) {
+      adminInviteRoleSelect.onchange = function (event) {
+        authInviteRole = String(event.target.value || "admin");
+      };
+    }
+
+    const adminInviteButton = document.getElementById("send-admin-invite");
+    if (adminInviteButton) {
+      adminInviteButton.onclick = async function () {
+        if (authState.pendingAction) return;
+        const emailInput = document.getElementById("admin-invite-email");
+        const email = String(emailInput?.value || "").trim();
+        if (!email) {
+          authState.status = "Enter an email address first.";
+          mount();
+          return;
+        }
+        try {
+          authState.pendingAction = "invite-admin";
+          authState.status = `Sending invite to ${email}...`;
+          mount();
+          await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
+          authState.status = `Invite sent to ${email}. They must set their password before signing in.`;
+          showToast(authState.status, "success");
+        } catch (error) {
+          authState.status = error.message || "Could not send invite.";
+          showToast(authState.status, "error");
+        } finally {
+          authState.pendingAction = "";
+          mount();
+        }
+      };
+    }
   }
 
   function bindRecoveryActions() {
@@ -3674,73 +3714,6 @@
     if (backToSignInButton) {
       backToSignInButton.onclick = function () {
         window.location.hash = "#dashboard";
-      };
-    }
-  }
-
-  function bindAuthActions() {
-    const signInButton = document.getElementById("auth-sign-in");
-    if (signInButton) {
-      signInButton.onclick = async function () {
-        const emailInput = document.getElementById("auth-email");
-        const passwordInput = document.getElementById("auth-password");
-        try {
-          await signInWithEmailPassword(String(emailInput?.value || ""), String(passwordInput?.value || ""));
-          await promoteInvitedMemberOnFirstSignIn();
-          await loadBootstrapData();
-          authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
-          mount();
-        } catch (error) {
-          authState.status = error.message;
-          mount();
-        }
-      };
-    }
-
-    const signOutButton = document.getElementById("auth-sign-out");
-    if (signOutButton) {
-      signOutButton.onclick = async function () {
-        try {
-          await signOut();
-          authState.status = "Signed out.";
-          mount();
-        } catch (error) {
-          authState.status = error.message;
-          mount();
-        }
-      };
-    }
-
-    const adminInviteRoleSelect = document.getElementById("admin-invite-role");
-    if (adminInviteRoleSelect) {
-      adminInviteRoleSelect.onchange = function (event) {
-        authInviteRole = String(event.target.value || "admin");
-      };
-    }
-
-    const adminInviteButton = document.getElementById("send-admin-invite");
-    if (adminInviteButton) {
-      adminInviteButton.onclick = async function () {
-        if (authState.pendingAction) return;
-        const emailInput = document.getElementById("admin-invite-email");
-        const email = String(emailInput?.value || "").trim();
-        if (!email) {
-          authState.status = "Enter an email address first.";
-          mount();
-          return;
-        }
-        try {
-          authState.pendingAction = "invite-admin";
-          authState.status = `Sending invite to ${email}...`;
-          mount();
-          await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
-          authState.status = `Invite sent to ${email}. They must set their password before signing in.`;
-        } catch (error) {
-          authState.status = error.message;
-        } finally {
-          authState.pendingAction = "";
-          mount();
-        }
       };
     }
   }
