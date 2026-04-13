@@ -10,7 +10,8 @@
     "migrate:fees:supabase-to-appwrite": "node scripts/migrate-fees-supabase-to-appwrite.mjs",
     "migrate:events:supabase-to-appwrite": "node scripts/migrate-events-supabase-to-appwrite.mjs",
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
-    "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs"
+    "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
+    "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

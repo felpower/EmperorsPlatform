@@ -69,6 +69,7 @@ Validation commands:
 
 - `npm run smoke:appwrite:auth-members`
 - `npm run smoke:appwrite:collections`
+- `npm run smoke:appwrite:parity-members-fees`
 
 Security note:
 
