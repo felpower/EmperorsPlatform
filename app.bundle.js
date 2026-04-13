@@ -1352,7 +1352,7 @@
     }
 
     const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
-    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
+    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin" || currentAccessRole === "player";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
 
     const queryWarnings = [];
