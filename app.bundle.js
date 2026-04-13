@@ -2073,7 +2073,7 @@
               <p style="font-size: 1.25rem; font-weight: 600;">${passValidity}</p>
             </div>
             <div>
-              <p class="muted">Validation date</p>
+              <p class="muted">Valid till</p>
               <p style="font-size: 1.25rem; font-weight: 600;">${passValidationDate}</p>
             </div>
           </div>
@@ -3806,7 +3806,7 @@
     const applyButton = document.getElementById("apply-fee-bulk-status");
     if (applyButton) {
       applyButton.onclick = async function () {
-        const memberIds = selectedFeeMemberIds.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+        const memberIds = selectedFeeMemberIds.map((value) => String(value || "").trim()).filter(Boolean);
         if (!memberIds.length) {
           return;
         }
@@ -3873,7 +3873,7 @@
 
     document.querySelectorAll(".fee-row-save").forEach((button) => {
       button.onclick = async function () {
-        const feeId = Number(button.dataset.feeId || 0);
+        const feeId = String(button.dataset.feeId || "").trim();
         const statusSelect = document.querySelector(`.fee-row-status-select[data-fee-id="${feeId}"]`);
         const amountInput = document.querySelector(`.fee-row-amount[data-fee-id="${feeId}"]`);
         const paidInput = document.querySelector(`.fee-row-paid[data-fee-id="${feeId}"]`);
@@ -3886,7 +3886,7 @@
             paidAmount: Number(paidInput.value || 0),
             note: ""
           });
-          authState.status = `${memberName(sortedVisibleFees().find((fee) => Number(fee.id) === feeId)?.memberId)} fee updated.`;
+          authState.status = `${memberName(sortedVisibleFees().find((fee) => String(fee.id) === feeId)?.memberId)} fee updated.`;
           feeInlineEditId = null;
           mount();
           switchView("fees");
