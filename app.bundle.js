@@ -1392,9 +1392,6 @@
     const passRows = canReadPassesOnline
       ? await selectMaybe("player_passes", "member_id, pass_status, expires_on, federation_reference, notes, updated_at", true)
       : [];
-    const legacyPassRows = canReadPassesOnline
-      ? await selectMaybe("members", "id, player_pass_status, player_pass_expires_on", true)
-      : [];
     const feeRows = canReadFeesOnline
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
@@ -1415,11 +1412,6 @@
     const passesByMember = new Map();
     (passRows || []).forEach((row) => {
       passesByMember.set(String(row.member_id || ""), row);
-    });
-
-    const legacyPassesByMember = new Map();
-    (legacyPassRows || []).forEach((row) => {
-      legacyPassesByMember.set(String(row.id || ""), row);
     });
 
     const feesByMember = new Map();
@@ -1453,17 +1445,9 @@
       const { firstName, lastName, displayName } = normalizeDisplayName(row);
       const memberId = String(row.id || "");
       const pass = passesByMember.get(memberId) || null;
-      const legacyPass = legacyPassesByMember.get(memberId) || null;
-      const hasPassRow = Boolean(pass);
-      const passExpiry = hasPassRow
-        ? String(pass?.expires_on || "")
-        : String(legacyPass?.player_pass_expires_on || "");
-      const licenseName = hasPassRow
-        ? String(pass?.federation_reference || "")
-        : "";
-      const rawPassStatus = hasPassRow
-        ? String(pass?.pass_status || "")
-        : String(legacyPass?.player_pass_status || "");
+      const passExpiry = String(pass?.expires_on || "");
+      const licenseName = String(pass?.federation_reference || "");
+      const rawPassStatus = String(pass?.pass_status || "");
       const memberFees = feesByMember.get(memberId) || [];
       const latestFee = memberFees[0] || null;
       return {
