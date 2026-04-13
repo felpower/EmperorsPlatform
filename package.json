@@ -9,6 +9,7 @@
     "migrate:members:supabase-to-appwrite": "node scripts/migrate-members-supabase-to-appwrite.mjs",
     "migrate:fees:supabase-to-appwrite": "node scripts/migrate-fees-supabase-to-appwrite.mjs",
     "migrate:events:supabase-to-appwrite": "node scripts/migrate-events-supabase-to-appwrite.mjs",
+    "auth:create-user": "node scripts/create-appwrite-auth-user.mjs",
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
     "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
     "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs"

@@ -71,6 +71,17 @@ Validation commands:
 - `npm run smoke:appwrite:collections`
 - `npm run smoke:appwrite:parity-members-fees`
 
+Create first Appwrite auth user (for localhost sign-in):
+
+- `npm run auth:create-user`
+
+Required env vars for that command:
+
+- `APPWRITE_API_KEY`
+- `AUTH_EMAIL`
+- `AUTH_PASSWORD`
+- `AUTH_NAME` (optional)
+
 Security note:
 
 - If an API key was shared in chat or terminal history, rotate it in Appwrite Console before production use.

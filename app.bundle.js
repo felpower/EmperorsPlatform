@@ -1355,11 +1355,11 @@
     const currentUserId = String(authState.user?.id || "").trim();
     const currentUserEmail = String(authState.user?.email || "").trim();
     if (currentUserId && currentUserEmail) {
-      // Best-effort claim: link imported member rows to this auth user by matching email once.
+      // Link member rows to current Appwrite auth user by exact email match.
+      // This also repairs rows migrated from legacy systems where profile_id references a non-Appwrite UUID.
       await backendClient
         .from("members")
         .update({ profile_id: currentUserId })
-        .is("profile_id", null)
         .ilike("email", currentUserEmail);
     }
 
