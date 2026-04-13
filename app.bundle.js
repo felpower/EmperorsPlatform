@@ -417,15 +417,16 @@
           <h3 style="margin-top: 4px;">Sign in</h3>
           <p class="muted">${authMessage}</p>
         </div>
+        <div class="auth-status" role="status" aria-live="polite">${authState.status || "Enter your email and password to continue."}</div>
         ${signInBusy || resetBusy || signOutBusy ? `<div class="auth-progress"><span class="auth-spinner" aria-hidden="true"></span><span>${authState.status || "Working..."}</span></div>` : ""}
         <div class="form-grid">
           <label>Email<input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" ${signInBusy || resetBusy ? "disabled" : ""} /></label>
           <label>Password<input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
         </div>
         <div class="button-row">
-          <button id="auth-sign-in" type="button" class="primary-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signInBusy ? "Signing in..." : "Sign in"}</button>
-          <button id="auth-reset-password" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""} aria-label="Send password reset email">${resetBusy ? "Sending reset email..." : "Forgot password?"}</button>
-          <button id="auth-sign-out" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signOutBusy ? "Signing out..." : "Sign out"}</button>
+          <button id="auth-sign-in" type="button" class="primary-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signInBusy ? "Signing in..." : "Sign in"}</button>
+          <button id="auth-reset-password" type="button" class="ghost-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""} aria-label="Send password reset email">${resetBusy ? "Sending reset email..." : "Forgot password?"}</button>
+          <button id="auth-sign-out" type="button" class="ghost-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signOutBusy ? "Signing out..." : "Sign out"}</button>
         </div>
         <p class="meta">Invited users must set their password first before normal sign-in. Use Forgot password? to send a reset email and return to the password setup screen.</p>
       </article>
@@ -462,8 +463,11 @@
     if (!normalizedEmail) {
       throw new Error("Enter your email address first.");
     }
+    const redirectTo = window.location.href.startsWith("http")
+      ? `${window.location.origin}${window.location.pathname}#recovery`
+      : undefined;
     const response = await supabaseClient.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
+      ...(redirectTo ? { redirectTo } : {})
     });
     if (response.error) {
       throw response.error;
@@ -3464,15 +3468,31 @@
         if (authState.pendingAction) return;
         const emailInput = document.getElementById("auth-email");
         const passwordInput = document.getElementById("auth-password");
+        const email = String(emailInput?.value || "").trim();
+        const password = String(passwordInput?.value || "").trim();
+        if (!email) {
+          authState.status = "Enter your email address first.";
+          showToast(authState.status, "error");
+          mount();
+          return;
+        }
+        if (!password) {
+          authState.status = "Enter your password first.";
+          showToast(authState.status, "error");
+          mount();
+          return;
+        }
         try {
           authState.pendingAction = "sign-in";
           authState.status = "Signing you in...";
           mount();
-          await signInWithEmailPassword(String(emailInput?.value || ""), String(passwordInput?.value || ""));
+          await signInWithEmailPassword(email, password);
           await loadBootstrapData();
           authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
+          showToast(authState.status, "success");
         } catch (error) {
-          authState.status = error.message;
+          authState.status = error.message || "Sign in failed.";
+          showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
           mount();
@@ -3485,14 +3505,23 @@
       resetPasswordButton.onclick = async function () {
         if (authState.pendingAction) return;
         const emailInput = document.getElementById("auth-email");
+        const email = String(emailInput?.value || "").trim();
+        if (!email) {
+          authState.status = "Enter your email address first.";
+          showToast(authState.status, "error");
+          mount();
+          return;
+        }
         try {
           authState.pendingAction = "reset-password";
           authState.status = "Sending password reset email...";
           mount();
-          await sendResetPasswordEmail(String(emailInput?.value || ""));
-          authState.status = `Password reset email sent to ${String(emailInput?.value || "").trim()}.`;
+          await sendResetPasswordEmail(email);
+          authState.status = `Password reset email sent to ${email}.`;
+          showToast(authState.status, "success");
         } catch (error) {
-          authState.status = error.message;
+          authState.status = error.message || "Could not send password reset email.";
+          showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
           mount();
@@ -3510,8 +3539,10 @@
           mount();
           await signOut();
           authState.status = "Signed out.";
+          showToast(authState.status, "info");
         } catch (error) {
-          authState.status = error.message;
+          authState.status = error.message || "Sign out failed.";
+          showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
           mount();

@@ -1233,6 +1233,15 @@ code {
   font-weight: 600;
 }
 
+.auth-status {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(84, 184, 229, 0.08);
+  color: #166d94;
+  border: 1px solid rgba(84, 184, 229, 0.16);
+  line-height: 1.4;
+}
+
 .auth-spinner {
   width: 16px;
   height: 16px;
