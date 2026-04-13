@@ -36,9 +36,51 @@
     .setProject(String(config.projectId));
 
   const account = new appwrite.Account(client);
-  const tables = new appwrite.TablesDB(client);
+  const tablesService = typeof appwrite.TablesDB === "function" ? new appwrite.TablesDB(client) : null;
+  const databasesService = typeof appwrite.Databases === "function" ? new appwrite.Databases(client) : null;
   const Query = appwrite.Query;
   const ID = appwrite.ID;
+
+  function buildListQueries() {
+    return Query && typeof Query.limit === "function" ? [Query.limit(5000)] : [];
+  }
+
+  const dbApi = tablesService
+    ? {
+        listRows: function (databaseId, tableId) {
+          return tablesService.listRows(databaseId, tableId, buildListQueries());
+        },
+        createRow: function (databaseId, tableId, rowId, data) {
+          return tablesService.createRow(databaseId, tableId, rowId, data);
+        },
+        updateRow: function (databaseId, tableId, rowId, data) {
+          return tablesService.updateRow(databaseId, tableId, rowId, data);
+        },
+        deleteRow: function (databaseId, tableId, rowId) {
+          return tablesService.deleteRow(databaseId, tableId, rowId);
+        }
+      }
+    : databasesService
+      ? {
+          listRows: function (databaseId, tableId) {
+            return databasesService.listDocuments(databaseId, tableId, buildListQueries());
+          },
+          createRow: function (databaseId, tableId, rowId, data) {
+            return databasesService.createDocument(databaseId, tableId, rowId, data);
+          },
+          updateRow: function (databaseId, tableId, rowId, data) {
+            return databasesService.updateDocument(databaseId, tableId, rowId, data);
+          },
+          deleteRow: function (databaseId, tableId, rowId) {
+            return databasesService.deleteDocument(databaseId, tableId, rowId);
+          }
+        }
+      : null;
+
+  if (!dbApi) {
+    console.error("Appwrite SDK does not expose TablesDB or Databases in this runtime.");
+    return;
+  }
 
   const authListeners = new Set();
 
@@ -316,7 +358,7 @@
     async fetchRows() {
       const tableId = tableIdFor(this.tableName);
       if (!tableId) throw new Error("Missing table id for " + this.tableName + ".");
-      const response = await tables.listRows(String(config.databaseId), tableId, [Query.limit(5000)]);
+      const response = await dbApi.listRows(String(config.databaseId), tableId);
       const rows = response.rows || response.documents || [];
       const normalized = this.tableName === "members" ? rows.map(normalizeMembersRow) : rows.map(function (row) {
         return Object.assign({}, row, { id: row.$id || row.id });
@@ -335,7 +377,7 @@
           const created = [];
           for (const row of this.payload || []) {
             const payload = this.tableName === "members" ? sanitizeMembersPayload(row || {}, { forInsert: true }) : clone(row || {});
-            const inserted = await tables.createRow(String(config.databaseId), tableId, ID.unique(), payload);
+            const inserted = await dbApi.createRow(String(config.databaseId), tableId, ID.unique(), payload);
             created.push(this.tableName === "members" ? normalizeMembersRow(inserted) : Object.assign({}, inserted, { id: inserted.$id || inserted.id }));
           }
           data = created;
@@ -345,7 +387,7 @@
           const updated = [];
           for (const row of rows) {
             const payload = this.tableName === "members" ? sanitizeMembersPayload(this.payload || {}) : clone(this.payload || {});
-            const next = await tables.updateRow(String(config.databaseId), tableId, String(row.$id || row.id), payload);
+            const next = await dbApi.updateRow(String(config.databaseId), tableId, String(row.$id || row.id), payload);
             updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
           }
           data = updated;
@@ -353,7 +395,7 @@
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
           for (const row of rows) {
-            await tables.deleteRow(String(config.databaseId), tableId, String(row.$id || row.id));
+            await dbApi.deleteRow(String(config.databaseId), tableId, String(row.$id || row.id));
           }
           data = [];
         } else if (this.action === "upsert") {
@@ -368,8 +410,8 @@
           }
           const payload = this.tableName === "members" ? sanitizeMembersPayload(this.payload || {}, { forInsert: !target }) : clone(this.payload || {});
           const saved = target
-            ? await tables.updateRow(String(config.databaseId), tableId, String(target.$id || target.id), payload)
-            : await tables.createRow(String(config.databaseId), tableId, ID.unique(), payload);
+            ? await dbApi.updateRow(String(config.databaseId), tableId, String(target.$id || target.id), payload)
+            : await dbApi.createRow(String(config.databaseId), tableId, ID.unique(), payload);
           data = [this.tableName === "members" ? normalizeMembersRow(saved) : Object.assign({}, saved, { id: saved.$id || saved.id })];
         } else {
           data = [];
