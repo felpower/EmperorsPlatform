@@ -2032,8 +2032,35 @@
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
+    const userMember = signedInMemberRecord();
+    const athleteStatsHtml = userMember ? `
+      <article class="setup-card">
+        <p class="eyebrow">Your Profile</p>
+        <h3>${userMember.name}</h3>
+        <div style="display: grid; gap: 12px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <p class="muted">Jersey Number</p>
+              <p style="font-size: 1.25rem; font-weight: 600;">${userMember.jerseyNumber || "—"}</p>
+            </div>
+            <div>
+              <p class="muted">Membership Status</p>
+              <p style="font-size: 1.25rem; font-weight: 600;">${userMember.membershipStatus}</p>
+            </div>
+          </div>
+          <div>
+            <p class="muted">Latest Fee Status</p>
+            <p style="font-size: 1.25rem; font-weight: 600;">${userMember.feeStatus || "No fees"}</p>
+          </div>
+          <div class="button-row">
+            <button class="primary-button" id="athlete-view-profile-btn" type="button" data-no-toast="true">View Full Profile</button>
+          </div>
+        </div>
+      </article>
+    ` : "";
     return `
       <div style="max-width: 760px; display: grid; gap: 12px;">
+        ${athleteStatsHtml}
         <article class="setup-card">
           <p class="eyebrow">Overview</p>
           <h3>Team Operations</h3>
@@ -4377,6 +4404,16 @@
     };
   }
 
+  function bindDashboardActions() {
+    const athleteProfileBtn = document.getElementById("athlete-view-profile-btn");
+    if (athleteProfileBtn) {
+      athleteProfileBtn.onclick = function () {
+        profileRouteMode = "own";
+        switchView("user");
+      };
+    }
+  }
+
   function mount() {
     try {
       ensureValidFeeFilter();
@@ -4391,6 +4428,7 @@
       selectedFeeMemberIds = selectedFeeMemberIds.filter((memberId) => visibleIds.has(String(memberId)));
       renderHeroNotice();
       document.getElementById("dashboard").innerHTML = renderDashboard();
+      bindDashboardActions();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
