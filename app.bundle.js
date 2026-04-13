@@ -2033,6 +2033,21 @@
       return renderAuthGate();
     }
     const userMember = signedInMemberRecord();
+    const quarterFormatted = currentQuarterToken().replace("_", " ");
+    const passValidationDate = userMember?.passExpiry ? formatDate(userMember.passExpiry) : "-";
+    const passValidity = (() => {
+      if (!userMember) return "-";
+      const normalizedPassStatus = String(userMember.passStatus || "").trim().toLowerCase();
+      if (normalizedPassStatus === "expired") return "Expired";
+      if (normalizedPassStatus === "valid" || normalizedPassStatus === "expiring") return "Valid";
+      if (userMember.passExpiry) {
+        const expiryDate = new Date(`${userMember.passExpiry}T00:00:00`);
+        if (!Number.isNaN(expiryDate.getTime())) {
+          return expiryDate.getTime() < Date.now() ? "Expired" : "Valid";
+        }
+      }
+      return "Missing";
+    })();
     const athleteStatsHtml = userMember ? `
       <article class="setup-card">
         <p class="eyebrow">Your Profile</p>
@@ -2049,33 +2064,34 @@
             </div>
           </div>
           <div>
-            <p class="muted">Latest Fee Status</p>
+            <p class="muted">Membership fee status for ${quarterFormatted}</p>
             <p style="font-size: 1.25rem; font-weight: 600;">${userMember.feeStatus || "No fees"}</p>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <p class="muted">Player pass</p>
+              <p style="font-size: 1.25rem; font-weight: 600;">${passValidity}</p>
+            </div>
+            <div>
+              <p class="muted">Validation date</p>
+              <p style="font-size: 1.25rem; font-weight: 600;">${passValidationDate}</p>
+            </div>
           </div>
           <div class="button-row">
             <button class="primary-button" id="athlete-view-profile-btn" type="button" data-no-toast="true">View Full Profile</button>
           </div>
         </div>
       </article>
-    ` : "";
+    ` : `
+      <article class="setup-card">
+        <p class="eyebrow">Your Profile</p>
+        <h3>No athlete profile linked</h3>
+        <p class="muted">Your signed-in account is active, but no player record is connected yet.</p>
+      </article>
+    `;
     return `
       <div style="max-width: 760px; display: grid; gap: 12px;">
         ${athleteStatsHtml}
-        <article class="setup-card">
-          <p class="eyebrow">Overview</p>
-          <h3>Team Operations</h3>
-          <p>Use the navigation on the left to manage members, invitations, fees, and player passes.</p>
-        </article>
-        <article class="setup-card">
-          <p class="eyebrow">Quick Start</p>
-          <h3>What to do next</h3>
-          <div class="setup-list compact-list">
-            <div class="setup-step"><span>1</span><div><strong>Members</strong><p>Add or review your roster.</p></div></div>
-            <div class="setup-step"><span>2</span><div><strong>Invites</strong><p>Send invitation emails to activate accounts.</p></div></div>
-            <div class="setup-step"><span>3</span><div><strong>Membership Finance</strong><p>Track quarterly payment status.</p></div></div>
-            <div class="setup-step"><span>4</span><div><strong>My Profile</strong><p>Open your profile to change password and personal details.</p></div></div>
-          </div>
-        </article>
       </div>
     `;
   }
