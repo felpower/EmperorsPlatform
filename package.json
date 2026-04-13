@@ -4,7 +4,13 @@
   "version": "0.1.0",
   "scripts": {
     "start": "node server.mjs",
-    "import:supabase": "node scripts/import-sqlite-to-supabase.mjs"
+    "import:supabase": "node scripts/import-sqlite-to-supabase.mjs",
+    "setup:appwrite": "node scripts/setup-appwrite-collections.mjs",
+    "migrate:members:supabase-to-appwrite": "node scripts/migrate-members-supabase-to-appwrite.mjs",
+    "migrate:fees:supabase-to-appwrite": "node scripts/migrate-fees-supabase-to-appwrite.mjs",
+    "migrate:events:supabase-to-appwrite": "node scripts/migrate-events-supabase-to-appwrite.mjs",
+    "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
+    "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

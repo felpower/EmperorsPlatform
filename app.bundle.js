@@ -1,9 +1,5 @@
 (async function () {
-  const SUPABASE_CONFIG = {
-    url: "https://qggypwdmfrkhehmspvsr.supabase.co",
-    publishableKey: "sb_publishable_3DSRw25D8oYpoivsnpVViQ_aIiOX0vy",
-    projectRef: "qggypwdmfrkhehmspvsr"
-  };
+  const APPWRITE_CONFIG = window.ClubHubAppwriteConfig || null;
   const APP_CONFIG = window.__EMPERORS_CONFIG__ || {};
   const API_BASE_URL = String(APP_CONFIG.apiBaseUrl || "").trim().replace(/\/$/, "");
 
@@ -38,15 +34,9 @@
     "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB"
   ];
 
-  const supabaseClient =
-    window.supabase && SUPABASE_CONFIG.url && SUPABASE_CONFIG.publishableKey
-      ? window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.publishableKey, {
-          auth: {
-            autoRefreshToken: true,
-            persistSession: true,
-            detectSessionInUrl: true
-          }
-        })
+  const backendClient =
+    window.ClubHubDataClient && typeof window.ClubHubDataClient.createClient === "function"
+      ? window.ClubHubDataClient.createClient()
       : null;
 
   let state = loadState();
@@ -340,7 +330,12 @@
   }
 
   function shouldRequireAuth() {
-    return Boolean(supabaseClient) && !isLocalDevHost();
+    const hasAppwriteConfig = Boolean(
+      APPWRITE_CONFIG &&
+      String(APPWRITE_CONFIG.projectId || "").trim() &&
+      String(APPWRITE_CONFIG.databaseId || "").trim()
+    );
+    return Boolean(backendClient) || hasAppwriteConfig;
   }
 
   function extractUserRoles(user) {
@@ -391,7 +386,7 @@
         currentAccessRole = loadStoredValue(ACCESS_KEY, currentAccessRole || "player");
       }
       saveStoredValue(ACCESS_KEY, currentAccessRole);
-      authState.mode = "supabase";
+      authState.mode = "remote";
       if (needsPasswordSetup()) {
         authState.status = "Set your password to finish activating this account.";
         if (!/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
@@ -403,7 +398,7 @@
       return;
     }
     currentAccessRole = loadStoredValue(ACCESS_KEY, "admin");
-    authState.mode = supabaseClient ? "supabase" : "local";
+    authState.mode = backendClient ? "remote" : "local";
     authState.status = shouldRequireAuth()
       ? "Sign in with email and password to continue."
       : (window.location.hostname.includes("localhost") || window.location.hostname === "127.0.0.1"
@@ -419,7 +414,7 @@
       ? "Checking your session..."
       : shouldRequireAuth()
         ? "Use your email and password to sign in. If you were invited, set your password from the email you received first."
-        : "Sign in is available for Supabase users, but local demo mode is still active on localhost.";
+        : "Sign in is available for Appwrite users, but local demo mode is still active on localhost.";
 
     return `
       <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
@@ -445,10 +440,10 @@
   }
 
   async function signInWithEmailPassword(email, password) {
-    if (!supabaseClient) {
-      throw new Error("Supabase auth is not configured.");
+    if (!backendClient) {
+      throw new Error("Appwrite auth is not configured.");
     }
-    const response = await supabaseClient.auth.signInWithPassword({
+    const response = await backendClient.auth.signInWithPassword({
       email: String(email || "").trim(),
       password: String(password || "")
     });
@@ -456,7 +451,7 @@
       throw response.error;
     }
     if (response.data?.user && !response.data.user?.user_metadata?.password_set) {
-      await supabaseClient.auth.updateUser({
+      await backendClient.auth.updateUser({
         data: {
           ...(response.data.user.user_metadata || {}),
           password_set: true
@@ -467,8 +462,8 @@
   }
 
   async function sendResetPasswordEmail(email) {
-    if (!supabaseClient) {
-      throw new Error("Supabase auth is not configured.");
+    if (!backendClient) {
+      throw new Error("Appwrite auth is not configured.");
     }
     const normalizedEmail = String(email || "").trim();
     if (!normalizedEmail) {
@@ -477,7 +472,7 @@
     const redirectTo = window.location.href.startsWith("http")
       ? `${window.location.origin}${window.location.pathname}#recovery`
       : undefined;
-    const response = await supabaseClient.auth.resetPasswordForEmail(normalizedEmail, {
+    const response = await backendClient.auth.resetPasswordForEmail(normalizedEmail, {
       ...(redirectTo ? { redirectTo } : {})
     });
     if (response.error) {
@@ -486,8 +481,8 @@
   }
 
   async function signOut() {
-    if (!supabaseClient) return;
-    const response = await supabaseClient.auth.signOut();
+    if (!backendClient) return;
+    const response = await backendClient.auth.signOut();
     if (response.error) {
       throw response.error;
     }
@@ -495,13 +490,13 @@
   }
 
   async function setRecoveryPassword(password) {
-    if (!supabaseClient) {
-      throw new Error("Supabase auth is not configured.");
+    if (!backendClient) {
+      throw new Error("Appwrite auth is not configured.");
     }
     recoveryState.loading = true;
     recoveryState.status = "Setting password...";
     try {
-      const response = await supabaseClient.auth.updateUser({
+      const response = await backendClient.auth.updateUser({
         password: String(password || ""),
         data: {
           ...(authState.user?.user_metadata || {}),
@@ -867,11 +862,11 @@
   }
 
   async function promoteInvitedMemberOnFirstSignIn() {
-    if (!supabaseClient) return;
+    if (!backendClient) return;
     const profileId = String(authState.user?.id || "").trim();
     if (!profileId) return;
 
-    const updateResponse = await supabaseClient
+    const updateResponse = await backendClient
       .from("members")
       .update({ invite_sent_at: null })
       .eq("profile_id", profileId)
@@ -1317,8 +1312,13 @@
     saveState();
   }
 
-  function shouldUseSupabaseData() {
-    return Boolean(supabaseClient) && !isLocalDevHost();
+  function shouldUseRemoteData() {
+    const hasAppwriteConfig = Boolean(
+      APPWRITE_CONFIG &&
+      String(APPWRITE_CONFIG.projectId || "").trim() &&
+      String(APPWRITE_CONFIG.databaseId || "").trim()
+    );
+    return Boolean(backendClient) || hasAppwriteConfig;
   }
 
   function parseJsonArrayField(value, fallback = []) {
@@ -1343,8 +1343,10 @@
       return normalized;
     }
 
-  async function loadSupabaseBootstrap() {
-    if (!supabaseClient) return;
+  async function loadRemoteBootstrap() {
+    if (!backendClient) {
+      throw new Error("Appwrite compatibility client is not available. Check index.html script order and appwrite config.");
+    }
     if (!authState.user) {
       authState.status = "Sign in with email and password to continue.";
       return;
@@ -1354,7 +1356,7 @@
     const currentUserEmail = String(authState.user?.email || "").trim();
     if (currentUserId && currentUserEmail) {
       // Best-effort claim: link imported member rows to this auth user by matching email once.
-      await supabaseClient
+      await backendClient
         .from("members")
         .update({ profile_id: currentUserId })
         .is("profile_id", null)
@@ -1367,7 +1369,7 @@
 
     const queryWarnings = [];
     const selectMaybe = async (table, columns, optional = false) => {
-      const response = await supabaseClient.from(table).select(columns);
+      const response = await backendClient.from(table).select(columns);
       if (response.error) {
         if (optional) {
           queryWarnings.push(`${table}: ${response.error.message || "read blocked"}`);
@@ -1378,9 +1380,9 @@
       return response.data || [];
     };
 
-    let memberRowsResponse = await supabaseClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at");
+    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at");
     if (memberRowsResponse.error && /invite_sent_at/i.test(String(memberRowsResponse.error?.message || ""))) {
-      memberRowsResponse = await supabaseClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
     }
     if (memberRowsResponse.error) {
       throw memberRowsResponse.error;
@@ -1542,22 +1544,22 @@
     }
 
     applyBootstrap({
-      source: "supabase",
+      source: "appwrite",
       permissionsModel: demoData.permissionsModel,
       members,
       fees,
       events,
       invites
     });
-    authState.status = `Supabase data loaded for ${authDisplayName() || authState.user.email}.`;
+    authState.status = `Appwrite data loaded for ${authDisplayName() || authState.user.email}.`;
     if (queryWarnings.length) {
       authState.status += ` Some data may be hidden by permissions (${queryWarnings.join(" | ")}).`;
     }
   }
 
   async function loadBootstrapData() {
-    if (shouldUseSupabaseData()) {
-      await loadSupabaseBootstrap();
+    if (shouldUseRemoteData()) {
+      await loadRemoteBootstrap();
       return;
     }
     await loadLocalBootstrap();
@@ -1611,8 +1613,8 @@
     return fullName || "Unknown member";
   }
 
-  async function saveMemberViaSupabase(memberPayload) {
-    if (!supabaseClient) throw new Error("Supabase client is not available.");
+  async function saveMemberViaRemote(memberPayload) {
+    if (!backendClient) throw new Error("Appwrite client is not available.");
 
     const memberId = String(memberPayload.memberId || "").trim();
     const firstName = String(memberPayload.firstName || "").trim();
@@ -1653,20 +1655,20 @@
     let savedMemberId = memberId;
 
     if (memberId) {
-      const updateResponse = await supabaseClient.from("members").update(patch).eq("id", memberId).select("id, profile_id").single();
+      const updateResponse = await backendClient.from("members").update(patch).eq("id", memberId).select("id, profile_id").single();
       if (updateResponse.error) throw updateResponse.error;
       savedMemberId = String(updateResponse.data?.id || memberId);
 
       if (currentAccessRole === "admin" && updateResponse.data?.profile_id) {
         const profileId = String(updateResponse.data.profile_id);
-        const deleteResponse = await supabaseClient.from("member_roles").delete().eq("profile_id", profileId);
+        const deleteResponse = await backendClient.from("member_roles").delete().eq("profile_id", profileId);
         if (deleteResponse.error) throw deleteResponse.error;
         const insertRows = (roles.length ? roles : ["player"]).map((role) => ({ profile_id: profileId, role_code: role }));
-        const insertResponse = await supabaseClient.from("member_roles").insert(insertRows);
+        const insertResponse = await backendClient.from("member_roles").insert(insertRows);
         if (insertResponse.error) throw insertResponse.error;
       }
     } else {
-      const insertResponse = await supabaseClient.from("members").insert([patch]).select("id, profile_id").single();
+      const insertResponse = await backendClient.from("members").insert([patch]).select("id, profile_id").single();
       if (insertResponse.error) throw insertResponse.error;
       savedMemberId = String(insertResponse.data?.id || "");
     }
@@ -1678,7 +1680,7 @@
         expires_on: normalizedPassExpiry || null
       };
 
-      let passResponse = await supabaseClient.from("player_passes").upsert(passPayload, { onConflict: "member_id" });
+      let passResponse = await backendClient.from("player_passes").upsert(passPayload, { onConflict: "member_id" });
 
       if (passResponse.error && normalizedPassStatus === "missing") {
         const message = String(passResponse.error?.message || "").toLowerCase();
@@ -1689,7 +1691,7 @@
 
         if (likelyOldStatusConstraint) {
           // Compatibility mode for older schemas that don't accept 'missing'.
-          passResponse = await supabaseClient.from("player_passes").upsert(
+          passResponse = await backendClient.from("player_passes").upsert(
             {
               member_id: savedMemberId,
               pass_status: "expired",
@@ -1706,8 +1708,8 @@
     await loadBootstrapData();
   }
 
-  async function removeMemberViaSupabase(memberId) {
-    const response = await supabaseClient
+  async function removeMemberViaRemote(memberId) {
+    const response = await backendClient
       .from("members")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", memberId);
@@ -1715,14 +1717,14 @@
     await loadBootstrapData();
   }
 
-  async function undeleteMemberViaSupabase(memberId) {
-    const response = await supabaseClient.from("members").update({ deleted_at: null }).eq("id", memberId);
+  async function undeleteMemberViaRemote(memberId) {
+    const response = await backendClient.from("members").update({ deleted_at: null }).eq("id", memberId);
     if (response.error) throw response.error;
     await loadBootstrapData();
   }
 
-  async function mergeMembersViaSupabase({ keepMemberId, removeMemberId }) {
-    if (!supabaseClient) throw new Error("Supabase client is not available.");
+  async function mergeMembersViaRemote({ keepMemberId, removeMemberId }) {
+    if (!backendClient) throw new Error("Appwrite client is not available.");
 
     const keepId = String(keepMemberId || "").trim();
     const removeId = String(removeMemberId || "").trim();
@@ -1730,37 +1732,37 @@
       throw new Error("Keep and remove member must be different.");
     }
 
-    const feeMove = await supabaseClient.from("membership_fees").update({ member_id: keepId }).eq("member_id", removeId);
+    const feeMove = await backendClient.from("membership_fees").update({ member_id: keepId }).eq("member_id", removeId);
     if (feeMove.error) throw feeMove.error;
 
-    const keepPass = await supabaseClient.from("player_passes").select("id").eq("member_id", keepId).maybeSingle();
+    const keepPass = await backendClient.from("player_passes").select("id").eq("member_id", keepId).maybeSingle();
     if (keepPass.error) throw keepPass.error;
-    const removePass = await supabaseClient.from("player_passes").select("id").eq("member_id", removeId).maybeSingle();
+    const removePass = await backendClient.from("player_passes").select("id").eq("member_id", removeId).maybeSingle();
     if (removePass.error) throw removePass.error;
     if (removePass.data?.id) {
       if (keepPass.data?.id) {
-        const deletePass = await supabaseClient.from("player_passes").delete().eq("member_id", removeId);
+        const deletePass = await backendClient.from("player_passes").delete().eq("member_id", removeId);
         if (deletePass.error) throw deletePass.error;
       } else {
-        const movePass = await supabaseClient.from("player_passes").update({ member_id: keepId }).eq("member_id", removeId);
+        const movePass = await backendClient.from("player_passes").update({ member_id: keepId }).eq("member_id", removeId);
         if (movePass.error) throw movePass.error;
       }
     }
 
-    const deleteMember = await supabaseClient.from("members").delete().eq("id", removeId);
+    const deleteMember = await backendClient.from("members").delete().eq("id", removeId);
     if (deleteMember.error) throw deleteMember.error;
 
     await loadBootstrapData();
   }
 
-  async function updateFeeStatusesBulkViaSupabase({ feePeriod, status, memberIds }) {
-    if (!supabaseClient) throw new Error("Supabase client is not available.");
+  async function updateFeeStatusesBulkViaRemote({ feePeriod, status, memberIds }) {
+    if (!backendClient) throw new Error("Appwrite client is not available.");
 
     const normalizedStatus = normalizeFeeStatusValue(status);
     const ids = (Array.isArray(memberIds) ? memberIds : []).map((id) => String(id || "").trim()).filter(Boolean);
     if (!ids.length) throw new Error("Select at least one member.");
 
-    const query = await supabaseClient
+    const query = await backendClient
       .from("membership_fees")
       .select("id, amount_cents, paid_cents")
       .eq("fee_period", String(feePeriod || ""))
@@ -1775,7 +1777,7 @@
       else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
       else paidCents = 0;
 
-      const update = await supabaseClient
+      const update = await backendClient
         .from("membership_fees")
         .update({ status: normalizedStatus, paid_cents: paidCents })
         .eq("id", row.id);
@@ -1785,8 +1787,8 @@
     await loadBootstrapData();
   }
 
-  async function updateFeeRowViaSupabase({ feeId, status, amount, paidAmount, note, iban }) {
-    if (!supabaseClient) throw new Error("Supabase client is not available.");
+  async function updateFeeRowViaRemote({ feeId, status, amount, paidAmount, note, iban }) {
+    if (!backendClient) throw new Error("Appwrite client is not available.");
 
     const normalizedStatus = normalizeFeeStatusValue(status);
     const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
@@ -1795,7 +1797,7 @@
     if (normalizedStatus === "paid") paidCents = amountCents;
     else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
 
-    const response = await supabaseClient
+    const response = await backendClient
       .from("membership_fees")
       .update({
         status: normalizedStatus,
@@ -1811,8 +1813,8 @@
   }
 
   async function saveMember(memberPayload) {
-    if (shouldUseSupabaseData()) {
-      await saveMemberViaSupabase(memberPayload);
+    if (shouldUseRemoteData()) {
+      await saveMemberViaRemote(memberPayload);
       return;
     }
     const memberId = String(memberPayload.memberId || "").trim();
@@ -1840,8 +1842,8 @@
   }
 
   async function removeMember(memberId) {
-    if (shouldUseSupabaseData()) {
-      await removeMemberViaSupabase(memberId);
+    if (shouldUseRemoteData()) {
+      await removeMemberViaRemote(memberId);
       return;
     }
     const response = await fetch(apiUrl(`/api/members/${memberId}`), { method: "DELETE" });
@@ -1851,8 +1853,8 @@
   }
 
   async function undeleteMember(memberId) {
-    if (shouldUseSupabaseData()) {
-      await undeleteMemberViaSupabase(memberId);
+    if (shouldUseRemoteData()) {
+      await undeleteMemberViaRemote(memberId);
       return;
     }
     const response = await fetch(apiUrl(`/api/members/${memberId}/undelete`), { method: "POST" });
@@ -1862,8 +1864,8 @@
   }
 
   async function mergeMemberRecords({ keepMemberId, removeMemberId, firstName, lastName }) {
-    if (shouldUseSupabaseData()) {
-      await mergeMembersViaSupabase({ keepMemberId, removeMemberId, firstName, lastName });
+    if (shouldUseRemoteData()) {
+      await mergeMembersViaRemote({ keepMemberId, removeMemberId, firstName, lastName });
       return;
     }
     const response = await fetch(apiUrl("/api/members/merge"), {
@@ -1877,8 +1879,8 @@
   }
 
   async function updateFeeStatusesBulk({ feePeriod, status, memberIds }) {
-    if (shouldUseSupabaseData()) {
-      await updateFeeStatusesBulkViaSupabase({ feePeriod, status, memberIds });
+    if (shouldUseRemoteData()) {
+      await updateFeeStatusesBulkViaRemote({ feePeriod, status, memberIds });
       return;
     }
     const response = await fetch(apiUrl("/api/fees/bulk-status"), {
@@ -1892,8 +1894,8 @@
   }
 
   async function updateFeeRow({ feeId, status, amount, paidAmount, note, iban }) {
-    if (shouldUseSupabaseData()) {
-      await updateFeeRowViaSupabase({ feeId, status, amount, paidAmount, note, iban });
+    if (shouldUseRemoteData()) {
+      await updateFeeRowViaRemote({ feeId, status, amount, paidAmount, note, iban });
       return;
     }
     const response = await fetch(apiUrl(`/api/fees/${feeId}`), {
@@ -3204,7 +3206,7 @@
           button.blur();
           await inviteMember(member.id);
           authState.status = `Invite sent to ${member.email}.`;
-          if (shouldUseSupabaseData()) {
+          if (shouldUseRemoteData()) {
             await loadBootstrapData();
           } else {
             member.inviteSentAt = new Date().toISOString();
@@ -4534,10 +4536,10 @@
     setupFeesStickyHeader();
     setupPassesStickyHeader();
   });
-  if (supabaseClient) {
-    const { data } = await supabaseClient.auth.getSession();
+  if (backendClient) {
+    const { data } = await backendClient.auth.getSession();
     syncAuthSession(data?.session || null);
-    supabaseClient.auth.onAuthStateChange(function (_event, session) {
+    backendClient.auth.onAuthStateChange(function (_event, session) {
       syncAuthSession(session || null);
       Promise.resolve()
         .then(() => promoteInvitedMemberOnFirstSignIn())

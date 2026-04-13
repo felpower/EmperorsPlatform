@@ -2,6 +2,78 @@
 
 This repository contains the first working starter for your football team platform.
 
+## Appwrite Migration (appwrite-ui branch)
+
+This branch keeps the original UI and routes data/auth through Appwrite via a compatibility layer.
+
+Current Appwrite config file:
+
+- `src/appwrite-config.js`
+
+Configured values:
+
+- `endpoint`: `https://fra.cloud.appwrite.io/v1`
+- `projectId`: `69dd0fdd00336ea1b4b5`
+- `databaseId`: `69dd11140002e2b4254a`
+- `membersTableId`: `members`
+
+For full feature parity (fees, passes, events, invites, role-driven views), create these additional tables in the same Appwrite database:
+
+- `member_roles`
+- `player_passes`
+- `membership_fees`
+- `events`
+- `event_recipients`
+- `invites`
+
+The compatibility layer maps these legacy names automatically from:
+
+- `src/appwrite-backend-compat.js`
+
+Detailed table blueprint:
+
+- `appwrite/TABLES_SETUP.md`
+
+Terminal setup option:
+
+- `npm run setup:appwrite`
+
+Required environment variables:
+
+- `APPWRITE_API_KEY`
+- `APPWRITE_PROJECT_ID` (optional, defaults to current project)
+- `APPWRITE_DATABASE_ID` (optional, defaults to current database)
+- `APPWRITE_ENDPOINT` (optional, defaults to FRA cloud endpoint)
+
+Important data model note:
+
+- Appwrite is not a SQL database like Supabase Postgres. It uses database collections/documents (table-like, but not SQL dumps/restores).
+- Migration from Supabase is still straightforward with API-based copy scripts.
+
+Members-first migration command (Supabase -> Appwrite):
+
+- `npm run migrate:members:supabase-to-appwrite`
+- `npm run migrate:fees:supabase-to-appwrite`
+- `npm run migrate:events:supabase-to-appwrite`
+
+Required variables for that migration:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `APPWRITE_API_KEY`
+- `APPWRITE_PROJECT_ID` (optional)
+- `APPWRITE_DATABASE_ID` (optional)
+- `APPWRITE_ENDPOINT` (optional)
+
+Validation commands:
+
+- `npm run smoke:appwrite:auth-members`
+- `npm run smoke:appwrite:collections`
+
+Security note:
+
+- If an API key was shared in chat or terminal history, rotate it in Appwrite Console before production use.
+
 ## Why this setup
 
 The best low-cost option for your case is:
