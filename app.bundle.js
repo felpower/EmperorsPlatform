@@ -1146,7 +1146,7 @@
 
   function sortedMembers() {
     return sortRows(filteredMembers(), "members", (member, key) => {
-      if (key === "id") return Number(member.id) || 0;
+      if (key === "id") return String(member.id || "");
       if (key === "firstName") return member.firstName || "";
       if (key === "lastName") return member.lastName || "";
       if (key === "jerseyNumber") return member.jerseyNumber || 0;
@@ -2033,7 +2033,12 @@
       return renderAuthGate();
     }
     const userMember = signedInMemberRecord();
-    const quarterFormatted = currentQuarterToken().replace("_", " ");
+    const quarterToken = currentQuarterToken();
+    const quarterFormatted = quarterToken.replace("_", " ");
+    const currentQuarterFee = userMember ? memberFeesByPeriod(userMember.id).get(quarterToken) : null;
+    const currentQuarterFeeStatusLabel = currentQuarterFee
+      ? statusLabel(currentQuarterFee.status)
+      : statusLabel(userMember?.feeStatus || "pending");
     const passValidationDate = userMember?.passExpiry ? formatDate(userMember.passExpiry) : "-";
     const passValidity = (() => {
       if (!userMember) return "-";
@@ -2065,7 +2070,7 @@
           </div>
           <div>
             <p class="muted">Membership fee status for ${quarterFormatted}</p>
-            <p style="font-size: 1.25rem; font-weight: 600;">${userMember.feeStatus || "No fees"}</p>
+            <p style="font-size: 1.25rem; font-weight: 600;">${currentQuarterFeeStatusLabel || "No fees"}</p>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div>
@@ -3096,8 +3101,8 @@
           defaultSuggestionId
         );
         if (!rawId) return;
-        const removeId = Number(String(rawId).trim());
-        if (!Number.isFinite(removeId) || removeId <= 0 || String(removeId) === String(keepMember.id)) {
+        const removeId = String(rawId).trim();
+        if (!removeId || String(removeId) === String(keepMember.id)) {
           authState.status = "Please enter a valid different member ID to merge.";
           mount();
           switchView("members");
@@ -4122,7 +4127,9 @@
           authState.status = "Loading Clubee pass changes...";
           mount();
           passSyncPreview = await previewClubeePassSync();
-          selectedPassSyncMemberIds = (passSyncPreview?.changes || []).map((change) => Number(change.memberId));
+          selectedPassSyncMemberIds = (passSyncPreview?.changes || [])
+            .map((change) => String(change.memberId || "").trim())
+            .filter(Boolean);
           authState.status = `Preview ready: ${(passSyncPreview?.changes || []).length} change(s).`;
         } catch (error) {
           authState.status = error.message;
@@ -4138,7 +4145,7 @@
     if (applyButton) {
       applyButton.onclick = async function () {
         if (authState.pendingAction) return;
-        const memberIds = Array.from(new Set(selectedPassSyncMemberIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
+        const memberIds = Array.from(new Set(selectedPassSyncMemberIds.map((id) => String(id || "").trim()).filter(Boolean)));
         if (!memberIds.length) {
           authState.status = "Select at least one change to apply.";
           mount();
@@ -4153,7 +4160,9 @@
           mount();
           const summary = await applyClubeePassSync(memberIds);
           passSyncPreview = await previewClubeePassSync();
-          selectedPassSyncMemberIds = (passSyncPreview?.changes || []).map((change) => Number(change.memberId));
+          selectedPassSyncMemberIds = (passSyncPreview?.changes || [])
+            .map((change) => String(change.memberId || "").trim())
+            .filter(Boolean);
           authState.status = `Applied ${Number(summary?.appliedCount || 0)} update(s).`;
         } catch (error) {
           authState.status = error.message;
@@ -4167,9 +4176,9 @@
 
     document.querySelectorAll(".pass-sync-select").forEach((checkbox) => {
       checkbox.onchange = function () {
-        const memberId = Number(checkbox.dataset.memberId || 0);
-        if (!Number.isFinite(memberId) || memberId <= 0) return;
-        const selected = new Set(selectedPassSyncMemberIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0));
+        const memberId = String(checkbox.dataset.memberId || "").trim();
+        if (!memberId) return;
+        const selected = new Set(selectedPassSyncMemberIds.map((id) => String(id || "").trim()).filter(Boolean));
         if (checkbox.checked) selected.add(memberId);
         else selected.delete(memberId);
         selectedPassSyncMemberIds = Array.from(selected);
@@ -4179,7 +4188,9 @@
     const selectAllButton = document.getElementById("select-all-pass-sync");
     if (selectAllButton) {
       selectAllButton.onclick = function () {
-        selectedPassSyncMemberIds = (passSyncPreview?.changes || []).map((change) => Number(change.memberId));
+        selectedPassSyncMemberIds = (passSyncPreview?.changes || [])
+          .map((change) => String(change.memberId || "").trim())
+          .filter(Boolean);
         mount();
         switchView("pass-sync");
       };
