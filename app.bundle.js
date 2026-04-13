@@ -2370,6 +2370,18 @@
         ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
       </article>
     `;
+    const passSection = `
+      <article class="card compact-card" style="display:grid; gap: 10px;">
+        <div>
+          <p class="eyebrow">Eligibility</p>
+          <h3 style="margin-top: 4px;">Player pass</h3>
+        </div>
+        <div class="pill-row dense-row">
+          ${statusPill(displayPassStatus(member.passStatus))}
+        </div>
+        <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Valid till ${formatDate(member.passExpiry)}` : (member.licenseName || "No expiry date")}</p>
+      </article>
+    `;
     const securitySection = authState.user && isOwnProfile(member) ? `
       <article class="card compact-card" style="display:grid; gap: 10px;">
         <div>
@@ -2407,6 +2419,7 @@
         </article>
         <div class="profile-side-column">
           ${rolePositionSection}
+          ${passSection}
           ${notesSection}
           ${securitySection}
           ${sensitiveSection}
