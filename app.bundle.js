@@ -1339,7 +1339,6 @@
       const hasExpiry = Boolean(String(expiry || "").trim());
       const hasLicense = Boolean(String(licenseName || "").trim());
       if (!normalized) return "missing";
-      if (normalized === "valid" && !hasExpiry && !hasLicense) return "missing";
       if (normalized === "expired" && !hasExpiry && !hasLicense) return "missing";
       return normalized;
     }
@@ -1349,6 +1348,17 @@
     if (!authState.user) {
       authState.status = "Sign in with email and password to continue.";
       return;
+    }
+
+    const currentUserId = String(authState.user?.id || "").trim();
+    const currentUserEmail = String(authState.user?.email || "").trim();
+    if (currentUserId && currentUserEmail) {
+      // Best-effort claim: link imported member rows to this auth user by matching email once.
+      await supabaseClient
+        .from("members")
+        .update({ profile_id: currentUserId })
+        .is("profile_id", null)
+        .ilike("email", currentUserEmail);
     }
 
     const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin" || currentAccessRole === "player";
