@@ -2782,10 +2782,44 @@
     `;
   }
 
+  function viewsAllowedForRole(role) {
+    const normalizedRole = String(role || "").trim().toLowerCase();
+    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "events", "invites", "recovery"];
+    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "events", "invites", "recovery"];
+    return ["dashboard", "user", "events", "recovery"];
+  }
+
+  function canAccessView(viewId) {
+    return viewsAllowedForRole(currentAccessRole).includes(String(viewId || "").trim());
+  }
+
+  function resolveAllowedView(nextViewId) {
+    const normalizedView = String(nextViewId || "").trim();
+    if (viewIds.includes(normalizedView) && canAccessView(normalizedView)) return normalizedView;
+    if (canAccessView("dashboard")) return "dashboard";
+    if (canAccessView("user")) return "user";
+    return "dashboard";
+  }
+
+  function updateNavigationVisibility() {
+    document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
+      const viewId = String(link.dataset.view || "").trim();
+      const visible = canAccessView(viewId);
+      link.style.display = visible ? "" : "none";
+      if (!visible) link.classList.remove("active");
+    });
+  }
+
   function bindNavigation() {
     document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
       link.onclick = function () {
         const nextView = link.dataset.view;
+        if (!canAccessView(nextView)) {
+          switchView(resolveAllowedView(nextView));
+          return;
+        }
         window.location.hash = nextView;
         switchView(nextView);
       };
@@ -2818,7 +2852,7 @@
   }
 
   function switchView(nextViewId) {
-    const finalView = viewIds.includes(nextViewId) ? nextViewId : "dashboard";
+    const finalView = resolveAllowedView(nextViewId);
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
       if (section) section.classList.toggle("active", viewId === finalView);
@@ -4463,6 +4497,7 @@
       bindChangePasswordAction();
       bindTableExports();
       bindTableSorts();
+      updateNavigationVisibility();
       switchView(getRouteView());
       setupMembersStickyHeader();
       setupFeesStickyHeader();
@@ -4494,6 +4529,7 @@
   bindNavigation();
   bindButtonFeedback();
   window.addEventListener("hashchange", function () {
+    updateNavigationVisibility();
     switchView(getRouteView());
     setupMembersStickyHeader();
     setupFeesStickyHeader();
