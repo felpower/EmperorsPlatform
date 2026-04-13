@@ -375,6 +375,10 @@
     return String(authState.pendingAction || "") === String(action || "");
   }
 
+  function needsPasswordSetup() {
+    return Boolean(authState.user) && !authState.user?.user_metadata?.password_set;
+  }
+
   function syncAuthSession(session) {
     authState.ready = true;
     authState.loading = false;
@@ -388,7 +392,14 @@
       }
       saveStoredValue(ACCESS_KEY, currentAccessRole);
       authState.mode = "supabase";
-      authState.status = `Signed in as ${authDisplayName() || authState.user.full_name}.`;
+      if (needsPasswordSetup()) {
+        authState.status = "Set your password to finish activating this account.";
+        if (!/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
+          window.location.hash = "#recovery";
+        }
+      } else {
+        authState.status = `Signed in as ${authDisplayName() || authState.user.full_name}.`;
+      }
       return;
     }
     currentAccessRole = loadStoredValue(ACCESS_KEY, "admin");
@@ -518,6 +529,23 @@
     const passwordInput = document.getElementById("recovery-password");
     const email = authState.user?.email || "your email";
     const isFirstTime = !authState.user?.user_metadata?.password_set;
+
+    if (!authState.user) {
+      return `
+        <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
+          <div>
+            <p class="eyebrow">Password setup</p>
+            <h3 style="margin-top: 4px;">This recovery link is no longer active</h3>
+            <p class="muted">Invite and reset links are time-limited. Request a new invite or use Forgot password? from the sign-in screen to get a fresh link.</p>
+          </div>
+          <div class="auth-status" role="status" aria-live="polite">No active recovery session was found.</div>
+          <div class="button-row">
+            <button id="recovery-back-to-sign-in" type="button" class="primary-button" data-no-toast="true">Back to sign in</button>
+          </div>
+        </article>
+      `;
+    }
+
     return `
       <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
         <div>
@@ -3590,6 +3618,13 @@
     const cancelButton = document.getElementById("recovery-cancel");
     if (cancelButton) {
       cancelButton.onclick = function () {
+        window.location.hash = "#dashboard";
+      };
+    }
+
+    const backToSignInButton = document.getElementById("recovery-back-to-sign-in");
+    if (backToSignInButton) {
+      backToSignInButton.onclick = function () {
         window.location.hash = "#dashboard";
       };
     }
