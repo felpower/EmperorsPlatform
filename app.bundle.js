@@ -2306,7 +2306,9 @@
           <p class="eyebrow">Sensitive finance</p>
           <h3 style="margin-top: 4px;">IBAN and quarter payment statuses</h3>
         </div>
-        ${canEditSensitive ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIban}" ${sensitiveDisabled} /></label>` : ""}
+        ${canEditSensitive
+          ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIban}" ${sensitiveDisabled} /></label>`
+          : `<div><p class="muted" style="margin-bottom: 4px;">IBAN</p><p>${firstIban || "No IBAN on file"}</p></div>`}
         <div class="table-wrap">
           <table>
             <thead><tr><th>Quarter</th><th>Status</th></tr></thead>
@@ -2316,7 +2318,10 @@
                 if (!fee) {
                   return `<tr><td>${formatFeePeriod(period)}</td><td><span class="meta">No record</span></td></tr>`;
                 }
-                return `<tr><td>${formatFeePeriod(period)}</td><td><select class="user-sensitive-fee-status" data-fee-id="${fee.id}" ${sensitiveDisabled}><option value="paid" ${fee.status === "paid" ? "selected" : ""}>paid</option><option value="partial" ${fee.status === "partial" ? "selected" : ""}>partial</option><option value="pending" ${fee.status === "pending" ? "selected" : ""}>pending</option><option value="not_collected" ${fee.status === "not_collected" ? "selected" : ""}>not collected</option><option value="exempt" ${fee.status === "exempt" ? "selected" : ""}>exempt</option><option value="exit" ${fee.status === "exit" ? "selected" : ""}>exit</option><option value="not_applicable" ${fee.status === "not_applicable" ? "selected" : ""}>not in team</option></select></td></tr>`;
+                if (canEditSensitive) {
+                  return `<tr><td>${formatFeePeriod(period)}</td><td><select class="user-sensitive-fee-status" data-fee-id="${fee.id}" ${sensitiveDisabled}><option value="paid" ${fee.status === "paid" ? "selected" : ""}>paid</option><option value="partial" ${fee.status === "partial" ? "selected" : ""}>partial</option><option value="pending" ${fee.status === "pending" ? "selected" : ""}>pending</option><option value="not_collected" ${fee.status === "not_collected" ? "selected" : ""}>not collected</option><option value="exempt" ${fee.status === "exempt" ? "selected" : ""}>exempt</option><option value="exit" ${fee.status === "exit" ? "selected" : ""}>exit</option><option value="not_applicable" ${fee.status === "not_applicable" ? "selected" : ""}>not in team</option></select></td></tr>`;
+                }
+                return `<tr><td>${formatFeePeriod(period)}</td><td>${statusPill(fee.status)}</td></tr>`;
               }).join("")}
             </tbody>
           </table>
@@ -2788,7 +2793,7 @@
     if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "events", "invites", "settings", "recovery"];
     if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "events", "invites", "recovery"];
     if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "events", "invites", "recovery"];
-    return ["dashboard", "user", "events", "recovery"];
+    return ["dashboard", "members", "user", "events", "recovery"];
   }
 
   function canAccessView(viewId) {
