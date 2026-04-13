@@ -91,6 +91,7 @@
     status: "",
     loading: false
   };
+  let buttonFeedbackBound = false;
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -108,6 +109,70 @@
 
   function saveStoredValue(key, value) {
     localStorage.setItem(key, value);
+  }
+
+  function ensureToastStack() {
+    let toastStack = document.getElementById("toast-stack");
+    if (!toastStack) {
+      toastStack = document.createElement("div");
+      toastStack.id = "toast-stack";
+      toastStack.className = "toast-stack";
+      toastStack.setAttribute("aria-live", "polite");
+      toastStack.setAttribute("aria-atomic", "true");
+      document.body.appendChild(toastStack);
+    }
+    return toastStack;
+  }
+
+  function showToast(message, tone = "info") {
+    const text = String(message || "").trim();
+    if (!text) return;
+    const toastStack = ensureToastStack();
+    const toast = document.createElement("div");
+    toast.className = `toast toast-${tone}`;
+    toast.textContent = text;
+    toastStack.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.classList.add("is-visible");
+    });
+    window.setTimeout(() => {
+      toast.classList.remove("is-visible");
+      window.setTimeout(() => toast.remove(), 220);
+    }, 2200);
+  }
+
+  function buttonLabelForToast(button) {
+    const explicitLabel = String(button?.dataset?.toast || "").trim();
+    if (explicitLabel) return explicitLabel;
+    const ariaLabel = String(button?.getAttribute("aria-label") || "").trim();
+    if (ariaLabel) return ariaLabel;
+    return String(button?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function bindButtonFeedback() {
+    if (buttonFeedbackBound) return;
+    buttonFeedbackBound = true;
+
+    document.addEventListener(
+      "click",
+      (event) => {
+        const button = event.target.closest("button");
+        if (!button || button.disabled || button.dataset.noToast === "true") {
+          return;
+        }
+
+        button.classList.add("is-clicked");
+        window.setTimeout(() => {
+          button.classList.remove("is-clicked");
+        }, 180);
+
+        const label = buttonLabelForToast(button);
+        if (label) {
+          showToast(label, button.classList.contains("danger-button") ? "error" : "info");
+        }
+      },
+      true
+    );
   }
 
   function loadStatusFilter() {
@@ -359,10 +424,10 @@
         </div>
         <div class="button-row">
           <button id="auth-sign-in" type="button" class="primary-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signInBusy ? "Signing in..." : "Sign in"}</button>
-          <button id="auth-reset-password" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${resetBusy ? "Sending reset email..." : "Send reset email"}</button>
+          <button id="auth-reset-password" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""} aria-label="Send password reset email">${resetBusy ? "Sending reset email..." : "Forgot password?"}</button>
           <button id="auth-sign-out" type="button" class="ghost-button" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signOutBusy ? "Signing out..." : "Sign out"}</button>
         </div>
-        <p class="meta">Invited users must set their password first before normal sign-in. Password reset emails also return users to the password setup screen.</p>
+        <p class="meta">Invited users must set their password first before normal sign-in. Use Forgot password? to send a reset email and return to the password setup screen.</p>
       </article>
     `;
   }
@@ -4310,6 +4375,7 @@
   }
 
   bindNavigation();
+  bindButtonFeedback();
   window.addEventListener("hashchange", function () {
     switchView(getRouteView());
     setupMembersStickyHeader();
