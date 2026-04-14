@@ -153,7 +153,7 @@
   function avatarFallbackOnErrorAttr() {
     const fallbackUrl = DEFAULT_PROFILE_AVATAR_URL.replaceAll("\"", "&quot;");
     const inlineFallback = INLINE_AVATAR_PLACEHOLDER.replaceAll("\"", "&quot;");
-    return `this.onerror=null;var backup=&quot;${fallbackUrl}&quot;;if(this.src!==backup){this.src=backup;return;}this.src=&quot;${inlineFallback}&quot;;`;
+    return `var backup=&quot;${fallbackUrl}&quot;;var inline=&quot;${inlineFallback}&quot;;if(this.dataset.avatarFallbackApplied===\"1\"){this.onerror=null;this.src=inline;return;}this.dataset.avatarFallbackApplied=\"1\";this.src=backup;`;
   }
 
   async function uploadProfileAvatarToStorage(file) {
@@ -2730,7 +2730,7 @@
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
                     ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${member.lastName || ""}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${member.email || ""}" placeholder="email" /></div>`
-                    : `<strong>${member.lastName || "-"}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? (member.email || "No email yet") : "Email hidden"}</div>`}
+                    : `<strong>${member.lastName || "-"}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? (member.email || "") : ""}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
@@ -2927,7 +2927,7 @@
           ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
             <h3 style="margin:0;">${member.name}</h3>
-            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? (member.email || "No email yet") : "Email hidden"}</p>
+            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? (member.email || "") : ""}</p>
             ${isOwnProfile(member) ? `<p class="meta" style="margin:6px 0 0;">Click image to change profile picture</p>` : ""}
           </div>
         </div>
@@ -2936,7 +2936,7 @@
           <label>Last name<input id="user-last-name" value="${member.lastName || ""}" ${editDisabled} /></label>
         </div>
         <div class="form-grid">
-          <label>Email<input id="user-email" type="email" value="${member.email || ""}" ${editDisabled} /></label>
+          <label>Email<input id="user-email" type="email" value="${canViewProfileEmail ? (member.email || "") : ""}" ${editDisabled} /></label>
           <label>Jersey number<input id="user-jersey" type="number" min="0" value="${member.jerseyNumber ?? ""}" ${editDisabled} /></label>
         </div>
         ${canEditProfile ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-profile" data-member-id="${member.id}">Save profile</button></div>` : ""}
