@@ -606,7 +606,7 @@
       throw new Error("Invite email is missing for this member.");
     }
 
-    const invokeInviteFunction = async () => {
+    const invokeInviteFunction = async ({ sendRecovery = true } = {}) => {
       const functionId = String(APPWRITE_CONFIG?.inviteFunctionId || "").trim();
       if (!functionId) {
         throw new Error("Invite function is required. Configure ClubHubAppwriteConfig.inviteFunctionId to create auth users before sending invites.");
@@ -629,6 +629,7 @@
           fullName,
           roles,
           memberId,
+          sendRecovery,
           redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
         }),
         false
@@ -680,7 +681,7 @@
     };
 
     const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
-    const functionResult = await invokeInviteFunction();
+    const functionResult = await invokeInviteFunction({ sendRecovery: true });
     const alreadySentRecovery = Boolean(functionResult?.ok && functionResult?.recoverySent);
     let response = { data: {}, error: null };
     if (!alreadySentRecovery) {
@@ -698,6 +699,37 @@
     }
 
     return { ok: true };
+  }
+
+  async function provisionAuthForMember({ memberId, email, fullName, roles }) {
+    const functionId = String(APPWRITE_CONFIG?.inviteFunctionId || "").trim();
+    if (!functionId) {
+      throw new Error("Missing inviteFunctionId. Cannot provision auth user on member creation.");
+    }
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+    const functionClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+    const functionsApi = new appwriteSdk.Functions(functionClient);
+    const execution = await functionsApi.createExecution(
+      functionId,
+      JSON.stringify({
+        email,
+        fullName,
+        roles,
+        memberId,
+        sendRecovery: false,
+        redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
+      }),
+      false
+    );
+    const status = String(execution?.status || "").toLowerCase();
+    if (status && ["failed", "crashed", "timeout", "canceled"].includes(status)) {
+      throw new Error(`Auth provisioning function failed (${status}).`);
+    }
   }
 
   async function inviteMember(memberId) {
@@ -1796,6 +1828,20 @@
         const insertResponse = await backendClient.from("members").insert([patch]).select("id, profile_id").single();
         if (insertResponse.error) throw insertResponse.error;
         savedMemberId = String(insertResponse.data?.id || "");
+
+        if (savedMemberId && String(patch.email || "").trim()) {
+          try {
+            await provisionAuthForMember({
+              memberId: savedMemberId,
+              email: String(patch.email || "").trim(),
+              fullName: displayName,
+              roles: roles.length ? roles : ["player"]
+            });
+          } catch (provisionError) {
+            const provisionMessage = String(provisionError?.message || "");
+            showToast(`Member created, but auth account provisioning failed: ${provisionMessage}`, "error");
+          }
+        }
       }
 
       if (passFieldsProvided && savedMemberId) {

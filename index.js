@@ -34,6 +34,7 @@ module.exports = async ({ req, res, log }) => {
   const email = String(body.email || "").trim().toLowerCase();
   const fullName = String(body.fullName || "").trim() || "ClubHub User";
   const memberId = String(body.memberId || "").trim();
+  const sendRecovery = body.sendRecovery !== false;
   const redirectTo = String(body.redirectTo || process.env.PUBLIC_SITE_URL || "").trim();
 
   if (!email) {
@@ -93,27 +94,30 @@ module.exports = async ({ req, res, log }) => {
 
     const userId = String(user?.$id || user?.id || "").trim();
 
-    // 3) Send recovery email so invite recipient can set password.
-    if (!redirectTo) {
-      return res.json({ error: "Missing redirectTo (or PUBLIC_SITE_URL) for recovery email." }, 500);
-    }
-
-    const recovery = await request(`/users/${encodeURIComponent(userId)}/recovery`, {
-      method: "POST",
-      body: {
-        url: redirectTo
+    let recoverySent = false;
+    if (sendRecovery) {
+      if (!redirectTo) {
+        return res.json({ error: "Missing redirectTo (or PUBLIC_SITE_URL) for recovery email." }, 500);
       }
-    });
 
-    if (!recovery.response.ok) {
-      return res.json(
-        {
-          error: recovery.payload?.message || "Could not send invite recovery email.",
-          userId,
-          createdUser
-        },
-        500
-      );
+      const recovery = await request(`/users/${encodeURIComponent(userId)}/recovery`, {
+        method: "POST",
+        body: {
+          url: redirectTo
+        }
+      });
+
+      if (!recovery.response.ok) {
+        return res.json(
+          {
+            error: recovery.payload?.message || "Could not send invite recovery email.",
+            userId,
+            createdUser
+          },
+          500
+        );
+      }
+      recoverySent = true;
     }
 
     // 4) Optionally patch member linkage/invite timestamp.
@@ -125,7 +129,7 @@ module.exports = async ({ req, res, log }) => {
           body: {
             data: {
               profile_id: userId || null,
-              invite_sent_at: new Date().toISOString()
+              ...(recoverySent ? { invite_sent_at: new Date().toISOString() } : {})
             }
           }
         }
@@ -143,8 +147,8 @@ module.exports = async ({ req, res, log }) => {
       }
     }
 
-    log(`Invite user ensured for ${email} (${createdUser ? "created" : "existing"}), recovery sent.`);
-    return res.json({ ok: true, email, userId, createdUser, recoverySent: true });
+    log(`Invite user ensured for ${email} (${createdUser ? "created" : "existing"}), recovery ${recoverySent ? "sent" : "skipped"}.`);
+    return res.json({ ok: true, email, userId, createdUser, recoverySent });
   } catch (error) {
     return res.json({ error: error instanceof Error ? error.message : "Unknown function error." }, 500);
   }
