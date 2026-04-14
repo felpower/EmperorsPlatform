@@ -31,6 +31,13 @@
     "QB", "RB", "FB", "WR", "TE", "OL", "DL", "LB", "DB", "CB", "S", "K", "P",
     "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB"
   ];
+  const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
+  const MAX_AVATAR_DIMENSION = 1280;
+  const DEFAULT_PROFILE_AVATAR_URL = String(
+    APPWRITE_CONFIG?.fallbackProfileImageUrl ||
+    "https://fra.cloud.appwrite.io/v1/storage/buckets/ProfilePictures/files/69de561b001bd1c509de/view?project=69dd0fdd00336ea1b4b5&mode=admin"
+  ).trim();
+  const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
 
   const backendClient =
     window.ClubHubDataClient && typeof window.ClubHubDataClient.createClient === "function"
@@ -143,6 +150,12 @@
     return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}/view?${query.toString()}`;
   }
 
+  function avatarFallbackOnErrorAttr() {
+    const fallbackUrl = DEFAULT_PROFILE_AVATAR_URL.replaceAll("\"", "&quot;");
+    const inlineFallback = INLINE_AVATAR_PLACEHOLDER.replaceAll("\"", "&quot;");
+    return `this.onerror=null;var backup=&quot;${fallbackUrl}&quot;;if(this.src!==backup){this.src=backup;return;}this.src=&quot;${inlineFallback}&quot;;`;
+  }
+
   async function uploadProfileAvatarToStorage(file) {
     const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
     if (!bucketId) {
@@ -189,7 +202,7 @@
       const localAvatar = loadProfileAvatar();
       if (localAvatar) return localAvatar;
     }
-    return "https://fra.cloud.appwrite.io/v1/storage/buckets/ProfilePictures/files/69de561b001bd1c509de/view?project=69dd0fdd00336ea1b4b5&mode=admin";
+    return DEFAULT_PROFILE_AVATAR_URL || INLINE_AVATAR_PLACEHOLDER;
   }
 
   function profileAvatarStorageKey() {
@@ -216,6 +229,77 @@
       reader.onload = () => resolve(String(reader.result || ""));
       reader.onerror = () => reject(new Error("Could not read selected image."));
       reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImageElementFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(image);
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Could not decode selected image."));
+      };
+      image.src = objectUrl;
+    });
+  }
+
+  function canvasToBlob(canvas, mimeType, quality) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error("Could not encode compressed image."));
+            return;
+          }
+          resolve(blob);
+        },
+        mimeType,
+        quality
+      );
+    });
+  }
+
+  async function compressImageForAvatar(file, { maxBytes = MAX_AVATAR_UPLOAD_BYTES, maxDimension = MAX_AVATAR_DIMENSION } = {}) {
+    if (!file || Number(file.size || 0) <= maxBytes) return file;
+
+    const sourceImage = await loadImageElementFromFile(file);
+    const scale = Math.min(1, maxDimension / Math.max(sourceImage.width || 1, sourceImage.height || 1));
+    let width = Math.max(1, Math.round((sourceImage.width || 1) * scale));
+    let height = Math.max(1, Math.round((sourceImage.height || 1) * scale));
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+
+    let quality = 0.88;
+    let compressedBlob = null;
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      canvas.width = width;
+      canvas.height = height;
+      context.clearRect(0, 0, width, height);
+      context.drawImage(sourceImage, 0, 0, width, height);
+      compressedBlob = await canvasToBlob(canvas, "image/jpeg", quality);
+      if (compressedBlob.size <= maxBytes) break;
+
+      if (quality > 0.52) {
+        quality -= 0.12;
+      } else {
+        width = Math.max(320, Math.round(width * 0.85));
+        height = Math.max(320, Math.round(height * 0.85));
+      }
+    }
+
+    if (!compressedBlob) return file;
+    const baseName = String(file.name || "avatar").replace(/\.[^.]+$/, "");
+    return new File([compressedBlob], `${baseName}-compressed.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now()
     });
   }
 
@@ -2468,7 +2552,10 @@
     const athleteStatsHtml = userMember ? `
       <article class="setup-card">
         <p class="eyebrow">Your Profile</p>
-        <h3>${userMember.name}</h3>
+        <div style="display:flex; align-items:center; gap: 12px;">
+          <img src="${resolveAvatarSrcForMember(userMember)}" onerror="${avatarFallbackOnErrorAttr()}" alt="Profile picture" style="width:56px; height:56px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          <h3 style="margin:0;">${userMember.name}</h3>
+        </div>
         <div style="display: grid; gap: 12px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div>
@@ -2643,7 +2730,7 @@
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
                     ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${member.lastName || ""}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${member.email || ""}" placeholder="email" /></div>`
-                    : `<strong>${member.lastName || "-"}</strong><div class="meta">${member.email || "No email yet"}</div>`}
+                    : `<strong>${member.lastName || "-"}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? (member.email || "No email yet") : "Email hidden"}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
@@ -2722,6 +2809,7 @@
     const rolePositionDisabled = canEditRolePosition ? "" : "disabled";
     const canEditNotes = currentAccessRole === "admin";
     const notesDisabled = canEditNotes ? "" : "disabled";
+    const canViewProfileEmail = currentAccessRole === "admin" || isOwnProfile(member);
     const feeMap = memberFeesByPeriod(member.id);
     const periods = profileQuarterWindowTokens();
     const firstIban = memberIban(member.id);
@@ -2801,7 +2889,8 @@
         ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
       </article>
     `;
-    const passSection = `
+    const canViewPassDetails = currentAccessRole === "admin" || isOwnProfile(member);
+    const passSection = canViewPassDetails ? `
       <article class="card compact-card" style="display:grid; gap: 10px;">
         <div>
           <p class="eyebrow">Eligibility</p>
@@ -2812,7 +2901,7 @@
         </div>
         <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Valid till ${formatDate(member.passExpiry)}` : (member.licenseName || "No expiry date")}</p>
       </article>
-    `;
+    ` : "";
     const securitySection = authState.user && isOwnProfile(member) ? `
       <article class="card compact-card" style="display:grid; gap: 10px;">
         <div>
@@ -2833,12 +2922,12 @@
         <article class="card profile-main-card" style="display:grid; gap: 12px;">
         <div style="display:flex; align-items:center; gap: 14px;">
           <button type="button" id="user-upload-profile-image-trigger" style="padding:0; border:0; background:none; cursor:${isOwnProfile(member) ? "pointer" : "default"};" ${isOwnProfile(member) ? "title=\"Change profile image\"" : "disabled"}>
-            <img src="${resolveAvatarSrcForMember(member)}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+            <img src="${resolveAvatarSrcForMember(member)}" onerror="${avatarFallbackOnErrorAttr()}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
           </button>
           ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
             <h3 style="margin:0;">${member.name}</h3>
-            <p class="meta" style="margin:4px 0 0;">${member.email || "No email yet"}</p>
+            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? (member.email || "No email yet") : "Email hidden"}</p>
             ${isOwnProfile(member) ? `<p class="meta" style="margin:6px 0 0;">Click image to change profile picture</p>` : ""}
           </div>
         </div>
@@ -3778,22 +3867,28 @@
         uploadProfileImageInput.click();
       };
       uploadProfileImageInput.onchange = async function () {
-        const file = uploadProfileImageInput.files && uploadProfileImageInput.files[0];
-        if (!file) return;
-        if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+        const originalFile = uploadProfileImageInput.files && uploadProfileImageInput.files[0];
+        if (!originalFile) return;
+        if (!String(originalFile.type || "").toLowerCase().startsWith("image/")) {
           showToast("Please select an image file.", "error");
           return;
         }
-        if (Number(file.size || 0) > 2 * 1024 * 1024) {
-          showToast("Image is too large. Please use up to 2 MB.", "error");
-          return;
-        }
         try {
+          let uploadFile = originalFile;
+          if (Number(uploadFile.size || 0) > MAX_AVATAR_UPLOAD_BYTES) {
+            showToast("Image is large. Compressing automatically...", "info");
+            uploadFile = await compressImageForAvatar(uploadFile);
+          }
+          if (Number(uploadFile.size || 0) > MAX_AVATAR_UPLOAD_BYTES) {
+            showToast("Image is still too large after compression. Please use a smaller image.", "error");
+            return;
+          }
+
           const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
           if (bucketId) {
-            await uploadProfileAvatarToStorage(file);
+            await uploadProfileAvatarToStorage(uploadFile);
           } else {
-            const dataUrl = await readFileAsDataUrl(file);
+            const dataUrl = await readFileAsDataUrl(uploadFile);
             saveProfileAvatar(dataUrl);
           }
           showToast("Profile image updated.", "success");
