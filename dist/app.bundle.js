@@ -181,17 +181,18 @@
   function loadMemberFilters() {
     try {
       const saved = sessionStorage.getItem(MEMBER_FILTER_KEY);
-      if (!saved) return { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
+      if (!saved) return { positions: [], roles: [], membership: ["active"], passStatuses: [], showDeleted: false, search: "" };
       const parsed = JSON.parse(saved);
       return {
         positions: Array.isArray(parsed?.positions) ? parsed.positions : [],
         roles: Array.isArray(parsed?.roles) ? parsed.roles : [],
         membership: Array.isArray(parsed?.membership) && parsed.membership.length ? parsed.membership : ["active"],
+        passStatuses: Array.isArray(parsed?.passStatuses) ? parsed.passStatuses.filter(Boolean) : [],
         showDeleted: Boolean(parsed?.showDeleted),
         search: String(parsed?.search || "").trim()
       };
     } catch {
-      return { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
+      return { positions: [], roles: [], membership: ["active"], passStatuses: [], showDeleted: false, search: "" };
     }
   }
 
@@ -209,7 +210,8 @@
           to: "",
           statuses: [],
           positions: [],
-          membership: ["active"]
+          membership: ["active"],
+          showDeleted: false
         };
       }
       const parsed = JSON.parse(saved);
@@ -219,7 +221,8 @@
         to: String(parsed?.to || "").trim(),
         statuses: Array.isArray(parsed?.statuses) ? parsed.statuses.filter(Boolean) : [],
         positions: Array.isArray(parsed?.positions) ? parsed.positions.filter(Boolean) : [],
-        membership: Array.isArray(parsed?.membership) && parsed.membership.length ? parsed.membership.filter(Boolean) : ["active"]
+        membership: Array.isArray(parsed?.membership) && parsed.membership.length ? parsed.membership.filter(Boolean) : ["active"],
+        showDeleted: Boolean(parsed?.showDeleted)
       };
     } catch {
       return {
@@ -228,7 +231,8 @@
         to: "",
         statuses: [],
         positions: [],
-        membership: ["active"]
+        membership: ["active"],
+        showDeleted: false
       };
     }
   }
@@ -1300,7 +1304,8 @@
     return {
       positions: Array.from(new Set(state.members.flatMap((member) => member.positions || []).filter(Boolean))).sort(),
       roles: Array.from(new Set(state.members.flatMap((member) => member.roles || []).filter(Boolean))).sort(),
-      membership: Array.from(new Set(state.members.map((member) => member.membershipStatus).filter(Boolean))).sort()
+      membership: Array.from(new Set(state.members.map((member) => member.membershipStatus).filter(Boolean))).sort(),
+      passStatuses: ["valid", "missing", "expired"]
     };
   }
 
@@ -1331,12 +1336,19 @@
       if (memberFilters.membership.length && !memberFilters.membership.includes(member.membershipStatus)) {
         return false;
       }
+      if (memberFilters.passStatuses.length) {
+        const status = displayPassStatus(member.passStatus);
+        if (!memberFilters.passStatuses.includes(status)) {
+          return false;
+        }
+      }
       return true;
     });
   }
 
   function passFilterOptions() {
-    const playerMembers = state.members.filter((member) => (member.roles || []).includes("player"));
+    const includeDeleted = currentAccessRole === "admin" && Boolean(passFilters.showDeleted);
+    const playerMembers = state.members.filter((member) => (member.roles || []).includes("player") && (includeDeleted || !member.deletedAt));
     return {
       statuses: ["valid", "missing", "expired"],
       positions: Array.from(new Set(playerMembers.flatMap((member) => member.positions || []).filter(Boolean))).sort(),
@@ -1345,8 +1357,12 @@
   }
 
   function filteredPassMembers() {
+    const includeDeleted = currentAccessRole === "admin" && Boolean(passFilters.showDeleted);
     return state.members.filter((member) => {
       if (!(member.roles || []).includes("player")) {
+        return false;
+      }
+      if (member.deletedAt && !includeDeleted) {
         return false;
       }
 
@@ -2340,14 +2356,14 @@
         <details class="member-filters-dropdown" ${memberFiltersExpanded ? "open" : ""}>
           <summary>
             <span class="member-filter-summary-label">Filters</span>
-            <span class="member-filter-summary-meta">Positions, roles, membership</span>
+            <span class="member-filter-summary-meta">Positions, roles, membership, pass status</span>
           </summary>
           <div style="margin-top: 10px;">
             <label>Search by name or email
               <input id="member-search-input" type="search" placeholder="e.g. test test" value="${String(memberFilters.search || "").replaceAll('"', '&quot;')}" />
             </label>
           </div>
-          <div class="split" style="grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 10px;">
+          <div class="split" style="grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 10px;">
             <fieldset class="status-filter-group">
               <legend>Positions</legend>
               <div class="status-filter-options">
@@ -2385,6 +2401,17 @@
                     <span>deleted</span>
                   </label>
                 ` : ""}
+              </div>
+            </fieldset>
+            <fieldset class="status-filter-group">
+              <legend>Pass status</legend>
+              <div class="status-filter-options">
+                ${options.passStatuses.map((value) => `
+                  <label class="status-check">
+                    <input type="checkbox" class="member-filter-checkbox" data-member-filter="passStatuses" value="${value}" ${memberFilters.passStatuses.includes(value) ? "checked" : ""} />
+                    <span>${value}</span>
+                  </label>
+                `).join("") || `<span class="meta">No pass statuses</span>`}
               </div>
             </fieldset>
           </div>
@@ -2745,7 +2772,8 @@
     if (!canAccess("playerPasses")) {
       return lockedState("Player pass data is hidden for this role.", "Only admins, coaches, and technical admins should see player pass details.");
     }
-    const allPlayerMembers = state.members.filter((member) => (member.roles || []).includes("player"));
+    const includeDeleted = currentAccessRole === "admin" && Boolean(passFilters.showDeleted);
+    const allPlayerMembers = state.members.filter((member) => (member.roles || []).includes("player") && (includeDeleted || !member.deletedAt));
     const options = passFilterOptions();
     if (!allPlayerMembers.length) return emptyState("No player pass data yet", "Import the roster and Clubee export to populate this area.");
 
@@ -2815,6 +2843,7 @@
           </div>
           <div class="button-row" style="margin-top: 10px;">
             <button id="clear-pass-filters" type="button" class="ghost-button">Clear pass filters</button>
+            ${currentAccessRole === "admin" ? `<label class="status-check"><input type="checkbox" id="show-deleted-pass-members" ${passFilters.showDeleted ? "checked" : ""} /><span>Show deleted players</span></label>` : ""}
           </div>
         </details>
       </article>
@@ -4148,7 +4177,7 @@
     }
     document.querySelectorAll(".member-filter-checkbox").forEach((checkbox) => {
       checkbox.onchange = function () {
-        const next = { positions: [], roles: [], membership: [], showDeleted: memberFilters.showDeleted, search: memberFilters.search };
+        const next = { positions: [], roles: [], membership: [], passStatuses: [], showDeleted: memberFilters.showDeleted, search: memberFilters.search };
         document.querySelectorAll(".member-filter-checkbox:checked").forEach((input) => {
           const target = input.dataset.memberFilter;
           if (target && next[target]) {
@@ -4201,7 +4230,7 @@
     const clearButton = document.getElementById("clear-member-filters");
     if (clearButton) {
       clearButton.onclick = function () {
-        memberFilters = { positions: [], roles: [], membership: ["active"], showDeleted: false, search: "" };
+        memberFilters = { positions: [], roles: [], membership: ["active"], passStatuses: [], showDeleted: false, search: "" };
         saveMemberFilters();
         mount();
         switchView("members");
@@ -4299,6 +4328,19 @@
       };
     }
 
+    const showDeletedToggle = document.getElementById("show-deleted-pass-members");
+    if (showDeletedToggle) {
+      showDeletedToggle.onchange = function () {
+        passFilters = {
+          ...passFilters,
+          showDeleted: Boolean(showDeletedToggle.checked)
+        };
+        savePassFilters();
+        mount();
+        switchView("passes");
+      };
+    }
+
     const clearButton = document.getElementById("clear-pass-filters");
     if (clearButton) {
       clearButton.onclick = function () {
@@ -4308,7 +4350,8 @@
           to: "",
           statuses: [],
           positions: [],
-          membership: ["active"]
+          membership: ["active"],
+          showDeleted: false
         };
         savePassFilters();
         mount();
