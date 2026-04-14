@@ -4,7 +4,7 @@ window.ClubHubAppwriteConfig = {
   databaseId: "69dd11140002e2b4254a",
   apiBaseUrl: "",
   inviteFunctionId: "CreateAuthAccount",
-  passSyncFunctionId: "",
+  passSyncFunctionId: "PassSyncFunction",
   membersTableId: "members",
   memberRolesTableId: "member_roles",
   playerPassesTableId: "player_passes",
