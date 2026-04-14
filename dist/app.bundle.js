@@ -588,10 +588,11 @@
     if (!backendClient) {
       throw new Error("Appwrite client not configured. Cannot send invites.");
     }
-    const email = String(payload?.email || "").trim();
     const memberId = String(payload?.memberId || "").trim();
+    const resolvedMember = memberId ? memberById(memberId) : null;
+    const email = String(payload?.email || resolvedMember?.email || "").trim();
     if (!email) {
-      throw new Error("Invite email is missing.");
+      throw new Error("Invite email is missing for this member.");
     }
 
     const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
@@ -611,7 +612,8 @@
   }
 
   async function inviteMember(memberId) {
-    return inviteRecipient({ memberId });
+    const member = memberById(memberId);
+    return inviteRecipient({ memberId, email: member?.email || "" });
   }
 
   async function inviteAdmin(email, fullName, roles) {
