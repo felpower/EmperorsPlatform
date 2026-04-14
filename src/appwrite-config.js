@@ -2,7 +2,7 @@ window.ClubHubAppwriteConfig = {
   endpoint: "https://fra.cloud.appwrite.io/v1",
   projectId: "69dd0fdd00336ea1b4b5",
   databaseId: "69dd11140002e2b4254a",
-  inviteFunctionId: "",
+  inviteFunctionId: "CreateAuthAccount",
   membersTableId: "members",
   memberRolesTableId: "member_roles",
   playerPassesTableId: "player_passes",
