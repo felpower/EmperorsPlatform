@@ -2909,21 +2909,6 @@
     const restrictions = bootstrapMeta.permissionsModel?.restrictedAreas || {};
     return `
       <div class="grid two-up">
-        <article class="setup-card">
-          <p class="eyebrow">Current mode</p>
-          <h3>Local-first development</h3>
-          <p>The app runs against the local SQLite API so we can move quickly before real auth and hosting are finalized.</p>
-          <div class="pill-row">${plainPill(`Source: ${bootstrapMeta.source}`)}${plainPill(`Preview role: ${roleLabel(currentAccessRole)}`)}</div>
-        </article>
-        <article class="setup-card">
-          <p class="eyebrow">Future auth</p>
-          <h3>Register and login later</h3>
-          <p>We are not wiring full authentication yet, but the local permissions preview and role model are already aligned with the future login system.</p>
-          <div class="setup-list compact-list">
-            <div class="setup-step"><span>1</span><div><strong>Fees</strong><p>${formatList(restrictions.fees, "No restriction")}</p></div></div>
-            <div class="setup-step"><span>2</span><div><strong>Player passes</strong><p>${formatList(restrictions.playerPasses, "No restriction")}</p></div></div>
-          </div>
-        </article>
         ${currentAccessRole === "admin" ? `
         <article class="setup-card">
           <p class="eyebrow">Invitations</p>
