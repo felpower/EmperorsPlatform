@@ -170,6 +170,38 @@ button {
   z-index: 1;
 }
 
+.hero-account-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.hero-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-avatar-button {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hero-avatar-image {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
 .primary-button,
 .ghost-button,
 .ghost-icon {

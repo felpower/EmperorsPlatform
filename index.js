@@ -58,12 +58,21 @@ module.exports = async ({ req, res, log }) => {
     return { response, payload };
   };
 
+  const fail = (message, extra = {}) => {
+    const details = {
+      error: String(message || "Unknown function error."),
+      ...extra
+    };
+    log(`Invite function failed: ${details.error}`);
+    return res.json(details, 500);
+  };
+
   try {
     // 1) Find existing user by email.
     const search = encodeURIComponent(email);
     const list = await request(`/users?search=${search}&limit=100`);
     if (!list.response.ok) {
-      return res.json({ error: list.payload?.message || "Could not search users." }, 500);
+      return fail(list.payload?.message || "Could not search users.", { stage: "search_users" });
     }
 
     const users = Array.isArray(list.payload?.users) ? list.payload.users : [];
@@ -85,7 +94,7 @@ module.exports = async ({ req, res, log }) => {
       });
 
       if (!create.response.ok) {
-        return res.json({ error: create.payload?.message || "Could not create user." }, 500);
+        return fail(create.payload?.message || "Could not create user.", { stage: "create_user", email });
       }
 
       user = create.payload || null;
@@ -97,7 +106,7 @@ module.exports = async ({ req, res, log }) => {
     let recoverySent = false;
     if (sendRecovery) {
       if (!redirectTo) {
-        return res.json({ error: "Missing redirectTo (or PUBLIC_SITE_URL) for recovery email." }, 500);
+        return fail("Missing redirectTo (or PUBLIC_SITE_URL) for recovery email.", { stage: "prepare_recovery", email });
       }
 
       const recovery = await request(`/users/${encodeURIComponent(userId)}/recovery`, {
@@ -108,19 +117,18 @@ module.exports = async ({ req, res, log }) => {
       });
 
       if (!recovery.response.ok) {
-        return res.json(
-          {
-            error: recovery.payload?.message || "Could not send invite recovery email.",
-            userId,
-            createdUser
-          },
-          500
-        );
+        return fail(recovery.payload?.message || "Could not send invite recovery email.", {
+          stage: "send_recovery",
+          userId,
+          createdUser,
+          email
+        });
       }
       recoverySent = true;
     }
 
     // 4) Optionally patch member linkage/invite timestamp.
+    let memberPatchWarning = "";
     if (memberId) {
       const patch = await request(
         `/databases/${databaseId}/collections/${membersCollectionId}/documents/${encodeURIComponent(memberId)}`,
@@ -136,20 +144,16 @@ module.exports = async ({ req, res, log }) => {
       );
 
       if (!patch.response.ok) {
-        return res.json(
-          {
-            error: patch.payload?.message || "User created, but member row could not be updated.",
-            userId,
-            createdUser
-          },
-          500
-        );
+        memberPatchWarning = String(
+          patch.payload?.message || "User ensured, but member row could not be updated."
+        ).trim();
+        log(`Invite function warning (member patch): ${memberPatchWarning}`);
       }
     }
 
     log(`Invite user ensured for ${email} (${createdUser ? "created" : "existing"}), recovery ${recoverySent ? "sent" : "skipped"}.`);
-    return res.json({ ok: true, email, userId, createdUser, recoverySent });
+    return res.json({ ok: true, email, userId, createdUser, recoverySent, memberPatchWarning });
   } catch (error) {
-    return res.json({ error: error instanceof Error ? error.message : "Unknown function error." }, 500);
+    return fail(error instanceof Error ? error.message : "Unknown function error.", { stage: "unexpected" });
   }
 };

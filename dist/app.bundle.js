@@ -104,6 +104,121 @@
     localStorage.setItem(key, value);
   }
 
+  function profileAvatarVersionKey(memberId) {
+    return `clubhub-profile-avatar-version-${String(memberId || "").trim()}`;
+  }
+
+  function profileAvatarVersion(memberId) {
+    const key = profileAvatarVersionKey(memberId);
+    return String(localStorage.getItem(key) || "").trim();
+  }
+
+  function bumpProfileAvatarVersion(memberId) {
+    const key = profileAvatarVersionKey(memberId);
+    localStorage.setItem(key, String(Date.now()));
+  }
+
+  function profileAvatarFileId(memberId) {
+    const normalized = String(memberId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const safe = normalized || "unknown";
+    return `avatar-${safe}`.slice(0, 36);
+  }
+
+  function storageAvatarUrlForMember(memberId) {
+    const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedMemberId = String(memberId || "").trim();
+    if (!bucketId || !endpoint || !projectId || !normalizedMemberId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const fileId = profileAvatarFileId(normalizedMemberId);
+    const version = profileAvatarVersion(normalizedMemberId);
+    const query = new URLSearchParams({ project: projectId });
+    if (version) query.set("v", version);
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}/view?${query.toString()}`;
+  }
+
+  async function uploadProfileAvatarToStorage(file) {
+    const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
+    if (!bucketId) {
+      throw new Error("Missing profilePicturesBucketId in Appwrite config.");
+    }
+    const ownMember = signedInMemberRecord();
+    const memberId = String(ownMember?.id || "").trim();
+    if (!memberId) {
+      throw new Error("Your account is not linked to a member profile yet.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      throw new Error("Appwrite Storage API is unavailable in this browser runtime.");
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    const fileId = profileAvatarFileId(memberId);
+
+    try {
+      if (typeof storage.deleteFile === "function") {
+        await storage.deleteFile(bucketId, fileId);
+      }
+    } catch {
+      // Ignore missing file errors; create below will handle fresh uploads.
+    }
+
+    await storage.createFile(bucketId, fileId, file);
+    bumpProfileAvatarVersion(memberId);
+    return storageAvatarUrlForMember(memberId);
+  }
+
+  function resolveAvatarSrcForMember(member) {
+    const memberId = String(member?.id || "").trim();
+    if (memberId) {
+      const storageUrl = storageAvatarUrlForMember(memberId);
+      if (storageUrl) return storageUrl;
+    }
+    if (member && authState.user && isOwnProfile(member)) {
+      const localAvatar = loadProfileAvatar();
+      if (localAvatar) return localAvatar;
+    }
+    return "./assets/emperors_crown.png";
+  }
+
+  function profileAvatarStorageKey() {
+    const userId = String(authState.user?.id || "").trim();
+    if (!userId) return "";
+    return `clubhub-profile-avatar-${userId}`;
+  }
+
+  function loadProfileAvatar() {
+    const key = profileAvatarStorageKey();
+    if (!key) return "";
+    return String(localStorage.getItem(key) || "").trim();
+  }
+
+  function saveProfileAvatar(dataUrl) {
+    const key = profileAvatarStorageKey();
+    if (!key) return;
+    localStorage.setItem(key, String(dataUrl || "").trim());
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Could not read selected image."));
+      reader.readAsDataURL(file);
+    });
+  }
+
   function ensureToastStack() {
     let toastStack = document.getElementById("toast-stack");
     if (!toastStack) {
@@ -2317,16 +2432,70 @@
     const heroActions = document.querySelector(".hero-actions");
     if (!heroActions) return;
     const signedInLabel = authState.user ? authDisplayName() || authState.user.email : "Not signed in";
+    const ownMember = signedInMemberRecord();
+    const avatarSrc = authState.user ? resolveAvatarSrcForMember(ownMember) : "./assets/emperors_crown.png";
     heroActions.innerHTML = `
       <div class="hero-stack">
         <div class="toolbar-row">
           ${authState.user ? `<div class="role-switcher"><span>Signed in</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : ""}
-          <div class="button-row">
-            ${authState.user ? `<button id="auth-sign-out-header" class="ghost-button" type="button">Sign out</button>` : ""}
+          <div class="hero-account-actions">
+            ${authState.user ? `
+              <div class="hero-profile-row">
+                <button id="open-profile-header" class="ghost-button" type="button">Profile</button>
+                <button id="upload-profile-image-trigger" class="hero-avatar-button" type="button" title="Upload profile image">
+                  <img id="hero-profile-image" src="${avatarSrc}" alt="Profile image" class="hero-avatar-image" />
+                </button>
+                <input id="upload-profile-image-input" type="file" accept="image/*" hidden />
+              </div>
+              <button id="auth-sign-out-header" class="ghost-button" type="button">Log out</button>
+            ` : ""}
           </div>
         </div>
       </div>
     `;
+
+    const openProfileButton = document.getElementById("open-profile-header");
+    if (openProfileButton) {
+      openProfileButton.onclick = function () {
+        profileRouteMode = "own";
+        window.location.hash = "user/me";
+        switchView("user");
+      };
+    }
+
+    const uploadProfileImageTrigger = document.getElementById("upload-profile-image-trigger");
+    const uploadProfileImageInput = document.getElementById("upload-profile-image-input");
+    if (uploadProfileImageTrigger && uploadProfileImageInput) {
+      uploadProfileImageTrigger.onclick = function () {
+        uploadProfileImageInput.click();
+      };
+      uploadProfileImageInput.onchange = async function () {
+        const file = uploadProfileImageInput.files && uploadProfileImageInput.files[0];
+        if (!file) return;
+        if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+          showToast("Please select an image file.", "error");
+          return;
+        }
+        if (Number(file.size || 0) > 2 * 1024 * 1024) {
+          showToast("Image is too large. Please use up to 2 MB.", "error");
+          return;
+        }
+        try {
+          const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
+          if (bucketId) {
+            await uploadProfileAvatarToStorage(file);
+          } else {
+            const dataUrl = await readFileAsDataUrl(file);
+            saveProfileAvatar(dataUrl);
+          }
+          showToast("Profile image updated.", "success");
+          mount();
+        } catch (error) {
+          showToast(error?.message || "Could not upload image.", "error");
+        }
+      };
+    }
+
     const signOutHeaderButton = document.getElementById("auth-sign-out-header");
     if (signOutHeaderButton) {
       signOutHeaderButton.onclick = async function () {
@@ -2600,7 +2769,7 @@
     const hashMemberId = userPageMemberIdFromHash();
     const ownMemberId = signedInMemberRecord()?.id || "";
     const memberId = profileRouteMode === "own"
-      ? (hashMemberId || ownMemberId)
+      ? ownMemberId
       : (hashMemberId || ownMemberId || selectedUserMemberId);
     const member = memberById(memberId);
 
@@ -2730,7 +2899,7 @@
       <div class="profile-layout">
         <article class="card profile-main-card" style="display:grid; gap: 12px;">
         <div style="display:flex; align-items:center; gap: 14px;">
-          <img src="./assets/emperors-mark.png" alt="Profile placeholder" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          <img src="${resolveAvatarSrcForMember(member)}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
           <div>
             <h3 style="margin:0;">${member.name}</h3>
             <p class="meta" style="margin:4px 0 0;">${member.email || "No email yet"}</p>
@@ -3058,7 +3227,7 @@
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
-    if (!state.events.length) return emptyState("No practices or games yet", "Next we can add local event CRUD and attendance invites.");
+    if (!state.events.length) return emptyState("No practices or games yet", "Practices will be added here in the future");
     return `...`;
   }
 
@@ -3130,7 +3299,7 @@
 
     const profileNavButton = document.getElementById("profile-nav-button");
     if (profileNavButton) {
-      profileNavButton.textContent = signedIn ? "Log out" : "Log in";
+      profileNavButton.textContent = signedIn ? "My Profile" : "Log in";
       profileNavButton.style.display = "block";
       profileNavButton.classList.remove("active");
     }
@@ -3151,7 +3320,7 @@
 
     const profileNavButton = document.getElementById("profile-nav-button");
     if (profileNavButton) {
-      profileNavButton.onclick = async function () {
+      profileNavButton.onclick = function () {
         if (!authState.user) {
           window.location.hash = "dashboard";
           mount();
@@ -3161,15 +3330,9 @@
           return;
         }
 
-        try {
-          await signOut();
-          authState.status = "Signed out.";
-        } catch (error) {
-          authState.status = error.message || "Sign out failed.";
-        }
-
-        mount();
-        switchView("dashboard");
+        profileRouteMode = "own";
+        window.location.hash = "user/me";
+        switchView("user");
       };
     }
   }
@@ -4822,6 +4985,7 @@
     if (athleteProfileBtn) {
       athleteProfileBtn.onclick = function () {
         profileRouteMode = "own";
+        window.location.hash = "user/me";
         switchView("user");
       };
     }
