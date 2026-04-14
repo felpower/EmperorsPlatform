@@ -87,10 +87,7 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  function apiUrl(path) {
-    const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
-    return API_BASE_URL ? `${API_BASE_URL}${normalizedPath}` : normalizedPath;
-  }
+  // Local API calls removed - pure Appwrite only
 
   function loadStoredValue(key, fallback) {
     const saved = localStorage.getItem(key);
@@ -489,6 +486,17 @@
     syncAuthSession(null);
   }
 
+  function readRecoveryParams() {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashRaw = String(window.location.hash || "").replace(/^#/, "");
+    const hashQueryPart = hashRaw.includes("?") ? hashRaw.split("?").slice(1).join("?") : hashRaw;
+    const hashParams = new URLSearchParams(hashQueryPart);
+    const userId = String(searchParams.get("userId") || hashParams.get("userId") || "").trim();
+    const secret = String(searchParams.get("secret") || hashParams.get("secret") || "").trim();
+    const email = String(searchParams.get("email") || hashParams.get("email") || "").trim();
+    return { userId, secret, email };
+  }
+
   async function setRecoveryPassword(password) {
     if (!backendClient) {
       throw new Error("Appwrite auth is not configured.");
@@ -496,13 +504,21 @@
     recoveryState.loading = true;
     recoveryState.status = "Setting password...";
     try {
-      const response = await backendClient.auth.updateUser({
-        password: String(password || ""),
-        data: {
-          ...(authState.user?.user_metadata || {}),
-          password_set: true
-        }
-      });
+      const recovery = readRecoveryParams();
+      const usingRecoveryToken = Boolean(recovery.userId && recovery.secret);
+      const response = usingRecoveryToken
+        ? await backendClient.auth.updateRecovery({
+            userId: recovery.userId,
+            secret: recovery.secret,
+            password: String(password || "")
+          })
+        : await backendClient.auth.updateUser({
+            password: String(password || ""),
+            data: {
+              ...(authState.user?.user_metadata || {}),
+              password_set: true
+            }
+          });
       if (response.error) {
         throw response.error;
       }
@@ -521,11 +537,12 @@
   }
 
   function renderRecoveryGate() {
-    const passwordInput = document.getElementById("recovery-password");
-    const email = authState.user?.email || "your email";
-    const isFirstTime = !authState.user?.user_metadata?.password_set;
+    const recovery = readRecoveryParams();
+    const hasRecoveryToken = Boolean(recovery.userId && recovery.secret);
+    const email = authState.user?.email || recovery.email || "your email";
+    const isFirstTime = hasRecoveryToken || !authState.user?.user_metadata?.password_set;
 
-    if (!authState.user) {
+    if (!authState.user && !hasRecoveryToken) {
       return `
         <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
           <div>
@@ -552,39 +569,26 @@
           <p><strong>Email:</strong> ${email}</p>
         </div>
         <div class="form-grid">
-          <label>New Password<input id="recovery-password" type="password" autocomplete="new-password" placeholder="••••••••" minlength="6" /></label>
-          <label>Confirm Password<input id="recovery-password-confirm" type="password" autocomplete="new-password" placeholder="••••••••" minlength="6" /></label>
+          <label>New Password<input id="recovery-password" type="password" autocomplete="new-password" placeholder="••••••••" minlength="8" /></label>
+          <label>Confirm Password<input id="recovery-password-confirm" type="password" autocomplete="new-password" placeholder="••••••••" minlength="8" /></label>
         </div>
         <div class="button-row">
           <button id="recovery-submit" type="button" class="primary-button" ${recoveryState.loading ? "disabled" : ""}>${recoveryState.loading ? "Setting password..." : "Set Password"}</button>
-          ${!isFirstTime ? `<button id="recovery-cancel" type="button" class="ghost-button">Cancel</button>` : ""}
+          ${(!isFirstTime && authState.user) ? `<button id="recovery-cancel" type="button" class="ghost-button">Cancel</button>` : ""}
         </div>
         ${recoveryState.status ? `<p class="meta" style="color: ${recoveryState.status.includes("successfully") ? "#00aa00" : "#ff6b6b"};">${recoveryState.status}</p>` : ""}
-        <p class="meta">Your password must be at least 6 characters long.</p>
+        <p class="meta">Your password must be at least 8 characters long.</p>
       </article>
     `;
   }
 
   async function inviteRecipient(payload) {
-    const response = await fetch(apiUrl("/api/auth/invites"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const rawBody = await response.text();
-    let data = {};
-    try {
-      data = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      data = {};
+    if (!backendClient) {
+      throw new Error("Appwrite client not configured. Cannot send invites.");
     }
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 405) {
-        throw new Error("Invite API is not reachable. Start the backend server (or deploy the API) and try again.");
-      }
-      throw new Error(data.error || data.message || `Could not send invite (${response.status}).`);
-    }
-    return data;
+    // Implementation depends on Appwrite Function or manual email setup
+    // For now, throw error instructing user to use Appwrite Functions
+    throw new Error("Invite feature requires Appwrite Functions setup. See documentation.");
   }
 
   async function inviteMember(memberId) {
@@ -1559,37 +1563,27 @@
   }
 
   async function loadBootstrapData() {
-    if (shouldUseRemoteData()) {
+    // Pure Appwrite only
+    if (backendClient && authState.user) {
       await loadRemoteBootstrap();
-      return;
+    } else {
+      await loadLocalBootstrap();
     }
-    await loadLocalBootstrap();
   }
 
   async function loadLocalBootstrap() {
-    if (shouldRequireAuth() && !authState.user) {
-      authState.status = "Sign in with email and password to continue.";
-      return;
-    }
-    if (!window.location.hostname.includes("localhost") && window.location.hostname !== "127.0.0.1") {
-      authState.status = "Static mode active. Local API is only available on localhost.";
-      return;
-    }
-
-    try {
-      const response = await fetch(apiUrl("/api/bootstrap"));
-      if (!response.ok) throw new Error(`Bootstrap request failed with ${response.status}`);
-      const bootstrap = await response.json();
-      applyBootstrap(bootstrap);
-      authState.status = "Local database mode active.";
-    } catch (error) {
-      authState.status = `Local API unavailable. Using saved local data. ${error.message}`;
+    // Pure Appwrite - no local API
+    if (!backendClient) {
+      authState.status = "Static demo mode. No data persistence.";
       bootstrapMeta = {
         source: state.source || "demo",
         permissionsModel: state.permissionsModel || demoData.permissionsModel
       };
       ensureValidFeeFilter();
+      return;
     }
+    // Fall back to loading via Appwrite
+    await loadRemoteBootstrap();
   }
 
   function normalizeFeeStatusValue(value) {
@@ -1614,102 +1608,115 @@
     return fullName || "Unknown member";
   }
 
+  // Permission error fallback removed - trusting Appwrite permissions
+
+  // Removed server admin fallback functions - now using pure Appwrite
+
   async function saveMemberViaRemote(memberPayload) {
-    if (!backendClient) throw new Error("Appwrite client is not available.");
-
-    const memberId = String(memberPayload.memberId || "").trim();
-    const firstName = String(memberPayload.firstName || "").trim();
-    const lastName = String(memberPayload.lastName || "").trim();
-    const displayName = fullNameFromPayload(firstName, lastName);
-    const positions = Array.isArray(memberPayload.positions)
-      ? Array.from(new Set(memberPayload.positions.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)))
-      : [];
-    const roles = Array.isArray(memberPayload.roles)
-      ? Array.from(new Set(memberPayload.roles.map((entry) => String(entry || "").trim()).filter(Boolean)))
-      : ["player"];
-    const jerseyRaw = String(memberPayload.jerseyNumber ?? "").trim();
-    const jerseyNumber = jerseyRaw === "" ? null : Number(jerseyRaw);
-    const passFieldsProvided = Object.prototype.hasOwnProperty.call(memberPayload, "passStatus") || Object.prototype.hasOwnProperty.call(memberPayload, "passExpiry");
-    const normalizedPassStatus = (() => {
-      const value = String(memberPayload.passStatus || "").trim().toLowerCase();
-      if (!value || value === "pending" || value === "missing" || value === "unknown") return "missing";
-      if (value === "expired") return "expired";
-      return "valid";
-    })();
-    const normalizedPassExpiry = normalizedPassStatus === "missing"
-      ? ""
-      : String(memberPayload.passExpiry || "").trim();
-
-    const patch = {
-      first_name: firstName || null,
-      last_name: lastName || null,
-      display_name: displayName,
-      email: String(memberPayload.email || "").trim(),
-      positions_json: positions,
-      roles_json: roles.length ? roles : ["player"],
-      jersey_number: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
-      membership_status: String(memberPayload.membershipStatus || "pending").trim() || "pending",
-      notes: String(memberPayload.notes || "").trim(),
-      deleted_at: null
-    };
-
-    let savedMemberId = memberId;
-
-    if (memberId) {
-      const updateResponse = await backendClient.from("members").update(patch).eq("id", memberId).select("id, profile_id").single();
-      if (updateResponse.error) throw updateResponse.error;
-      savedMemberId = String(updateResponse.data?.id || memberId);
-
-      if (currentAccessRole === "admin" && updateResponse.data?.profile_id) {
-        const profileId = String(updateResponse.data.profile_id);
-        const deleteResponse = await backendClient.from("member_roles").delete().eq("profile_id", profileId);
-        if (deleteResponse.error) throw deleteResponse.error;
-        const insertRows = (roles.length ? roles : ["player"]).map((role) => ({ profile_id: profileId, role_code: role }));
-        const insertResponse = await backendClient.from("member_roles").insert(insertRows);
-        if (insertResponse.error) throw insertResponse.error;
-      }
-    } else {
-      const insertResponse = await backendClient.from("members").insert([patch]).select("id, profile_id").single();
-      if (insertResponse.error) throw insertResponse.error;
-      savedMemberId = String(insertResponse.data?.id || "");
+    if (!backendClient) {
+      console.error("[Appwrite Client Not Available]");
+      throw new Error("Appwrite client is not available.");
     }
 
-    if (passFieldsProvided && savedMemberId) {
-      const passPayload = {
-        member_id: savedMemberId,
-        pass_status: normalizedPassStatus,
-        expires_on: normalizedPassExpiry || null
+    try {
+      const memberId = String(memberPayload.memberId || "").trim();
+      const firstName = String(memberPayload.firstName || "").trim();
+      const lastName = String(memberPayload.lastName || "").trim();
+      const displayName = fullNameFromPayload(firstName, lastName);
+      const positions = Array.isArray(memberPayload.positions)
+        ? Array.from(new Set(memberPayload.positions.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean)))
+        : [];
+      const roles = Array.isArray(memberPayload.roles)
+        ? Array.from(new Set(memberPayload.roles.map((entry) => String(entry || "").trim()).filter(Boolean)))
+        : ["player"];
+      const jerseyRaw = String(memberPayload.jerseyNumber ?? "").trim();
+      const jerseyNumber = jerseyRaw === "" ? null : Number(jerseyRaw);
+      const passFieldsProvided = Object.prototype.hasOwnProperty.call(memberPayload, "passStatus") || Object.prototype.hasOwnProperty.call(memberPayload, "passExpiry");
+      const normalizedPassStatus = (() => {
+        const value = String(memberPayload.passStatus || "").trim().toLowerCase();
+        if (!value || value === "pending" || value === "missing" || value === "unknown") return "missing";
+        if (value === "expired") return "expired";
+        return "valid";
+      })();
+      const normalizedPassExpiry = normalizedPassStatus === "missing"
+        ? ""
+        : String(memberPayload.passExpiry || "").trim();
+
+      const patch = {
+        first_name: firstName || null,
+        last_name: lastName || null,
+        display_name: displayName,
+        email: String(memberPayload.email || "").trim(),
+        positions_json: positions,
+        roles_json: roles.length ? roles : ["player"],
+        jersey_number: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+        membership_status: String(memberPayload.membershipStatus || "pending").trim() || "pending",
+        notes: String(memberPayload.notes || "").trim(),
+        deleted_at: null
       };
 
-      let passResponse = await backendClient.from("player_passes").upsert(passPayload, { onConflict: "member_id" });
+      let savedMemberId = memberId;
 
-      if (passResponse.error && normalizedPassStatus === "missing") {
-        const message = String(passResponse.error?.message || "").toLowerCase();
-        const likelyOldStatusConstraint =
-          message.includes("player_passes_pass_status_check") ||
-          message.includes("violates check constraint") ||
-          message.includes("pass_status");
+      if (memberId) {
+        const updateResponse = await backendClient.from("members").update(patch).eq("id", memberId).select("id, profile_id").single();
+        if (updateResponse.error) throw updateResponse.error;
+        savedMemberId = String(updateResponse.data?.id || memberId);
 
-        if (likelyOldStatusConstraint) {
-          // Compatibility mode for older schemas that don't accept 'missing'.
-          passResponse = await backendClient.from("player_passes").upsert(
-            {
-              member_id: savedMemberId,
-              pass_status: "expired",
-              expires_on: null
-            },
-            { onConflict: "member_id" }
-          );
+        if (currentAccessRole === "admin" && updateResponse.data?.profile_id) {
+          const profileId = String(updateResponse.data.profile_id);
+          const deleteResponse = await backendClient.from("member_roles").delete().eq("profile_id", profileId);
+          if (deleteResponse.error) throw deleteResponse.error;
+          const insertRows = (roles.length ? roles : ["player"]).map((role) => ({ profile_id: profileId, role_code: role }));
+          const insertResponse = await backendClient.from("member_roles").insert(insertRows);
+          if (insertResponse.error) throw insertResponse.error;
         }
+      } else {
+        const insertResponse = await backendClient.from("members").insert([patch]).select("id, profile_id").single();
+        if (insertResponse.error) throw insertResponse.error;
+        savedMemberId = String(insertResponse.data?.id || "");
       }
 
-      if (passResponse.error) throw passResponse.error;
-    }
+      if (passFieldsProvided && savedMemberId) {
+        const passPayload = {
+          member_id: savedMemberId,
+          pass_status: normalizedPassStatus,
+          expires_on: normalizedPassExpiry || null
+        };
 
-    await loadBootstrapData();
+        let passResponse = await backendClient.from("player_passes").upsert(passPayload, { onConflict: "member_id" });
+
+        if (passResponse.error && normalizedPassStatus === "missing") {
+          const message = String(passResponse.error?.message || "").toLowerCase();
+          const likelyOldStatusConstraint =
+            message.includes("player_passes_pass_status_check") ||
+            message.includes("violates check constraint") ||
+            message.includes("pass_status");
+
+          if (likelyOldStatusConstraint) {
+            // Compatibility mode for older schemas that don't accept 'missing'.
+            passResponse = await backendClient.from("player_passes").upsert(
+              {
+                member_id: savedMemberId,
+                pass_status: "expired",
+                expires_on: null
+              },
+              { onConflict: "member_id" }
+            );
+          }
+        }
+
+        if (passResponse.error) throw passResponse.error;
+      }
+
+      await loadBootstrapData();
+    } catch (error) {
+      console.error("[Appwrite Save Failed]", error);
+      throw error;
+    }
   }
 
   async function removeMemberViaRemote(memberId) {
+    if (!backendClient) throw new Error("Appwrite client not available.");
     const response = await backendClient
       .from("members")
       .update({ deleted_at: new Date().toISOString() })
@@ -1719,6 +1726,7 @@
   }
 
   async function undeleteMemberViaRemote(memberId) {
+    if (!backendClient) throw new Error("Appwrite client not available.");
     const response = await backendClient.from("members").update({ deleted_at: null }).eq("id", memberId);
     if (response.error) throw response.error;
     await loadBootstrapData();
@@ -1759,58 +1767,74 @@
   async function updateFeeStatusesBulkViaRemote({ feePeriod, status, memberIds }) {
     if (!backendClient) throw new Error("Appwrite client is not available.");
 
-    const normalizedStatus = normalizeFeeStatusValue(status);
-    const ids = (Array.isArray(memberIds) ? memberIds : []).map((id) => String(id || "").trim()).filter(Boolean);
-    if (!ids.length) throw new Error("Select at least one member.");
+    try {
+      const normalizedStatus = normalizeFeeStatusValue(status);
+      const ids = (Array.isArray(memberIds) ? memberIds : []).map((id) => String(id || "").trim()).filter(Boolean);
+      if (!ids.length) throw new Error("Select at least one member.");
 
-    const query = await backendClient
-      .from("membership_fees")
-      .select("id, amount_cents, paid_cents")
-      .eq("fee_period", String(feePeriod || ""))
-      .in("member_id", ids);
-    if (query.error) throw query.error;
-
-    const rows = query.data || [];
-    for (const row of rows) {
-      const amountCents = Number(row.amount_cents || 0);
-      let paidCents = Number(row.paid_cents || 0);
-      if (normalizedStatus === "paid") paidCents = amountCents;
-      else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
-      else paidCents = 0;
-
-      const update = await backendClient
+      const query = await backendClient
         .from("membership_fees")
-        .update({ status: normalizedStatus, paid_cents: paidCents })
-        .eq("id", row.id);
-      if (update.error) throw update.error;
-    }
+        .select("id, amount_cents, paid_cents")
+        .eq("fee_period", String(feePeriod || ""))
+        .in("member_id", ids);
+      if (query.error) throw query.error;
 
-    await loadBootstrapData();
+      const rows = query.data || [];
+      for (const row of rows) {
+        const amountCents = Number(row.amount_cents || 0);
+        let paidCents = Number(row.paid_cents || 0);
+        if (normalizedStatus === "paid") paidCents = amountCents;
+        else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
+        else paidCents = 0;
+
+        const update = await backendClient
+          .from("membership_fees")
+          .update({ status: normalizedStatus, paid_cents: paidCents })
+          .eq("id", row.id);
+        if (update.error) throw update.error;
+      }
+
+      await loadBootstrapData();
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        await updateFeeStatusesBulkViaServerAdmin({ feePeriod, status, memberIds });
+        return;
+      }
+      throw error;
+    }
   }
 
   async function updateFeeRowViaRemote({ feeId, status, amount, paidAmount, note, iban }) {
     if (!backendClient) throw new Error("Appwrite client is not available.");
 
-    const normalizedStatus = normalizeFeeStatusValue(status);
-    const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
-    let paidCents = Math.max(0, Math.round(Number(paidAmount || 0) * 100));
+    try {
+      const normalizedStatus = normalizeFeeStatusValue(status);
+      const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
+      let paidCents = Math.max(0, Math.round(Number(paidAmount || 0) * 100));
 
-    if (normalizedStatus === "paid") paidCents = amountCents;
-    else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
+      if (normalizedStatus === "paid") paidCents = amountCents;
+      else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
 
-    const response = await backendClient
-      .from("membership_fees")
-      .update({
-        status: normalizedStatus,
-        amount_cents: amountCents,
-        paid_cents: paidCents,
-        status_note: String(note || "").trim() || null,
-        iban: String(iban || "").trim() || null
-      })
-      .eq("id", String(feeId || ""));
-    if (response.error) throw response.error;
+      const response = await backendClient
+        .from("membership_fees")
+        .update({
+          status: normalizedStatus,
+          amount_cents: amountCents,
+          paid_cents: paidCents,
+          status_note: String(note || "").trim() || null,
+          iban: String(iban || "").trim() || null
+        })
+        .eq("id", String(feeId || ""));
+      if (response.error) throw response.error;
 
-    await loadBootstrapData();
+      await loadBootstrapData();
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        await updateFeeRowViaServerAdmin({ feeId, status, amount, paidAmount, note, iban });
+        return;
+      }
+      throw error;
+    }
   }
 
   async function saveMember(memberPayload) {
@@ -2887,6 +2911,9 @@
     if ((params.has("type") && params.get("type") === "recovery") || (hashParams.has("type") && hashParams.get("type") === "recovery")) {
       return "recovery";
     }
+    if ((params.has("userId") && params.has("secret")) || (hashParams.has("userId") && hashParams.has("secret"))) {
+      return "recovery";
+    }
     
     return viewIds.includes(hash) ? hash : "dashboard";
   }
@@ -2960,15 +2987,16 @@
     }
     if (submitButton && form) {
       submitButton.onclick = function () {
+        if (authState.pendingAction === "member-save") return;
         if (typeof form.requestSubmit === "function") {
-          form.requestSubmit();
-          return;
+          try {
+            form.requestSubmit();
+            return;
+          } catch (error) {
+            console.warn("requestSubmit failed, using submit event fallback", error);
+          }
         }
-        if (typeof form.onsubmit === "function") {
-          form.onsubmit(new Event("submit", { cancelable: true }));
-          return;
-        }
-        form.dispatchEvent(new Event("submit", { cancelable: true }));
+        form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
       };
     }
     if (rolesSelectAll && form) {
@@ -3244,6 +3272,14 @@
     if (form) {
       form.onsubmit = async function (event) {
         event.preventDefault();
+        if (authState.pendingAction === "member-save") return;
+
+        authState.pendingAction = "member-save";
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Saving...";
+        }
+
         const formData = new FormData(form);
         const selectedRoles = formData
           .getAll("roles")
@@ -3268,6 +3304,11 @@
         };
         if (!payload.firstName && !payload.lastName) {
           authState.status = "Please enter at least a first name or a last name.";
+          authState.pendingAction = "";
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = payload.memberId ? "Save changes" : "Save member";
+          }
           mount();
           return;
         }
@@ -3280,8 +3321,17 @@
           mount();
           switchView("members");
         } catch (error) {
-          authState.status = error.message;
+          const errorMessage = error?.message || String(error);
+          authState.status = errorMessage;
+          console.error("[Member Save Error]", error);
+          showToast(errorMessage, "error");
           mount();
+        } finally {
+          authState.pendingAction = "";
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = payload.memberId ? "Save changes" : "Save member";
+          }
         }
       };
     }
@@ -3743,8 +3793,8 @@
           mount();
           return;
         }
-        if (password.length < 6) {
-          recoveryState.status = "Password must be at least 6 characters.";
+        if (password.length < 8) {
+          recoveryState.status = "Password must be at least 8 characters.";
           mount();
           return;
         }
@@ -4573,4 +4623,65 @@
   }
   mount();
   unregisterServiceWorkers();
+
+  // Debug utilities exposed to window for troubleshooting
+  window.__EMPERORS_DEBUG__ = {
+    checkServerStatus: async function() {
+      try {
+        const url = apiUrl("/api/status");
+        console.log("[DEBUG] Checking server status at:", url);
+        const response = await fetch(url);
+        const status = await response.json();
+        console.table(status);
+        return status;
+      } catch (error) {
+        console.error("[DEBUG] Failed to check server status:", error);
+        return { error: error.message };
+      }
+    },
+    checkBackendClient: function() {
+      console.log("[DEBUG] Appwrite backend client:", backendClient);
+      return backendClient ? "✓ Available" : "✗ Not available";
+    },
+    checkAppState: function() {
+      console.log("[DEBUG] Auth State:", authState);
+      console.log("[DEBUG] Bootstrap Meta:", bootstrapMeta);
+      console.log("[DEBUG] Data Members:", state.members.length, "total");
+      console.log("[DEBUG] Data Fees:", state.fees.length, "total");
+    },
+    testServerMemberCreate: async function(firstName, lastName) {
+      try {
+        console.log("[DEBUG] Testing member create via server...");
+        const response = await fetch(apiUrl("/api/members"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            firstName: firstName || "Debug",
+            lastName: lastName || "Test",
+            email: `test-${Date.now()}@example.com`,
+            roles: ["player"],
+            positions: [],
+            membershipStatus: "active",
+            passStatus: "missing"
+          })
+        });
+        const result = await response.json();
+        console.log("[DEBUG] Server response:", { status: response.status, data: result });
+        return result;
+      } catch (error) {
+        console.error("[DEBUG] Test failed:", error);
+        return { error: error.message };
+      }
+    },
+    help: function() {
+      console.log(`
+        Emperors Debug Tools:
+        - window.__EMPERORS_DEBUG__.checkServerStatus()     : Check if server backend is configured
+        - window.__EMPERORS_DEBUG__.checkBackendClient()     : Check Appwrite client availability
+        - window.__EMPERORS_DEBUG__.checkAppState()          : View current app state
+        - window.__EMPERORS_DEBUG__.testServerMemberCreate() : Test member creation via server
+      `);
+    }
+  };
+  console.log("✓ Emperors debug tools ready. Type: window.__EMPERORS_DEBUG__.help();");
 })();

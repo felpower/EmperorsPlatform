@@ -473,6 +473,31 @@
         }
       },
 
+      async updateRecovery(input) {
+        try {
+          const userId = String(input?.userId || "").trim();
+          const secret = String(input?.secret || "").trim();
+          const password = String(input?.password || "");
+          if (!userId || !secret || !password) {
+            return { data: null, error: createError("Recovery token data is incomplete.") };
+          }
+
+          if (typeof account.updateRecovery !== "function") {
+            return { data: null, error: createError("Recovery confirmation is not supported by this Appwrite SDK build.") };
+          }
+
+          try {
+            await account.updateRecovery({ userId: userId, secret: secret, password: password });
+          } catch {
+            await account.updateRecovery(userId, secret, password);
+          }
+
+          return { data: {}, error: null };
+        } catch (error) {
+          return { data: null, error: createError(error && error.message) };
+        }
+      },
+
       async signOut() {
         try {
           await account.deleteSession("current");

@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "build": "node scripts/build.mjs",
     "start": "node server.mjs",
     "import:supabase": "node scripts/import-sqlite-to-supabase.mjs",
     "setup:appwrite": "node scripts/setup-appwrite-collections.mjs",

@@ -34,6 +34,12 @@ Detailed table blueprint:
 
 - `appwrite/TABLES_SETUP.md`
 
+Appwrite invite/recovery email templates (Supabase-style look):
+
+- `appwrite/templates/README.md`
+- `appwrite/templates/invite.html`
+- `appwrite/templates/recovery.html`
+
 Terminal setup option:
 
 - `npm run setup:appwrite`

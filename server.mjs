@@ -14,6 +14,12 @@ const SEPA_GENERATOR_SCRIPT = path.join(SEPA_GENERATOR_DIR, "sepa_generator.py")
 const SEPA_GENERATOR_INPUT_CSV = path.join(SEPA_GENERATOR_DIR, "Mitgliedsbeiträge Quartale bezahlt - Sheet1.csv");
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://qggypwdmfrkhehmspvsr.supabase.co";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
+const APPWRITE_ENDPOINT = process.env.APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1";
+const APPWRITE_PROJECT_ID = process.env.APPWRITE_PROJECT_ID || "69dd0fdd00336ea1b4b5";
+const APPWRITE_API_KEY = process.env.APPWRITE_API_KEY || "";
+const APPWRITE_DATABASE_ID = process.env.APPWRITE_DATABASE_ID || "69dd11140002e2b4254a";
+const APPWRITE_MEMBERS_COLLECTION_ID = process.env.APPWRITE_MEMBERS_COLLECTION_ID || "members";
+const APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID = process.env.APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID || "membership_fees";
 const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
 const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
 const SERVE_STATIC_FRONTEND = String(process.env.SERVE_STATIC_FRONTEND || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
@@ -336,93 +342,383 @@ function resolvePublicSiteUrl(req) {
   return `${protocol}://${host}`;
 }
 
-async function sendSupabaseInvite({ email, fullName, roles, memberId, req }) {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server to send invites.");
-  }
+function hasAppwriteAdminConfig() {
+  return Boolean(
+    String(APPWRITE_ENDPOINT || "").trim() &&
+    String(APPWRITE_PROJECT_ID || "").trim() &&
+    String(APPWRITE_API_KEY || "").trim() &&
+    String(APPWRITE_DATABASE_ID || "").trim()
+  );
+}
 
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/invite`, {
-    method: "POST",
-    headers: supabaseAdminHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({
-      email,
-      data: {
-        full_name: fullName,
-        roles: Array.isArray(roles) ? roles : [],
-        member_id: memberId ? String(memberId) : ""
-      },
-      redirectTo: `${resolvePublicSiteUrl(req)}/#recovery`
-    })
+function appwriteAdminHeaders(extra = {}) {
+  return {
+    "X-Appwrite-Project": APPWRITE_PROJECT_ID,
+    "X-Appwrite-Key": APPWRITE_API_KEY,
+    "Content-Type": "application/json",
+    ...extra
+  };
+}
+
+function appwriteApi(pathname) {
+  const base = String(APPWRITE_ENDPOINT || "").trim().replace(/\/$/, "");
+  return `${base}${pathname}`;
+}
+
+async function appwriteAdminRequest(pathname, { method = "GET", body, tolerateStatus = [] } = {}) {
+  const response = await fetch(appwriteApi(pathname), {
+    method,
+    headers: appwriteAdminHeaders(),
+    body: body ? JSON.stringify(body) : undefined
   });
 
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const errorText = `${payload?.msg || payload?.error_description || payload?.error || ""}`.toLowerCase();
-    if (response.status === 429 || errorText.includes("rate limit")) {
-      throw new Error("Supabase email rate limit exceeded. Configure a custom SMTP provider in Supabase Auth, or wait and try again later.");
-    }
-    throw new Error(payload?.msg || payload?.error_description || payload?.error || `Invite failed (${response.status}).`);
-  }
-  return payload;
-}
-
-async function fetchSupabaseMemberForInvite(memberId) {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server to send invites.");
-  }
-
-  const encodedId = encodeURIComponent(String(memberId || "").trim());
-  const baseSelect = "id,email,display_name,first_name,last_name,roles_json,profile_id";
-  const preferredSelect = `${baseSelect},invite_sent_at`;
-
-  const requestMember = async (selectClause) => {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/members?id=eq.${encodedId}&select=${encodeURIComponent(selectClause)}`, {
-      method: "GET",
-      headers: supabaseAdminHeaders()
-    });
-    const payload = await response.json().catch(() => []);
-    return { response, payload };
-  };
-
-  let result = await requestMember(preferredSelect);
-  if (!result.response.ok) {
-    const errorText = JSON.stringify(result.payload || {});
-    if (/invite_sent_at/i.test(errorText)) {
-      result = await requestMember(baseSelect);
-    }
-  }
-
-  if (!result.response.ok) {
-    const message = result.payload?.message || result.payload?.error || `Could not load member (${result.response.status}).`;
+  if (!response.ok && !tolerateStatus.includes(response.status)) {
+    const message = payload?.message || payload?.type || `Request failed (${response.status}).`;
     throw new Error(message);
   }
-
-  const rows = Array.isArray(result.payload) ? result.payload : [];
-  return rows[0] || null;
+  return { response, payload };
 }
 
-async function markSupabaseMemberInviteSent(memberId) {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+function randomAppwriteId(prefix = "user") {
+  const stamp = Date.now().toString(36).slice(-6);
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${prefix}-${stamp}-${rand}`.slice(0, 36);
+}
 
-  const encodedId = encodeURIComponent(String(memberId || "").trim());
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/members?id=eq.${encodedId}`, {
-    method: "PATCH",
-    headers: supabaseAdminHeaders({
-      "Content-Type": "application/json",
-      Prefer: "return=minimal"
-    }),
-    body: JSON.stringify({ invite_sent_at: new Date().toISOString() })
+function inviteTempPassword() {
+  return `InviteTemp!${Math.random().toString(36).slice(2, 8)}A1`;
+}
+
+function randomDocumentId(prefix = "doc") {
+  const compactPrefix = String(prefix || "doc").replace(/[^A-Za-z0-9._-]/g, "").slice(0, 8) || "doc";
+  const stamp = Date.now().toString(36).slice(-6);
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${compactPrefix}-${stamp}-${rand}`.slice(0, 36);
+}
+
+function normalizeFeeStatusServer(value) {
+  const normalized = String(value || "pending").trim().toLowerCase();
+  const aliases = {
+    paid: "paid",
+    partial: "partial",
+    pending: "pending",
+    "not paid": "pending",
+    not_collected: "not_collected",
+    "not collected": "not_collected",
+    exempt: "exempt",
+    exit: "exit",
+    not_applicable: "not_applicable",
+    "not applicable": "not_applicable"
+  };
+  return aliases[normalized] || "pending";
+}
+
+function parseArrayStrings(value, { uppercase = false, fallback = [] } = {}) {
+  const source = Array.isArray(value) ? value : [];
+  const parsed = source
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .map((entry) => (uppercase ? entry.toUpperCase() : entry));
+  return parsed.length ? Array.from(new Set(parsed)) : fallback;
+}
+
+async function appwriteListCollectionDocuments(collectionId) {
+  const query = encodeURIComponent("limit(5000)");
+  const { payload } = await appwriteAdminRequest(
+    `/databases/${APPWRITE_DATABASE_ID}/collections/${collectionId}/documents?queries[]=${query}`
+  );
+  return Array.isArray(payload?.documents) ? payload.documents : [];
+}
+
+function toIsoOrNull(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+async function createMemberViaAppwriteAdmin(input) {
+  const firstName = String(input?.firstName || "").trim();
+  const lastName = String(input?.lastName || "").trim();
+  const displayName = `${firstName} ${lastName}`.trim() || "Unknown member";
+  const jerseyRaw = String(input?.jerseyNumber ?? "").trim();
+  const jerseyNumber = jerseyRaw === "" ? null : Number(jerseyRaw);
+  const positions = parseArrayStrings(input?.positions, { uppercase: true, fallback: [] });
+  const roles = parseArrayStrings(input?.roles, { fallback: ["player"] });
+  const passStatusRaw = String(input?.passStatus || "").trim().toLowerCase();
+  const passStatus = !passStatusRaw || passStatusRaw === "pending" || passStatusRaw === "unknown" ? "missing" : passStatusRaw;
+  const passExpiry = passStatus === "missing" ? null : toIsoOrNull(input?.passExpiry) || null;
+
+  const documentId = randomDocumentId("member");
+  await appwriteAdminRequest(`/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERS_COLLECTION_ID}/documents`, {
+    method: "POST",
+    body: {
+      documentId,
+      data: {
+        displayName,
+        jerseyNumber: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+        email: String(input?.email || "").trim() || null,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        positions_json: JSON.stringify(positions),
+        roles_json: JSON.stringify(roles),
+        membership_status: String(input?.membershipStatus || "pending").trim() || "pending",
+        notes: String(input?.notes || "").trim() || null,
+        deleted_at: null
+      }
+    }
   });
 
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    const text = JSON.stringify(payload || {});
-    if (/invite_sent_at/i.test(text)) {
-      return;
+  await appwriteAdminRequest(`/databases/${APPWRITE_DATABASE_ID}/collections/player_passes/documents`, {
+    method: "POST",
+    body: {
+      documentId: randomDocumentId("pass"),
+      data: {
+        member_id: documentId,
+        pass_status: ["valid", "expired", "missing"].includes(passStatus) ? passStatus : "missing",
+        expires_on: passExpiry
+      }
     }
-    const message = payload?.message || payload?.error || `Could not update invite status (${response.status}).`;
-    throw new Error(message);
+  });
+
+  return { memberId: documentId };
+}
+
+async function updateMemberViaAppwriteAdmin(memberId, input) {
+  const firstName = String(input?.firstName || "").trim();
+  const lastName = String(input?.lastName || "").trim();
+  const displayName = `${firstName} ${lastName}`.trim() || "Unknown member";
+  const jerseyRaw = String(input?.jerseyNumber ?? "").trim();
+  const jerseyNumber = jerseyRaw === "" ? null : Number(jerseyRaw);
+  const positions = parseArrayStrings(input?.positions, { uppercase: true, fallback: [] });
+  const roles = parseArrayStrings(input?.roles, { fallback: ["player"] });
+  const passStatusRaw = String(input?.passStatus || "").trim().toLowerCase();
+  const passStatus = !passStatusRaw || passStatusRaw === "pending" || passStatusRaw === "unknown" ? "missing" : passStatusRaw;
+  const passExpiry = passStatus === "missing" ? null : toIsoOrNull(input?.passExpiry) || null;
+
+  await appwriteAdminRequest(
+    `/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERS_COLLECTION_ID}/documents/${encodeURIComponent(String(memberId || "").trim())}`,
+    {
+      method: "PATCH",
+      body: {
+        data: {
+          displayName,
+          jerseyNumber: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+          email: String(input?.email || "").trim() || null,
+          first_name: firstName || null,
+          last_name: lastName || null,
+          positions_json: JSON.stringify(positions),
+          roles_json: JSON.stringify(roles),
+          membership_status: String(input?.membershipStatus || "pending").trim() || "pending",
+          notes: String(input?.notes || "").trim() || null,
+          deleted_at: null
+        }
+      }
+    }
+  );
+
+  const passRows = await appwriteListCollectionDocuments("player_passes");
+  const existing = passRows.find((row) => String(row?.member_id || "") === String(memberId || ""));
+  if (existing?.$id) {
+    await appwriteAdminRequest(
+      `/databases/${APPWRITE_DATABASE_ID}/collections/player_passes/documents/${encodeURIComponent(String(existing.$id))}`,
+      {
+        method: "PATCH",
+        body: {
+          data: {
+            pass_status: ["valid", "expired", "missing"].includes(passStatus) ? passStatus : "missing",
+            expires_on: passExpiry
+          }
+        }
+      }
+    );
+  } else {
+    await appwriteAdminRequest(`/databases/${APPWRITE_DATABASE_ID}/collections/player_passes/documents`, {
+      method: "POST",
+      body: {
+        documentId: randomDocumentId("pass"),
+        data: {
+          member_id: String(memberId || "").trim(),
+          pass_status: ["valid", "expired", "missing"].includes(passStatus) ? passStatus : "missing",
+          expires_on: passExpiry
+        }
+      }
+    });
   }
+}
+
+async function updateFeeRecordViaAppwriteAdmin(feeId, input) {
+  const normalizedStatus = normalizeFeeStatusServer(input?.status);
+  const amountCents = Math.max(0, Math.round(Number(input?.amount || 0) * 100));
+  let paidCents = Math.max(0, Math.round(Number(input?.paidAmount || 0) * 100));
+
+  if (normalizedStatus === "paid") paidCents = amountCents;
+  else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
+
+  await appwriteAdminRequest(
+    `/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID}/documents/${encodeURIComponent(String(feeId || "").trim())}`,
+    {
+      method: "PATCH",
+      body: {
+        data: {
+          status: normalizedStatus,
+          amount_cents: amountCents,
+          paid_cents: paidCents,
+          status_note: String(input?.note || "").trim() || null,
+          iban: String(input?.iban || "").trim() || null
+        }
+      }
+    }
+  );
+}
+
+async function bulkUpdateFeeStatusViaAppwriteAdmin(input) {
+  const feePeriod = String(input?.feePeriod || "").trim();
+  const normalizedStatus = normalizeFeeStatusServer(input?.status);
+  const memberIds = new Set((Array.isArray(input?.memberIds) ? input.memberIds : []).map((id) => String(id || "").trim()).filter(Boolean));
+  if (!feePeriod) throw new Error("feePeriod is required.");
+  if (!memberIds.size) throw new Error("Select at least one member.");
+
+  const rows = await appwriteListCollectionDocuments(APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID);
+  const targets = rows.filter((row) => String(row?.fee_period || "") === feePeriod && memberIds.has(String(row?.member_id || "")));
+
+  for (const row of targets) {
+    const amountCents = Math.max(0, Number(row?.amount_cents || 0));
+    let paidCents = Math.max(0, Number(row?.paid_cents || 0));
+    if (normalizedStatus === "paid") paidCents = amountCents;
+    else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
+    else paidCents = 0;
+
+    await appwriteAdminRequest(
+      `/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID}/documents/${encodeURIComponent(String(row.$id || row.id || "").trim())}`,
+      {
+        method: "PATCH",
+        body: {
+          data: {
+            status: normalizedStatus,
+            paid_cents: paidCents
+          }
+        }
+      }
+    );
+  }
+}
+
+function parseRolesJson(value, fallback = ["player"]) {
+  if (Array.isArray(value)) return value.map((role) => String(role || "").trim()).filter(Boolean);
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((role) => String(role || "").trim()).filter(Boolean);
+      }
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+async function listAppwriteUsers() {
+  const { payload } = await appwriteAdminRequest(`/users?limit=5000`);
+  return Array.isArray(payload?.users) ? payload.users : [];
+}
+
+async function findAppwriteUserByEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return null;
+  const users = await listAppwriteUsers();
+  return users.find((item) => String(item?.email || "").trim().toLowerCase() === normalized) || null;
+}
+
+async function ensureAppwriteUserForInvite({ email, fullName }) {
+  const existing = await findAppwriteUserByEmail(email);
+  if (existing) {
+    return { user: existing, created: false };
+  }
+
+  const createResult = await appwriteAdminRequest("/users", {
+    method: "POST",
+    body: {
+      userId: randomAppwriteId("user"),
+      email: String(email || "").trim(),
+      password: inviteTempPassword(),
+      name: String(fullName || "").trim() || String(email || "").split("@")[0] || "ClubHub User"
+    },
+    tolerateStatus: [409]
+  });
+
+  if (createResult.response.status === 201) {
+    return { user: createResult.payload, created: true };
+  }
+
+  const user = await findAppwriteUserByEmail(email);
+  if (!user) {
+    throw new Error("User exists but could not be loaded from Appwrite.");
+  }
+  return { user, created: false };
+}
+
+async function fetchAppwriteMemberForInvite(memberId) {
+  if (!hasAppwriteAdminConfig()) {
+    throw new Error("Set APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY, and APPWRITE_DATABASE_ID on the server to send invites.");
+  }
+
+  const { payload, response } = await appwriteAdminRequest(
+    `/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERS_COLLECTION_ID}/documents/${encodeURIComponent(String(memberId || "").trim())}`,
+    { tolerateStatus: [404] }
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+  return payload || null;
+}
+
+async function markAppwriteMemberInviteSent(memberId, profileId) {
+  if (!hasAppwriteAdminConfig()) return;
+
+  await appwriteAdminRequest(
+    `/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERS_COLLECTION_ID}/documents/${encodeURIComponent(String(memberId || "").trim())}`,
+    {
+      method: "PATCH",
+      body: {
+        data: {
+          invite_sent_at: new Date().toISOString(),
+          ...(profileId ? { profile_id: String(profileId) } : {})
+        }
+      }
+    }
+  );
+}
+
+async function sendAppwriteInvite({ email, fullName, req }) {
+  if (!hasAppwriteAdminConfig()) {
+    throw new Error("Set APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY, and APPWRITE_DATABASE_ID on the server to send invites.");
+  }
+
+  const ensured = await ensureAppwriteUserForInvite({ email, fullName });
+  const redirectTo = `${resolvePublicSiteUrl(req)}/#recovery`;
+  const userId = String(ensured.user?.$id || ensured.user?.id || "").trim();
+  if (!userId) {
+    throw new Error("Could not resolve Appwrite user ID for invite recovery email.");
+  }
+
+  await appwriteAdminRequest(`/users/${encodeURIComponent(userId)}/recovery`, {
+    method: "POST",
+    body: {
+      url: redirectTo
+    }
+  });
+
+  return {
+    provider: "appwrite",
+    userId,
+    createdUser: Boolean(ensured.created),
+    redirectTo
+  };
 }
 
 function isValidFeePeriodToken(period) {
@@ -723,7 +1019,7 @@ app.post("/api/auth/invites", async (req, res) => {
     let memberId = requestedMemberId;
 
     if (requestedMemberId) {
-      const member = await fetchSupabaseMemberForInvite(requestedMemberId);
+      const member = await fetchAppwriteMemberForInvite(requestedMemberId);
       if (!member) {
         res.status(404).json({ error: "Member not found." });
         return;
@@ -744,9 +1040,9 @@ app.post("/api/auth/invites", async (req, res) => {
       email = email || String(member.email || "").trim();
       fullName = fullName || String(member.display_name || `${member.first_name || ""} ${member.last_name || ""}`.trim()).trim();
       if (!roles.length) {
-        roles = Array.isArray(member.roles_json) ? member.roles_json.map((role) => String(role || "").trim()).filter(Boolean) : ["player"];
+        roles = parseRolesJson(member.roles_json, ["player"]);
       }
-      memberId = String(member.id);
+      memberId = String(member.$id || member.id || requestedMemberId);
     }
 
     if (!email) {
@@ -758,9 +1054,9 @@ app.post("/api/auth/invites", async (req, res) => {
       fullName = email.split("@")[0] || email;
     }
 
-    const invite = await sendSupabaseInvite({ email, fullName, roles: roles.length ? roles : ["player"], memberId, req });
+    const invite = await sendAppwriteInvite({ email, fullName, roles: roles.length ? roles : ["player"], memberId, req });
     if (memberId) {
-      await markSupabaseMemberInviteSent(memberId);
+      await markAppwriteMemberInviteSent(memberId, invite?.userId || null);
     }
     res.json({ ok: true, email, fullName, roles: roles.length ? roles : ["player"], invite, memberId: memberId || null });
   } catch (error) {
@@ -772,21 +1068,43 @@ app.post("/api/auth/invites", async (req, res) => {
 
 app.post("/api/members", async (req, res) => {
   try {
-    if (!requireLocalDb(res, "Member create API")) return;
-    await localDbApi.createMember(req.body || {});
-    res.status(201).json(await localDbApi.getBootstrapData());
+    if (isLocalDbEnabled()) {
+      if (!requireLocalDb(res, "Member create API")) return;
+      await localDbApi.createMember(req.body || {});
+      res.status(201).json(await localDbApi.getBootstrapData());
+      return;
+    }
+    if (hasAppwriteAdminConfig()) {
+      console.log("[POST /api/members] Using Appwrite admin API");
+      const created = await createMemberViaAppwriteAdmin(req.body || {});
+      console.log("[POST /api/members] Member created successfully via Appwrite admin", { memberId: created?.id });
+      res.status(201).json({ ok: true, ...created });
+      return;
+    }
+    const diagMsg = `APPWRITE_API_KEY: ${String(APPWRITE_API_KEY || "").trim() ? "set" : "NOT SET"}, LOCAL_DB: ${isLocalDbEnabled() ? "enabled" : "disabled"}`;
+    console.error("[POST /api/members] Backend unavailable:", diagMsg);
+    res.status(503).json({ error: "Server not configured. Appwrite admin key missing or local DB disabled." });
   } catch (error) {
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Unknown member create error"
-    });
+    const message = error instanceof Error ? error.message : "Unknown member create error";
+    console.error("[POST /api/members] Error:", message, error);
+    res.status(400).json({ error: message });
   }
 });
 
 app.put("/api/members/:memberId", async (req, res) => {
   try {
-    if (!requireLocalDb(res, "Member update API")) return;
-    await localDbApi.updateMember(Number(req.params.memberId), req.body || {});
-    res.json(await localDbApi.getBootstrapData());
+    if (isLocalDbEnabled()) {
+      if (!requireLocalDb(res, "Member update API")) return;
+      await localDbApi.updateMember(Number(req.params.memberId), req.body || {});
+      res.json(await localDbApi.getBootstrapData());
+      return;
+    }
+    if (hasAppwriteAdminConfig()) {
+      await updateMemberViaAppwriteAdmin(req.params.memberId, req.body || {});
+      res.json({ ok: true, memberId: String(req.params.memberId || "").trim() });
+      return;
+    }
+    res.status(503).json({ error: "Member update API is unavailable. Configure local DB or Appwrite admin settings on the server." });
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown member update error"
@@ -832,9 +1150,18 @@ app.post("/api/members/merge", async (req, res) => {
 
 app.post("/api/fees/bulk-status", async (req, res) => {
   try {
-    if (!requireLocalDb(res, "Fees bulk status API")) return;
-    await localDbApi.bulkUpdateFeeStatus(req.body || {});
-    res.json(await localDbApi.getBootstrapData());
+    if (isLocalDbEnabled()) {
+      if (!requireLocalDb(res, "Fees bulk status API")) return;
+      await localDbApi.bulkUpdateFeeStatus(req.body || {});
+      res.json(await localDbApi.getBootstrapData());
+      return;
+    }
+    if (hasAppwriteAdminConfig()) {
+      await bulkUpdateFeeStatusViaAppwriteAdmin(req.body || {});
+      res.json({ ok: true });
+      return;
+    }
+    res.status(503).json({ error: "Fees bulk status API is unavailable. Configure local DB or Appwrite admin settings on the server." });
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown fee update error"
@@ -844,9 +1171,18 @@ app.post("/api/fees/bulk-status", async (req, res) => {
 
 app.put("/api/fees/:feeId", async (req, res) => {
   try {
-    if (!requireLocalDb(res, "Fee update API")) return;
-    await localDbApi.updateFeeRecord(Number(req.params.feeId), req.body || {});
-    res.json(await localDbApi.getBootstrapData());
+    if (isLocalDbEnabled()) {
+      if (!requireLocalDb(res, "Fee update API")) return;
+      await localDbApi.updateFeeRecord(Number(req.params.feeId), req.body || {});
+      res.json(await localDbApi.getBootstrapData());
+      return;
+    }
+    if (hasAppwriteAdminConfig()) {
+      await updateFeeRecordViaAppwriteAdmin(req.params.feeId, req.body || {});
+      res.json({ ok: true, feeId: String(req.params.feeId || "").trim() });
+      return;
+    }
+    res.status(503).json({ error: "Fee update API is unavailable. Configure local DB or Appwrite admin settings on the server." });
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown fee row update error"
@@ -875,6 +1211,30 @@ app.get("/api/fees/export-sepa-xml", async (req, res) => {
       error: error instanceof Error ? error.message : "Could not generate SEPA XML."
     });
   }
+});
+
+app.get("/api/status", (req, res) => {
+  const appwriteConfigured = hasAppwriteAdminConfig();
+  const localDbStatus = isLocalDbEnabled();
+  res.json({
+    status: "ok",
+    localDb: {
+      enabled: localDbStatus,
+      available: localDbApi ? true : false,
+      reason: localDbAvailableReason || ""
+    },
+    appwrite: {
+      endpoint: APPWRITE_ENDPOINT,
+      projectId: APPWRITE_PROJECT_ID,
+      databaseId: APPWRITE_DATABASE_ID,
+      apiKeySet: Boolean(String(APPWRITE_API_KEY || "").trim()),
+      configured: appwriteConfigured
+    },
+    activeBackend: localDbStatus ? "local-db" : appwriteConfigured ? "appwrite-admin" : "none",
+    message: !localDbStatus && !appwriteConfigured 
+      ? "⚠️ No backend configured! Set APPWRITE_API_KEY environment variable on server for Appwrite admin API access."
+      : "✓ Backend is configured"
+  });
 });
 
 app.listen(port, () => {
