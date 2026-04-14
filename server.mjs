@@ -12,8 +12,6 @@ const port = Number(process.env.PORT || 4173);
 const SEPA_GENERATOR_DIR = "C:\\Projekte\\UniWien-SEPAs";
 const SEPA_GENERATOR_SCRIPT = path.join(SEPA_GENERATOR_DIR, "sepa_generator.py");
 const SEPA_GENERATOR_INPUT_CSV = path.join(SEPA_GENERATOR_DIR, "Mitgliedsbeiträge Quartale bezahlt - Sheet1.csv");
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://qggypwdmfrkhehmspvsr.supabase.co";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 const APPWRITE_ENDPOINT = process.env.APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1";
 const APPWRITE_PROJECT_ID = process.env.APPWRITE_PROJECT_ID || "69dd0fdd00336ea1b4b5";
 const APPWRITE_API_KEY = process.env.APPWRITE_API_KEY || "";
@@ -21,8 +19,8 @@ const APPWRITE_DATABASE_ID = process.env.APPWRITE_DATABASE_ID || "69dd11140002e2
 const APPWRITE_MEMBERS_COLLECTION_ID = process.env.APPWRITE_MEMBERS_COLLECTION_ID || "members";
 const APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID = process.env.APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID || "membership_fees";
 const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
-const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
-const SERVE_STATIC_FRONTEND = String(process.env.SERVE_STATIC_FRONTEND || (process.env.RENDER ? "false" : "true")).toLowerCase() !== "false";
+const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || "true").toLowerCase() !== "false";
+const SERVE_STATIC_FRONTEND = String(process.env.SERVE_STATIC_FRONTEND || "true").toLowerCase() !== "false";
 const CLUBEE_XLSX_PATH = String(process.env.CLUBEE_XLSX_PATH || path.join(__dirname, "assets", "uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx")).trim();
 
 let localDbApi = null;
@@ -58,62 +56,6 @@ function requireLocalDb(res, featureLabel = "This endpoint") {
   return false;
 }
 
-function hasSupabaseAdminConfig() {
-  return Boolean(String(SUPABASE_URL || "").trim() && String(SUPABASE_SERVICE_ROLE_KEY || "").trim());
-}
-
-function normalizeNamePart(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function normalizeFullName(firstName, lastName) {
-  return `${normalizeNamePart(firstName)}|${normalizeNamePart(lastName)}`;
-}
-
-function parseClubeeLicense(rawLicense) {
-  const text = String(rawLicense || "").trim();
-  if (!text) {
-    return { passStatus: "missing", passExpiry: null, licenseName: "", note: "No license text in Clubee export." };
-  }
-  const match = text.match(/^(.*?)\s*\(\d+\)\s*:?\s*Spielberechtigt bis\s+(\d{2}\/\d{2}\/\d{4})/i);
-  if (!match) return { passStatus: "missing", passExpiry: null, licenseName: text, note: text };
-  const [, licenseName, expiryText] = match;
-  const [day, month, year] = expiryText.split("/");
-  const passExpiry = `${year}-${month}-${day}`;
-  const expiryDate = new Date(`${passExpiry}T00:00:00`);
-  const diffDays = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  const passStatus = diffDays < 0 ? "expired" : "valid";
-  return {
-    passStatus,
-    passExpiry,
-    licenseName: String(licenseName || "").trim(),
-    note: text
-  };
-}
-
-function parseClubeePassRecord(row) {
-  const firstName = String(row?.Vorname || "").trim();
-  const lastName = String(row?.Nachname || "").trim();
-  if (!firstName && !lastName) return null;
-  const normalizedKey = normalizeFullName(firstName, lastName);
-  if (!normalizedKey) return null;
-  const license = parseClubeeLicense(row?.Lizenz);
-  return {
-    firstName,
-    lastName,
-    normalizedKey,
-    passStatus: license.passStatus,
-    passExpiry: license.passExpiry,
-    licenseName: license.licenseName,
-    note: license.note
-  };
-}
-
 function readClubeeWorkbook(filePath) {
   const workbook = xlsx.readFile(filePath);
   const firstSheet = workbook.SheetNames[0];
@@ -140,197 +82,6 @@ function decodeBase64FilePayload(fileBase64) {
     throw new Error("Uploaded Clubee file is too large (max 15MB).");
   }
   return buffer;
-}
-
-async function loadSupabaseMembersAndPasses() {
-  if (!hasSupabaseAdminConfig()) {
-    throw new Error("Supabase admin config is missing on the server.");
-  }
-
-  const membersResponse = await fetch(
-    `${SUPABASE_URL}/rest/v1/members?select=${encodeURIComponent("id,first_name,last_name,display_name,email")}`,
-    { method: "GET", headers: supabaseAdminHeaders() }
-  );
-  const membersPayload = await membersResponse.json().catch(() => []);
-  if (!membersResponse.ok) {
-    const message = membersPayload?.message || membersPayload?.error || `Could not fetch members (${membersResponse.status}).`;
-    throw new Error(message);
-  }
-
-  const passesResponse = await fetch(
-    `${SUPABASE_URL}/rest/v1/player_passes?select=${encodeURIComponent("member_id,pass_status,expires_on,federation_reference,notes")}`,
-    { method: "GET", headers: supabaseAdminHeaders() }
-  );
-  const passesPayload = await passesResponse.json().catch(() => []);
-  if (!passesResponse.ok) {
-    const message = passesPayload?.message || passesPayload?.error || `Could not fetch player passes (${passesResponse.status}).`;
-    throw new Error(message);
-  }
-
-  const members = Array.isArray(membersPayload) ? membersPayload : [];
-  const passes = Array.isArray(passesPayload) ? passesPayload : [];
-  return { members, passes };
-}
-
-async function buildSupabaseClubeePassSyncPlan({ clubeeRows, sourceLabel, sourceMtimeMs } = {}) {
-  let rows = Array.isArray(clubeeRows) ? clubeeRows : null;
-  let finalSourceLabel = String(sourceLabel || "").trim();
-  let finalSourceMtimeMs = Number(sourceMtimeMs || 0);
-
-  if (!rows) {
-    let stats;
-    try {
-      stats = await fs.stat(CLUBEE_XLSX_PATH);
-    } catch {
-      throw new Error(`Clubee export file was not found at ${CLUBEE_XLSX_PATH}.`);
-    }
-    rows = readClubeeWorkbook(CLUBEE_XLSX_PATH);
-    finalSourceLabel = finalSourceLabel || CLUBEE_XLSX_PATH;
-    finalSourceMtimeMs = finalSourceMtimeMs || Number(stats.mtimeMs || 0);
-  }
-
-  const clubeeRowsLocal = rows;
-  const { members, passes } = await loadSupabaseMembersAndPasses();
-
-  const memberByKey = new Map();
-  members.forEach((member) => {
-    const key = normalizeFullName(member?.first_name || "", member?.last_name || "");
-    if (!key || key === "|") return;
-    memberByKey.set(key, member);
-  });
-
-  const passByMemberId = new Map();
-  passes.forEach((pass) => {
-    passByMemberId.set(String(pass?.member_id || ""), pass);
-  });
-
-  const changes = [];
-  let processedRows = 0;
-  let matchedRows = 0;
-  let unmatchedRows = 0;
-  const unmatchedNames = [];
-
-  for (const row of clubeeRowsLocal) {
-    const record = parseClubeePassRecord(row);
-    if (!record) continue;
-    processedRows += 1;
-
-    const member = memberByKey.get(record.normalizedKey);
-    if (!member) {
-      unmatchedRows += 1;
-      unmatchedNames.push(`${record.firstName} ${record.lastName}`.trim());
-      continue;
-    }
-    matchedRows += 1;
-
-    const currentPass = passByMemberId.get(String(member.id || ""));
-    const currentStatus = String(currentPass?.pass_status || "");
-    const currentExpiry = String(currentPass?.expires_on || "");
-    const currentLicense = String(currentPass?.federation_reference || "");
-    const currentNote = String(currentPass?.notes || "");
-
-    const fieldChanges = [];
-    if (currentStatus !== String(record.passStatus || "")) {
-      fieldChanges.push({ field: "pass_status", current: currentStatus, next: String(record.passStatus || "") });
-    }
-    if (currentExpiry !== String(record.passExpiry || "")) {
-      fieldChanges.push({ field: "expiry_date", current: currentExpiry, next: String(record.passExpiry || "") });
-    }
-    if (currentLicense !== String(record.licenseName || "")) {
-      fieldChanges.push({ field: "license_name", current: currentLicense, next: String(record.licenseName || "") });
-    }
-    if (currentNote !== String(record.note || "")) {
-      fieldChanges.push({ field: "note", current: currentNote, next: String(record.note || "") });
-    }
-    if (!fieldChanges.length) continue;
-
-    changes.push({
-      memberId: Number(member.id),
-      memberName: String(member.display_name || `${member.first_name || ""} ${member.last_name || ""}`).trim(),
-      memberEmail: String(member.email || "").trim(),
-      existingPass: Boolean(currentPass),
-      fieldChanges,
-      proposed: {
-        passStatus: String(record.passStatus || "missing"),
-        passExpiry: String(record.passExpiry || "") || null,
-        licenseName: String(record.licenseName || ""),
-        note: String(record.note || "")
-      }
-    });
-  }
-
-  return {
-    sourceFilePath: finalSourceLabel || CLUBEE_XLSX_PATH,
-    sourceMtimeMs: finalSourceMtimeMs,
-    processedRows,
-    matchedRows,
-    unmatchedRows,
-    createdPasses: changes.filter((entry) => !entry.existingPass).length,
-    updatedPasses: changes.filter((entry) => entry.existingPass).length,
-    unmatchedNames: unmatchedNames.slice(0, 20),
-    changes
-  };
-}
-
-async function previewSupabaseClubeePassSync(options = {}) {
-  return buildSupabaseClubeePassSyncPlan(options);
-}
-
-async function applySupabaseClubeePassSync({ memberIds, clubeeRows, sourceLabel, sourceMtimeMs } = {}) {
-  const plan = await buildSupabaseClubeePassSyncPlan({ clubeeRows, sourceLabel, sourceMtimeMs });
-  const selectedSet = new Set(
-    (Array.isArray(memberIds) ? memberIds : [])
-      .map((value) => Number(value))
-      .filter((value) => Number.isFinite(value) && value > 0)
-  );
-  const selected = selectedSet.size
-    ? plan.changes.filter((change) => selectedSet.has(Number(change.memberId)))
-    : [];
-
-  if (selected.length) {
-    const rows = selected.map((change) => ({
-      member_id: change.memberId,
-      pass_status: change.proposed.passStatus,
-      expires_on: change.proposed.passExpiry,
-      federation_reference: change.proposed.licenseName || null,
-      notes: change.proposed.note || null
-    }));
-
-    const upsertResponse = await fetch(`${SUPABASE_URL}/rest/v1/player_passes?on_conflict=member_id`, {
-      method: "POST",
-      headers: supabaseAdminHeaders({
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=minimal"
-      }),
-      body: JSON.stringify(rows)
-    });
-
-    if (!upsertResponse.ok) {
-      const payload = await upsertResponse.json().catch(() => ({}));
-      const message = payload?.message || payload?.error || `Could not apply Clubee pass sync (${upsertResponse.status}).`;
-      throw new Error(message);
-    }
-  }
-
-  return {
-    selectedCount: selected.length,
-    skippedCount: Math.max(0, plan.changes.length - selected.length),
-    appliedCount: selected.length,
-    createdPasses: selected.filter((entry) => !entry.existingPass).length,
-    updatedPasses: selected.filter((entry) => entry.existingPass).length,
-    processedRows: plan.processedRows,
-    matchedRows: plan.matchedRows,
-    unmatchedRows: plan.unmatchedRows,
-    unmatchedNames: plan.unmatchedNames
-  };
-}
-
-function supabaseAdminHeaders(extra = {}) {
-  return {
-    apikey: SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    ...extra
-  };
 }
 
 function resolvePublicSiteUrl(req) {
@@ -916,10 +667,8 @@ app.post("/api/passes/sync-clubee", async (req, res) => {
       } else {
         preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
       }
-    } else if (hasSupabaseAdminConfig()) {
-      preview = await previewSupabaseClubeePassSync({ clubeeRows: uploadedRows, sourceLabel, sourceMtimeMs });
     } else {
-      res.status(503).json({ error: "Clubee sync API is unavailable. Configure local DB or Supabase service-role settings on the server." });
+      res.status(503).json({ error: "Clubee sync API is unavailable. Configure local DB support on the server." });
       return;
     }
     res.json({
@@ -954,10 +703,8 @@ app.post("/api/passes/sync-clubee/preview", async (_req, res) => {
       } else {
         preview = await localDbApi.previewClubeePassSync({ clubeeXlsxPath: CLUBEE_XLSX_PATH });
       }
-    } else if (hasSupabaseAdminConfig()) {
-      preview = await previewSupabaseClubeePassSync({ clubeeRows: uploadedRows, sourceLabel, sourceMtimeMs });
     } else {
-      res.status(503).json({ error: "Clubee sync preview is unavailable. Configure local DB or Supabase service-role settings on the server." });
+      res.status(503).json({ error: "Clubee sync preview is unavailable. Configure local DB support on the server." });
       return;
     }
     res.json({ preview });
@@ -995,13 +742,7 @@ app.post("/api/passes/sync-clubee/apply", async (req, res) => {
       return;
     }
 
-    if (hasSupabaseAdminConfig()) {
-      const applySummary = await applySupabaseClubeePassSync({ memberIds, clubeeRows: uploadedRows, sourceLabel, sourceMtimeMs });
-      res.json({ passSyncApply: applySummary });
-      return;
-    }
-
-    res.status(503).json({ error: "Clubee sync apply is unavailable. Configure local DB or Supabase service-role settings on the server." });
+    res.status(503).json({ error: "Clubee sync apply is unavailable. Configure local DB support on the server." });
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Could not apply pass sync from Clubee export."
