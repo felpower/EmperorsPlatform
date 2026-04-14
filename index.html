@@ -43,7 +43,10 @@
           <a class="nav-link" href="#invites" data-view="invites">Invites</a>
           <a class="nav-link" href="#settings" data-view="settings">Setup</a>
           <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--line);" />
-          <button id="profile-nav-button" class="nav-link" type="button" style="background: none; border: none; cursor: pointer; text-align: left; display: block; width: 100%;">My Profile</button>
+          <div class="button-row" style="display:flex; gap:8px;">
+            <button id="profile-nav-button" class="nav-link" type="button" style="background: none; border: none; cursor: pointer; text-align: left; display: block; width: auto; flex:1;">My Profile</button>
+            <button id="logout-nav-button" class="nav-link" type="button" style="background: none; border: none; cursor: pointer; text-align: left; display: none; width: auto; flex:1;">Log out</button>
+          </div>
         </nav>
       </aside>
 

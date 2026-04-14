@@ -189,7 +189,7 @@
       const localAvatar = loadProfileAvatar();
       if (localAvatar) return localAvatar;
     }
-    return "./assets/emperors_crown.png";
+    return "https://fra.cloud.appwrite.io/v1/storage/buckets/ProfilePictures/files/69de561b001bd1c509de/view?project=69dd0fdd00336ea1b4b5&mode=admin";
   }
 
   function profileAvatarStorageKey() {
@@ -2432,83 +2432,13 @@
     const heroActions = document.querySelector(".hero-actions");
     if (!heroActions) return;
     const signedInLabel = authState.user ? authDisplayName() || authState.user.email : "Not signed in";
-    const ownMember = signedInMemberRecord();
-    const avatarSrc = authState.user ? resolveAvatarSrcForMember(ownMember) : "./assets/emperors_crown.png";
     heroActions.innerHTML = `
       <div class="hero-stack">
         <div class="toolbar-row">
           ${authState.user ? `<div class="role-switcher"><span>Signed in</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : ""}
-          <div class="hero-account-actions">
-            ${authState.user ? `
-              <div class="hero-profile-row">
-                <button id="open-profile-header" class="ghost-button" type="button">Profile</button>
-                <button id="upload-profile-image-trigger" class="hero-avatar-button" type="button" title="Upload profile image">
-                  <img id="hero-profile-image" src="${avatarSrc}" alt="Profile image" class="hero-avatar-image" />
-                </button>
-                <input id="upload-profile-image-input" type="file" accept="image/*" hidden />
-              </div>
-              <button id="auth-sign-out-header" class="ghost-button" type="button">Log out</button>
-            ` : ""}
-          </div>
         </div>
       </div>
     `;
-
-    const openProfileButton = document.getElementById("open-profile-header");
-    if (openProfileButton) {
-      openProfileButton.onclick = function () {
-        profileRouteMode = "own";
-        window.location.hash = "user/me";
-        switchView("user");
-      };
-    }
-
-    const uploadProfileImageTrigger = document.getElementById("upload-profile-image-trigger");
-    const uploadProfileImageInput = document.getElementById("upload-profile-image-input");
-    if (uploadProfileImageTrigger && uploadProfileImageInput) {
-      uploadProfileImageTrigger.onclick = function () {
-        uploadProfileImageInput.click();
-      };
-      uploadProfileImageInput.onchange = async function () {
-        const file = uploadProfileImageInput.files && uploadProfileImageInput.files[0];
-        if (!file) return;
-        if (!String(file.type || "").toLowerCase().startsWith("image/")) {
-          showToast("Please select an image file.", "error");
-          return;
-        }
-        if (Number(file.size || 0) > 2 * 1024 * 1024) {
-          showToast("Image is too large. Please use up to 2 MB.", "error");
-          return;
-        }
-        try {
-          const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
-          if (bucketId) {
-            await uploadProfileAvatarToStorage(file);
-          } else {
-            const dataUrl = await readFileAsDataUrl(file);
-            saveProfileAvatar(dataUrl);
-          }
-          showToast("Profile image updated.", "success");
-          mount();
-        } catch (error) {
-          showToast(error?.message || "Could not upload image.", "error");
-        }
-      };
-    }
-
-    const signOutHeaderButton = document.getElementById("auth-sign-out-header");
-    if (signOutHeaderButton) {
-      signOutHeaderButton.onclick = async function () {
-        try {
-          await signOut();
-          authState.status = "Signed out.";
-          mount();
-        } catch (error) {
-          authState.status = error.message;
-          mount();
-        }
-      };
-    }
   }
   function renderDashboard() {
     if (shouldRequireAuth() && !authState.user) {
@@ -2767,8 +2697,11 @@
       return renderAuthGate();
     }
     const hashMemberId = userPageMemberIdFromHash();
+    const hashRoute = String(window.location.hash || "").replace("#", "").trim().toLowerCase();
+    const ownRouteActive = hashRoute === "user/me";
     const ownMemberId = signedInMemberRecord()?.id || "";
-    const memberId = profileRouteMode === "own"
+    const useOwnProfile = ownRouteActive || profileRouteMode === "own";
+    const memberId = useOwnProfile
       ? ownMemberId
       : (hashMemberId || ownMemberId || selectedUserMemberId);
     const member = memberById(memberId);
@@ -2899,10 +2832,14 @@
       <div class="profile-layout">
         <article class="card profile-main-card" style="display:grid; gap: 12px;">
         <div style="display:flex; align-items:center; gap: 14px;">
-          <img src="${resolveAvatarSrcForMember(member)}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          <button type="button" id="user-upload-profile-image-trigger" style="padding:0; border:0; background:none; cursor:${isOwnProfile(member) ? "pointer" : "default"};" ${isOwnProfile(member) ? "title=\"Change profile image\"" : "disabled"}>
+            <img src="${resolveAvatarSrcForMember(member)}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          </button>
+          ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
             <h3 style="margin:0;">${member.name}</h3>
             <p class="meta" style="margin:4px 0 0;">${member.email || "No email yet"}</p>
+            ${isOwnProfile(member) ? `<p class="meta" style="margin:6px 0 0;">Click image to change profile picture</p>` : ""}
           </div>
         </div>
         <div class="form-grid">
@@ -3298,10 +3235,15 @@
     }
 
     const profileNavButton = document.getElementById("profile-nav-button");
+    const logoutNavButton = document.getElementById("logout-nav-button");
     if (profileNavButton) {
       profileNavButton.textContent = signedIn ? "My Profile" : "Log in";
       profileNavButton.style.display = "block";
       profileNavButton.classList.remove("active");
+    }
+    if (logoutNavButton) {
+      logoutNavButton.style.display = signedIn ? "block" : "none";
+      logoutNavButton.classList.remove("active");
     }
   }
 
@@ -3319,6 +3261,7 @@
     });
 
     const profileNavButton = document.getElementById("profile-nav-button");
+    const logoutNavButton = document.getElementById("logout-nav-button");
     if (profileNavButton) {
       profileNavButton.onclick = function () {
         if (!authState.user) {
@@ -3331,8 +3274,26 @@
         }
 
         profileRouteMode = "own";
+        selectedUserMemberId = "";
         window.location.hash = "user/me";
+        mount();
         switchView("user");
+      };
+    }
+    if (logoutNavButton) {
+      logoutNavButton.onclick = async function () {
+        if (!authState.user) return;
+        try {
+          await signOut();
+          authState.status = "Signed out.";
+        } catch (error) {
+          authState.status = error.message || "Sign out failed.";
+        }
+        profileRouteMode = "member";
+        selectedUserMemberId = "";
+        window.location.hash = "dashboard";
+        mount();
+        switchView("dashboard");
       };
     }
   }
@@ -3807,6 +3768,40 @@
         profileRouteMode = "member";
         window.location.hash = "members";
         switchView("members");
+      };
+    }
+
+    const uploadProfileImageTrigger = document.getElementById("user-upload-profile-image-trigger");
+    const uploadProfileImageInput = document.getElementById("user-upload-profile-image-input");
+    if (uploadProfileImageTrigger && uploadProfileImageInput) {
+      uploadProfileImageTrigger.onclick = function () {
+        uploadProfileImageInput.click();
+      };
+      uploadProfileImageInput.onchange = async function () {
+        const file = uploadProfileImageInput.files && uploadProfileImageInput.files[0];
+        if (!file) return;
+        if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+          showToast("Please select an image file.", "error");
+          return;
+        }
+        if (Number(file.size || 0) > 2 * 1024 * 1024) {
+          showToast("Image is too large. Please use up to 2 MB.", "error");
+          return;
+        }
+        try {
+          const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
+          if (bucketId) {
+            await uploadProfileAvatarToStorage(file);
+          } else {
+            const dataUrl = await readFileAsDataUrl(file);
+            saveProfileAvatar(dataUrl);
+          }
+          showToast("Profile image updated.", "success");
+          mount();
+          switchView("user");
+        } catch (error) {
+          showToast(error?.message || "Could not upload image.", "error");
+        }
       };
     }
 
