@@ -672,11 +672,12 @@
       }
 
       const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+      let parsedBody = null;
       if (responseBodyRaw) {
         try {
-          const responseBody = JSON.parse(responseBodyRaw);
-          if (responseBody?.error) {
-            throw new Error(String(responseBody.error));
+          parsedBody = JSON.parse(responseBodyRaw);
+          if (parsedBody?.error) {
+            throw new Error(String(parsedBody.error));
           }
         } catch (parseError) {
           const parseMessage = String(parseError?.message || "");
@@ -685,13 +686,20 @@
           }
         }
       }
+
+      return parsedBody;
     };
 
     const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
     let response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
     if (response?.error && isInviteTargetMissing(response.error)) {
-      await invokeInviteFunction();
-      response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+      const functionResult = await invokeInviteFunction();
+      const alreadySentRecovery = Boolean(functionResult?.ok && functionResult?.recoverySent);
+      if (!alreadySentRecovery) {
+        response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+      } else {
+        response = { data: {}, error: null };
+      }
     }
     if (response?.error) {
       throw response.error;
