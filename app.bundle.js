@@ -591,12 +591,79 @@
     const memberId = String(payload?.memberId || "").trim();
     const resolvedMember = memberId ? memberById(memberId) : null;
     const email = String(payload?.email || resolvedMember?.email || "").trim();
+    const fullName = String(
+      payload?.fullName ||
+      resolvedMember?.name ||
+      `${resolvedMember?.firstName || ""} ${resolvedMember?.lastName || ""}`
+    ).trim();
+    const roles = Array.isArray(payload?.roles)
+      ? payload.roles
+      : Array.isArray(resolvedMember?.roles)
+        ? resolvedMember.roles
+        : ["player"];
     if (!email) {
       throw new Error("Invite email is missing for this member.");
     }
 
+    const isInviteTargetMissing = (errorLike) => {
+      const message = String(errorLike?.message || errorLike || "").trim().toLowerCase();
+      return (
+        message.includes("user with requested id could not get found") ||
+        message.includes("user could not be found") ||
+        message.includes("user not found")
+      );
+    };
+
+    const invokeInviteFunction = async () => {
+      const functionId = String(APPWRITE_CONFIG?.inviteFunctionId || "").trim();
+      if (!functionId) {
+        throw new Error("Invite target has no Appwrite account yet. Configure ClubHubAppwriteConfig.inviteFunctionId to auto-create users for invites.");
+      }
+
+      const appwriteSdk = window.Appwrite || window.appwrite;
+      if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+        throw new Error("Appwrite SDK Functions API is unavailable in this browser runtime.");
+      }
+
+      const inviteClient = new appwriteSdk.Client()
+        .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+        .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+      const functionsApi = new appwriteSdk.Functions(inviteClient);
+      const execution = await functionsApi.createExecution(
+        functionId,
+        JSON.stringify({
+          email,
+          fullName,
+          roles,
+          memberId,
+          redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
+        }),
+        false
+      );
+
+      const responseBodyRaw = String(execution?.responseBody || "").trim();
+      if (responseBodyRaw) {
+        try {
+          const responseBody = JSON.parse(responseBodyRaw);
+          if (responseBody?.error) {
+            throw new Error(String(responseBody.error));
+          }
+        } catch (parseError) {
+          const parseMessage = String(parseError?.message || "");
+          if (!parseMessage.toLowerCase().includes("json")) {
+            throw parseError;
+          }
+        }
+      }
+    };
+
     const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
-    const response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+    let response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if (response?.error && isInviteTargetMissing(response.error)) {
+      await invokeInviteFunction();
+      response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+    }
     if (response?.error) {
       throw response.error;
     }
