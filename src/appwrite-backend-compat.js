@@ -24,7 +24,7 @@
   }
 
   const config = window.ClubHubAppwriteConfig || {};
-  const appwrite = window.Appwrite;
+  const appwrite = window.Appwrite || window.appwrite;
 
   if (!appwrite || !config.projectId || !config.databaseId) {
     console.warn("Appwrite compatibility is not configured. Falling back to local mode.");
