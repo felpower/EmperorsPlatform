@@ -643,7 +643,33 @@
         false
       );
 
-      const responseBodyRaw = String(execution?.responseBody || "").trim();
+      const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+      const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+      let finalExecution = execution;
+
+      // Some runtimes return an execution before logs/body are finalized.
+      for (let i = 0; i < 8; i += 1) {
+        const status = String(finalExecution?.status || "").toLowerCase();
+        if (terminalStatuses.has(status)) break;
+        if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+          await wait(350);
+          finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+          continue;
+        }
+        break;
+      }
+
+      const finalStatus = String(finalExecution?.status || "").toLowerCase();
+      if (finalStatus && finalStatus !== "completed") {
+        const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+        const stderr = String(finalExecution?.stderr || "").trim();
+        const bodyText = String(finalExecution?.responseBody || "").trim();
+        throw new Error(
+          `Invite function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+        );
+      }
+
+      const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
       if (responseBodyRaw) {
         try {
           const responseBody = JSON.parse(responseBodyRaw);
