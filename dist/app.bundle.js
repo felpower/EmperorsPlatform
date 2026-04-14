@@ -588,9 +588,26 @@
     if (!backendClient) {
       throw new Error("Appwrite client not configured. Cannot send invites.");
     }
-    // Implementation depends on Appwrite Function or manual email setup
-    // For now, throw error instructing user to use Appwrite Functions
-    throw new Error("Invite feature requires Appwrite Functions setup. See documentation.");
+    const email = String(payload?.email || "").trim();
+    const memberId = String(payload?.memberId || "").trim();
+    if (!email) {
+      throw new Error("Invite email is missing.");
+    }
+
+    const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
+    const response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if (response?.error) {
+      throw response.error;
+    }
+
+    if (memberId) {
+      const updateResponse = await backendClient.from("members").update({ invite_sent_at: new Date().toISOString() }).eq("id", memberId);
+      if (updateResponse.error) {
+        throw updateResponse.error;
+      }
+    }
+
+    return { ok: true };
   }
 
   async function inviteMember(memberId) {
@@ -3256,6 +3273,7 @@
           button.blur();
           await inviteMember(member.id);
           authState.status = `Invite sent to ${member.email}.`;
+          showToast(`Invite sent to ${member.email}.`, "success");
           if (shouldUseRemoteData()) {
             await loadBootstrapData();
           } else {
@@ -3267,7 +3285,9 @@
             window.scrollTo(previousScrollX, previousScrollY);
           });
         } catch (error) {
-          authState.status = error.message;
+          const errorMessage = error?.message || "Could not send invite.";
+          authState.status = errorMessage;
+          showToast(errorMessage, "error");
           mount();
           switchView("members");
           requestAnimationFrame(() => {
