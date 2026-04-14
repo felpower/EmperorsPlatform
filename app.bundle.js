@@ -606,21 +606,10 @@
       throw new Error("Invite email is missing for this member.");
     }
 
-    const isInviteTargetMissing = (errorLike) => {
-      const message = String(errorLike?.message || errorLike || "").trim().toLowerCase();
-      return (
-        message.includes("requested id could not be found") ||
-        message.includes("user with requested id") ||
-        message.includes("user with requested id could not get found") ||
-        message.includes("user could not be found") ||
-        message.includes("user not found")
-      );
-    };
-
     const invokeInviteFunction = async () => {
       const functionId = String(APPWRITE_CONFIG?.inviteFunctionId || "").trim();
       if (!functionId) {
-        throw new Error("Invite target has no Appwrite account yet. Configure ClubHubAppwriteConfig.inviteFunctionId to auto-create users for invites.");
+        throw new Error("Invite function is required. Configure ClubHubAppwriteConfig.inviteFunctionId to create auth users before sending invites.");
       }
 
       const appwriteSdk = window.Appwrite || window.appwrite;
@@ -691,15 +680,11 @@
     };
 
     const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
-    let response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
-    if (response?.error && isInviteTargetMissing(response.error)) {
-      const functionResult = await invokeInviteFunction();
-      const alreadySentRecovery = Boolean(functionResult?.ok && functionResult?.recoverySent);
-      if (!alreadySentRecovery) {
-        response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
-      } else {
-        response = { data: {}, error: null };
-      }
+    const functionResult = await invokeInviteFunction();
+    const alreadySentRecovery = Boolean(functionResult?.ok && functionResult?.recoverySent);
+    let response = { data: {}, error: null };
+    if (!alreadySentRecovery) {
+      response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
     }
     if (response?.error) {
       throw response.error;
