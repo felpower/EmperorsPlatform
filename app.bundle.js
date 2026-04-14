@@ -1345,7 +1345,8 @@
 
   async function loadRemoteBootstrap() {
     if (!backendClient) {
-      throw new Error("Appwrite compatibility client is not available. Check index.html script order and appwrite config.");
+      authState.status = "Appwrite client not ready yet. Please refresh the page and try again.";
+      return;
     }
     if (!authState.user) {
       authState.status = "Sign in with email and password to continue.";
@@ -2805,12 +2806,25 @@
   }
 
   function updateNavigationVisibility() {
+    const signedIn = Boolean(authState.user);
     document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
       const viewId = String(link.dataset.view || "").trim();
-      const visible = canAccessView(viewId);
+      const visible = signedIn && canAccessView(viewId);
       link.style.display = visible ? "" : "none";
       if (!visible) link.classList.remove("active");
     });
+
+    const navDivider = document.querySelector(".nav hr");
+    if (navDivider) {
+      navDivider.style.display = signedIn ? "" : "none";
+    }
+
+    const profileNavButton = document.getElementById("profile-nav-button");
+    if (profileNavButton) {
+      profileNavButton.textContent = signedIn ? "Log out" : "Log in";
+      profileNavButton.style.display = "block";
+      profileNavButton.classList.remove("active");
+    }
   }
 
   function bindNavigation() {
@@ -2828,26 +2842,25 @@
 
     const profileNavButton = document.getElementById("profile-nav-button");
     if (profileNavButton) {
-      profileNavButton.onclick = function () {
-        profileRouteMode = "own";
-        selectedUserMemberId = "";
+      profileNavButton.onclick = async function () {
         if (!authState.user) {
           window.location.hash = "dashboard";
           mount();
           switchView("dashboard");
+          const emailInput = document.getElementById("auth-email");
+          if (emailInput) emailInput.focus();
           return;
         }
-        const ownMember = signedInMemberRecord();
-        if (ownMember?.id) {
-          selectedUserMemberId = String(ownMember.id);
-          window.location.hash = "user/me";
-          mount();
-          switchView("user");
-          return;
+
+        try {
+          await signOut();
+          authState.status = "Signed out.";
+        } catch (error) {
+          authState.status = error.message || "Sign out failed.";
         }
-        window.location.hash = "user";
+
         mount();
-        switchView("user");
+        switchView("dashboard");
       };
     }
   }
@@ -4553,7 +4566,11 @@
   } else {
     syncAuthSession(null);
   }
-  await loadBootstrapData();
+  try {
+    await loadBootstrapData();
+  } catch (error) {
+    authState.status = error?.message || "Startup failed while loading remote data.";
+  }
   mount();
   unregisterServiceWorkers();
 })();
