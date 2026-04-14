@@ -87,7 +87,12 @@
 
   function apiUrl(path) {
     const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
-    return normalizedPath;
+    const configuredBase = String(APPWRITE_CONFIG?.apiBaseUrl || window.ClubHubApiBaseUrl || "").trim();
+    if (!configuredBase) {
+      return normalizedPath;
+    }
+    const sanitizedBase = configuredBase.replace(/\/+$/, "");
+    return `${sanitizedBase}${normalizedPath}`;
   }
 
   function loadStoredValue(key, fallback) {
@@ -2129,7 +2134,80 @@
     });
   }
 
+  async function invokePassSyncFunction({ mode, memberIds = [] } = {}) {
+    const functionId = String(APPWRITE_CONFIG?.passSyncFunctionId || "").trim();
+    if (!functionId) {
+      return null;
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+
+    const passSyncClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const functionsApi = new appwriteSdk.Functions(passSyncClient);
+    const execution = await functionsApi.createExecution(
+      functionId,
+      JSON.stringify({
+        action: mode === "apply" ? "apply" : "preview",
+        fileName: passSyncUpload?.fileName || "",
+        fileBase64: passSyncUpload?.fileBase64 || "",
+        memberIds: Array.isArray(memberIds) ? memberIds : []
+      }),
+      false
+    );
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    let finalExecution = execution;
+
+    for (let index = 0; index < 12; index += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(350);
+        finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyText = String(finalExecution?.responseBody || "").trim();
+      throw new Error(
+        `Pass sync function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    if (!responseBodyRaw) {
+      throw new Error("Pass sync function returned an empty response body.");
+    }
+
+    try {
+      const parsed = JSON.parse(responseBodyRaw);
+      if (parsed?.error) {
+        throw new Error(String(parsed.error));
+      }
+      return parsed;
+    } catch (error) {
+      throw new Error(String(error?.message || "Could not parse pass sync function response."));
+    }
+  }
+
   async function previewClubeePassSync() {
+    const functionPayload = await invokePassSyncFunction({ mode: "preview" });
+    if (functionPayload) {
+      return functionPayload.preview || null;
+    }
+
     const response = await fetch(apiUrl("/api/passes/sync-clubee/preview"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2139,11 +2217,24 @@
       })
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not build Clubee pass preview.");
+    if (!response.ok) {
+      if (response.status === 405) {
+        throw new Error(
+          "Pass sync preview endpoint is not available on this host. Set ClubHubAppwriteConfig.apiBaseUrl to your backend URL (for example https://your-backend-domain) so /api/passes/sync-clubee/preview is called there."
+        );
+      }
+      throw new Error(payload.error || "Could not build Clubee pass preview.");
+    }
     return payload.preview || null;
   }
 
   async function applyClubeePassSync(memberIds) {
+    const functionPayload = await invokePassSyncFunction({ mode: "apply", memberIds });
+    if (functionPayload) {
+      await loadBootstrapData();
+      return functionPayload.passSyncApply || null;
+    }
+
     const response = await fetch(apiUrl("/api/passes/sync-clubee/apply"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2154,7 +2245,14 @@
       })
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not apply Clubee pass sync.");
+    if (!response.ok) {
+      if (response.status === 405) {
+        throw new Error(
+          "Pass sync apply endpoint is not available on this host. Set ClubHubAppwriteConfig.apiBaseUrl to your backend URL (for example https://your-backend-domain) so /api/passes/sync-clubee/apply is called there."
+        );
+      }
+      throw new Error(payload.error || "Could not apply Clubee pass sync.");
+    }
     if (Array.isArray(payload?.members) || Array.isArray(payload?.fees)) {
       applyBootstrap(payload);
     } else {
@@ -2863,7 +2961,7 @@
             ${rows.map((member) => `
               <tr>
                 <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${member.id}" aria-label="Open profile"></button></td>
-                <td><strong>${member.firstName || "-"}</strong></td>
+                <td><strong>${member.firstName || "-"}</strong>${member.deletedAt ? ` ${statusPill("deleted", "deleted")}` : ""}</td>
                 <td><strong>${member.lastName || "-"}</strong></td>
                 <td>${formatList(member.positions, "-")}</td>
                 <td class="${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? formatDate(member.passExpiry) : "No expiry date"}</td>
