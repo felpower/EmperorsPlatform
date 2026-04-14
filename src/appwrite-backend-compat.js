@@ -96,7 +96,8 @@
       membership_fees: String(config.membershipFeesTableId || "membership_fees"),
       events: String(config.eventsTableId || "events"),
       event_recipients: String(config.eventRecipientsTableId || "event_recipients"),
-      invites: String(config.invitesTableId || "invites")
+      invites: String(config.invitesTableId || "invites"),
+      equipment_inventory: String(config.equipmentTableId || "equipment_inventory")
     };
   }
 

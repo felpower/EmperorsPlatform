@@ -12,5 +12,6 @@ window.ClubHubAppwriteConfig = {
   membershipFeesTableId: "membership_fees",
   eventsTableId: "events",
   eventRecipientsTableId: "event_recipients",
-  invitesTableId: "invites"
+  invitesTableId: "invites",
+  equipmentTableId: "equipment_inventory"
 };
