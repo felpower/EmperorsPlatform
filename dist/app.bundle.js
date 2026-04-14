@@ -25,6 +25,13 @@
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
+  const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
+  const EQUIPMENT_SHEETS = [
+    { key: "training", label: "Training" },
+    { key: "gameday", label: "Gameday" },
+    { key: "technik", label: "Technik" },
+    { key: "all", label: "All sheets" }
+  ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
   const viewIds = ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
@@ -71,6 +78,7 @@
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
   let passFilters = loadPassFilters();
+  let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "training");
   let passSyncPreview = null;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
@@ -334,7 +342,7 @@
     window.setTimeout(() => {
       toast.classList.remove("is-visible");
       window.setTimeout(() => toast.remove(), 220);
-    }, 2200);
+    }, 8000);
   }
 
   function buttonLabelForToast(button) {
@@ -1010,6 +1018,66 @@
   function generateEquipmentId() {
     const randomPart = Math.random().toString(36).slice(2, 8);
     return `equipment-${Date.now()}-${randomPart}`;
+  }
+
+  function normalizeEquipmentSheetKey(value) {
+    return normalizeLookupToken(value).replace(/^sheet/, "");
+  }
+
+  function availableEquipmentSheetKeys() {
+    const sheetKeys = new Set(EQUIPMENT_SHEETS.map((sheet) => sheet.key));
+    state.equipment.forEach((item) => {
+      const sheetKey = normalizeEquipmentSheetKey(item.group);
+      if (sheetKey && sheetKey !== "all") {
+        sheetKeys.add(sheetKey);
+      }
+    });
+    return Array.from(sheetKeys);
+  }
+
+  function resolveEquipmentSheetKey(sheetKey) {
+    const normalized = normalizeEquipmentSheetKey(sheetKey);
+    if (EQUIPMENT_SHEETS.some((sheet) => sheet.key === normalized)) {
+      return normalized;
+    }
+    return "training";
+  }
+
+  function equipmentSheetLabel(sheetKey) {
+    const normalized = resolveEquipmentSheetKey(sheetKey);
+    const preset = EQUIPMENT_SHEETS.find((sheet) => sheet.key === normalized);
+    return preset?.label || "Training";
+  }
+
+  function equipmentSheetPromptDefaultGroup(sheetKey) {
+    const normalized = resolveEquipmentSheetKey(sheetKey);
+    if (normalized === "all") return "Training";
+    return equipmentSheetLabel(normalized);
+  }
+
+  function equipmentSheetRows(rows, sheetKey) {
+    const normalizedSheetKey = resolveEquipmentSheetKey(sheetKey);
+    const normalizedRows = sortEquipmentRows(rows);
+    if (normalizedSheetKey === "all") {
+      return normalizedRows;
+    }
+    return normalizedRows.filter((row) => normalizeEquipmentSheetKey(row.group) === normalizedSheetKey);
+  }
+
+  function saveEquipmentSheetKey(sheetKey) {
+    const normalized = resolveEquipmentSheetKey(sheetKey);
+    selectedEquipmentSheet = normalized;
+    saveStoredValue(EQUIPMENT_SHEET_KEY, normalized);
+  }
+
+  function equipmentSheetCounts(rows) {
+    const normalizedRows = sortEquipmentRows(rows);
+    return EQUIPMENT_SHEETS.map((sheet) => ({
+      ...sheet,
+      count: sheet.key === "all"
+        ? normalizedRows.length
+        : normalizedRows.filter((row) => normalizeEquipmentSheetKey(row.group) === sheet.key).length
+    }));
   }
 
   function normalizeEquipmentItem(item, index) {
@@ -3356,6 +3424,15 @@
     }
 
     const rows = sortEquipmentRows(state.equipment || []);
+    const activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
+    if (selectedEquipmentSheet !== activeSheet) {
+      saveEquipmentSheetKey(activeSheet);
+    }
+    const visibleRows = equipmentSheetRows(rows, activeSheet);
+    const showGroupColumn = activeSheet === "all";
+    const sheetTabs = equipmentSheetCounts(rows)
+      .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
+      .join("");
     const canEdit = currentAccessRole === "admin";
 
     return `
@@ -3366,15 +3443,20 @@
           <p class="meta">Visible for all users${canEdit ? ", editable by admins" : "."}</p>
         </div>
         <div class="button-row">
-          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button">Add item</button>` : ""}
+          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${equipmentSheetLabel(activeSheet)}`}</button>` : ""}
         </div>
       </div>
       ${equipmentStatus ? `<article class="card" style="margin-bottom: 12px;"><p class="meta">${equipmentStatus}</p></article>` : ""}
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 0;">
+          ${sheetTabs}
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Group</th>
+              ${showGroupColumn ? "<th>Group</th>" : ""}
               <th>Category</th>
               <th>Article</th>
               <th>Quantity</th>
@@ -3386,9 +3468,9 @@
             </tr>
           </thead>
           <tbody>
-            ${rows.map((item) => `
+            ${visibleRows.map((item) => `
               <tr>
-                <td>${item.group || "-"}</td>
+                ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
                 <td>${item.category || "-"}</td>
                 <td><strong>${item.article || "-"}</strong></td>
                 <td>${item.quantity || "-"}</td>
@@ -3400,7 +3482,7 @@
                   ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}">Delete</button></div></td>`
                   : ""}
               </tr>
-            `).join("") || `<tr><td colspan="${canEdit ? 9 : 8}" class="meta">No equipment rows yet.</td></tr>`}
+            `).join("") || `<tr><td colspan="${canEdit ? (showGroupColumn ? 9 : 8) : (showGroupColumn ? 8 : 7)}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -4289,7 +4371,8 @@
   }
 
   function promptEquipmentRow(initial = {}) {
-    const group = window.prompt("Group (e.g. Training, Gameday, Technik)", String(initial.group || "General"));
+    const defaultGroup = String(initial.group || equipmentSheetLabel(selectedEquipmentSheet) || "General");
+    const group = window.prompt("Group (e.g. Training, Gameday, Technik)", defaultGroup);
     if (group === null) return null;
     const category = window.prompt("Category", String(initial.category || ""));
     if (category === null) return null;
@@ -4323,11 +4406,21 @@
   }
 
   function bindEquipmentActions() {
+    document.querySelectorAll("[data-equipment-sheet]").forEach((button) => {
+      button.onclick = function () {
+        const sheetKey = String(button.dataset.equipmentSheet || "").trim();
+        if (!sheetKey) return;
+        saveEquipmentSheetKey(sheetKey);
+        mount();
+        switchView("equipment");
+      };
+    });
+
     const addButton = document.getElementById("equipment-add-item");
     if (addButton) {
       addButton.onclick = async function () {
         if (currentAccessRole !== "admin") return;
-        const draft = promptEquipmentRow();
+        const draft = promptEquipmentRow({ group: equipmentSheetPromptDefaultGroup(selectedEquipmentSheet) });
         if (!draft) return;
         if (!draft.article) {
           showToast("Article is required.", "error");
