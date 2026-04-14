@@ -690,13 +690,23 @@
     };
 
     const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
-    const functionResult = await invokeInviteFunction({ sendRecovery: true });
+    let functionResult = null;
+    let functionFailureMessage = "";
+    try {
+      functionResult = await invokeInviteFunction({ sendRecovery: true });
+    } catch (error) {
+      functionFailureMessage = String(error?.message || "Invite function failed.").trim();
+    }
+
     const alreadySentRecovery = Boolean(functionResult?.ok && functionResult?.recoverySent);
     let response = { data: {}, error: null };
     if (!alreadySentRecovery) {
       response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
     }
     if (response?.error) {
+      if (functionFailureMessage) {
+        throw new Error(`${functionFailureMessage} Recovery fallback failed: ${response.error.message || "Could not send recovery email."}`);
+      }
       throw response.error;
     }
 
@@ -707,7 +717,7 @@
       }
     }
 
-    return { ok: true };
+    return { ok: true, usedRecoveryFallback: Boolean(functionFailureMessage) };
   }
 
   async function provisionAuthForMember({ memberId, email, fullName, roles }) {
