@@ -38,6 +38,7 @@ temp/
 membership-fees.csv
 player-list.csv
 assets/*.xlsx
+assets/*.csv
 
 # Editor/system extras
 .vscode/*

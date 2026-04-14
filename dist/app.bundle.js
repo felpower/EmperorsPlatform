@@ -13,7 +13,8 @@
     members: [],
     fees: [],
     events: [],
-    invites: []
+    invites: [],
+    equipment: []
   };
 
   const STORAGE_KEY = "emperors-local-state-v3";
@@ -23,8 +24,9 @@
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
+  const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
-  const viewIds = ["dashboard", "members", "fees", "user", "passes", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -87,6 +89,8 @@
     loading: false
   };
   let buttonFeedbackBound = false;
+  let equipmentStorageMode = "local";
+  let equipmentStatus = "";
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -1003,6 +1007,58 @@
     };
   }
 
+  function generateEquipmentId() {
+    const randomPart = Math.random().toString(36).slice(2, 8);
+    return `equipment-${Date.now()}-${randomPart}`;
+  }
+
+  function normalizeEquipmentItem(item, index) {
+    return {
+      id: String(item?.id || `equipment-${index + 1}`).trim(),
+      group: String(item?.group || "General").trim() || "General",
+      category: String(item?.category || "").trim(),
+      article: String(item?.article || "").trim(),
+      quantity: String(item?.quantity || "").trim(),
+      condition: String(item?.condition || "").trim(),
+      location: String(item?.location || "").trim(),
+      checkedAt: String(item?.checkedAt || "").trim(),
+      notes: String(item?.notes || "").trim()
+    };
+  }
+
+  function normalizeEquipmentRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((item, index) => normalizeEquipmentItem(item, index))
+      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes);
+  }
+
+  function sortEquipmentRows(rows) {
+    return [...normalizeEquipmentRows(rows)].sort((left, right) => {
+      const groupCompare = String(left.group || "").localeCompare(String(right.group || ""), undefined, { sensitivity: "base" });
+      if (groupCompare !== 0) return groupCompare;
+      const categoryCompare = String(left.category || "").localeCompare(String(right.category || ""), undefined, { sensitivity: "base" });
+      if (categoryCompare !== 0) return categoryCompare;
+      return String(left.article || "").localeCompare(String(right.article || ""), undefined, { sensitivity: "base" });
+    });
+  }
+
+  function loadEquipmentFromStorage() {
+    try {
+      const saved = localStorage.getItem(EQUIPMENT_STORAGE_KEY);
+      if (!saved) return [];
+      return sortEquipmentRows(JSON.parse(saved));
+    } catch {
+      return [];
+    }
+  }
+
+  function saveEquipmentToStorage(rows) {
+    const normalizedRows = sortEquipmentRows(rows);
+    localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(normalizedRows));
+    state.equipment = normalizedRows;
+    saveState();
+  }
+
   function normalizeState(value) {
     return {
       source: value.source || "demo",
@@ -1010,7 +1066,8 @@
       members: Array.isArray(value.members) ? value.members.map(normalizeMember) : [],
       fees: Array.isArray(value.fees) ? value.fees.map(normalizeFee) : [],
       events: Array.isArray(value.events) ? value.events : [],
-      invites: Array.isArray(value.invites) ? value.invites : []
+      invites: Array.isArray(value.invites) ? value.invites : [],
+      equipment: sortEquipmentRows(value.equipment)
     };
   }
 
@@ -1691,7 +1748,11 @@
   }
 
   function applyBootstrap(bootstrap) {
-    state = normalizeState(bootstrap);
+    const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
+    state = normalizeState({
+      ...bootstrap,
+      equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment
+    });
     bootstrapMeta = {
       source: bootstrap.source || "local-sqlite",
       permissionsModel: bootstrap.permissionsModel || demoData.permissionsModel
@@ -1968,6 +2029,116 @@
     }
     // Fall back to loading via Appwrite
     await loadRemoteBootstrap();
+  }
+
+  function mapEquipmentRowFromRemote(row, index) {
+    return normalizeEquipmentItem(
+      {
+        id: row?.id,
+        group: row?.group_name,
+        category: row?.category,
+        article: row?.article,
+        quantity: row?.quantity,
+        condition: row?.condition,
+        location: row?.location,
+        checkedAt: row?.checked_at,
+        notes: row?.notes
+      },
+      index
+    );
+  }
+
+  function mapEquipmentRowToRemote(row) {
+    return {
+      id: String(row?.id || generateEquipmentId()).trim(),
+      group_name: String(row?.group || "General").trim() || "General",
+      category: String(row?.category || "").trim() || null,
+      article: String(row?.article || "").trim() || null,
+      quantity: String(row?.quantity || "").trim() || null,
+      condition: String(row?.condition || "").trim() || null,
+      location: String(row?.location || "").trim() || null,
+      checked_at: String(row?.checkedAt || "").trim() || null,
+      notes: String(row?.notes || "").trim() || null
+    };
+  }
+
+  async function loadEquipmentData() {
+    const localRows = loadEquipmentFromStorage();
+
+    if (backendClient && authState.user) {
+      try {
+        const remoteResponse = await backendClient
+          .from("equipment_inventory")
+          .select("id, group_name, category, article, quantity, condition, location, checked_at, notes");
+
+        if (remoteResponse.error) {
+          throw remoteResponse.error;
+        }
+
+        const remoteRows = sortEquipmentRows((remoteResponse.data || []).map(mapEquipmentRowFromRemote));
+        equipmentStorageMode = "remote";
+        equipmentStatus = remoteRows.length
+          ? ""
+          : "No equipment entries found in database yet. Admins can add items now.";
+        saveEquipmentToStorage(remoteRows);
+        return;
+      } catch (error) {
+        equipmentStorageMode = "local";
+        equipmentStatus = `Equipment remote table unavailable. Using local storage (${String(error?.message || "unknown error")}).`;
+      }
+    } else {
+      equipmentStorageMode = "local";
+      equipmentStatus = "";
+    }
+
+    if (localRows.length) {
+      saveEquipmentToStorage(localRows);
+      return;
+    }
+
+    saveEquipmentToStorage([]);
+  }
+
+  async function upsertEquipmentRow(row) {
+    if (currentAccessRole !== "admin") {
+      throw new Error("Only admins can edit equipment.");
+    }
+
+    const normalizedRow = normalizeEquipmentItem({ ...row, id: row?.id || generateEquipmentId() }, 0);
+
+    if (backendClient && authState.user && equipmentStorageMode === "remote") {
+      const remotePayload = mapEquipmentRowToRemote(normalizedRow);
+      const response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
+      if (response.error) {
+        throw response.error;
+      }
+    }
+
+    const currentRows = Array.isArray(state.equipment) ? state.equipment : [];
+    const existingIndex = currentRows.findIndex((item) => String(item.id) === String(normalizedRow.id));
+    const nextRows = existingIndex >= 0
+      ? currentRows.map((item, index) => (index === existingIndex ? normalizedRow : item))
+      : [...currentRows, normalizedRow];
+    saveEquipmentToStorage(nextRows);
+  }
+
+  async function deleteEquipmentRow(equipmentId) {
+    if (currentAccessRole !== "admin") {
+      throw new Error("Only admins can edit equipment.");
+    }
+
+    const normalizedId = String(equipmentId || "").trim();
+    if (!normalizedId) return;
+
+    if (backendClient && authState.user && equipmentStorageMode === "remote") {
+      const response = await backendClient.from("equipment_inventory").delete().eq("id", normalizedId);
+      if (response.error) {
+        throw response.error;
+      }
+    }
+
+    const nextRows = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.id) !== normalizedId);
+    saveEquipmentToStorage(nextRows);
   }
 
   function normalizeFeeStatusValue(value) {
@@ -3179,6 +3350,63 @@
     `;
   }
 
+  function renderEquipment() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
+
+    const rows = sortEquipmentRows(state.equipment || []);
+    const canEdit = currentAccessRole === "admin";
+
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Inventory</p>
+          <h3>Current equipment</h3>
+          <p class="meta">Visible for all users${canEdit ? ", editable by admins" : "."}</p>
+        </div>
+        <div class="button-row">
+          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button">Add item</button>` : ""}
+        </div>
+      </div>
+      ${equipmentStatus ? `<article class="card" style="margin-bottom: 12px;"><p class="meta">${equipmentStatus}</p></article>` : ""}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Group</th>
+              <th>Category</th>
+              <th>Article</th>
+              <th>Quantity</th>
+              <th>Condition</th>
+              <th>Location</th>
+              <th>Last checked</th>
+              <th>Notes</th>
+              ${canEdit ? "<th>Actions</th>" : ""}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((item) => `
+              <tr>
+                <td>${item.group || "-"}</td>
+                <td>${item.category || "-"}</td>
+                <td><strong>${item.article || "-"}</strong></td>
+                <td>${item.quantity || "-"}</td>
+                <td>${item.condition || "-"}</td>
+                <td>${item.location || "-"}</td>
+                <td>${item.checkedAt || "-"}</td>
+                <td>${item.notes || "-"}</td>
+                ${canEdit
+                  ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}">Delete</button></div></td>`
+                  : ""}
+              </tr>
+            `).join("") || `<tr><td colspan="${canEdit ? 9 : 8}" class="meta">No equipment rows yet.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   function renderPassSyncReview() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
@@ -3194,6 +3422,7 @@
       <div class="section-head">
         <div>
           <p class="eyebrow">Clubee Sync</p>
+          <h1 color="red">Under Development do not use!</h1>
           <h3>Review pass updates</h3>
           <p class="meta">Nothing is written until you click apply.</p>
         </div>
@@ -3290,11 +3519,11 @@
 
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
-    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "events", "invites", "recovery"];
-    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "events", "invites", "recovery"];
-    return ["dashboard", "members", "user", "events", "recovery"];
+    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "equipment", "events", "invites", "recovery"];
+    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "equipment", "events", "invites", "recovery"];
+    return ["dashboard", "members", "user", "equipment", "events", "recovery"];
   }
 
   function canAccessView(viewId) {
@@ -4057,6 +4286,104 @@
       };
     }
 
+  }
+
+  function promptEquipmentRow(initial = {}) {
+    const group = window.prompt("Group (e.g. Training, Gameday, Technik)", String(initial.group || "General"));
+    if (group === null) return null;
+    const category = window.prompt("Category", String(initial.category || ""));
+    if (category === null) return null;
+    const article = window.prompt("Article", String(initial.article || ""));
+    if (article === null) return null;
+    const quantity = window.prompt("Quantity", String(initial.quantity || ""));
+    if (quantity === null) return null;
+    const condition = window.prompt("Condition", String(initial.condition || ""));
+    if (condition === null) return null;
+    const location = window.prompt("Location", String(initial.location || ""));
+    if (location === null) return null;
+    const checkedAt = window.prompt("Last checked", String(initial.checkedAt || ""));
+    if (checkedAt === null) return null;
+    const notes = window.prompt("Notes", String(initial.notes || ""));
+    if (notes === null) return null;
+
+    return normalizeEquipmentItem(
+      {
+        id: initial.id || generateEquipmentId(),
+        group,
+        category,
+        article,
+        quantity,
+        condition,
+        location,
+        checkedAt,
+        notes
+      },
+      0
+    );
+  }
+
+  function bindEquipmentActions() {
+    const addButton = document.getElementById("equipment-add-item");
+    if (addButton) {
+      addButton.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const draft = promptEquipmentRow();
+        if (!draft) return;
+        if (!draft.article) {
+          showToast("Article is required.", "error");
+          return;
+        }
+        try {
+          await upsertEquipmentRow(draft);
+          showToast("Equipment item added.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not add equipment item.", "error");
+        }
+      };
+    }
+
+    document.querySelectorAll(".equipment-edit-button").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const rowId = String(button.dataset.equipmentId || "").trim();
+        const currentRow = (state.equipment || []).find((item) => String(item.id) === rowId);
+        if (!currentRow) return;
+        const draft = promptEquipmentRow(currentRow);
+        if (!draft) return;
+        if (!draft.article) {
+          showToast("Article is required.", "error");
+          return;
+        }
+        try {
+          await upsertEquipmentRow(draft);
+          showToast("Equipment item updated.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not update equipment item.", "error");
+        }
+      };
+    });
+
+    document.querySelectorAll(".equipment-delete-button").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const rowId = String(button.dataset.equipmentId || "").trim();
+        const currentRow = (state.equipment || []).find((item) => String(item.id) === rowId);
+        if (!currentRow) return;
+        if (!window.confirm(`Delete equipment item '${currentRow.article || currentRow.id}'?`)) return;
+        try {
+          await deleteEquipmentRow(rowId);
+          showToast("Equipment item deleted.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not delete equipment item.", "error");
+        }
+      };
+    });
   }
 
   function bindFeeFilters() {
@@ -5100,6 +5427,7 @@
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
       document.getElementById("passes").innerHTML = renderPasses();
+      document.getElementById("equipment").innerHTML = renderEquipment();
       document.getElementById("pass-sync").innerHTML = renderPassSyncReview();
       document.getElementById("events").innerHTML = renderEvents();
       document.getElementById("invites").innerHTML = renderInvites();
@@ -5107,6 +5435,7 @@
       document.getElementById("recovery").innerHTML = renderRecoveryGate();
       bindMemberActions();
       bindUserPageActions();
+      bindEquipmentActions();
       bindMemberFilters();
       bindFeeFilters();
       bindPassFilters();
@@ -5163,6 +5492,7 @@
       Promise.resolve()
         .then(() => promoteInvitedMemberOnFirstSignIn())
         .then(() => loadBootstrapData())
+        .then(() => loadEquipmentData())
         .then(() => mount())
         .catch((error) => {
           authState.status = error.message;
@@ -5174,6 +5504,7 @@
   }
   try {
     await loadBootstrapData();
+    await loadEquipmentData();
   } catch (error) {
     authState.status = error?.message || "Startup failed while loading remote data.";
   }
