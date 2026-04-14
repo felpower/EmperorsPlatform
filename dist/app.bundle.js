@@ -1,7 +1,5 @@
 (async function () {
   const APPWRITE_CONFIG = window.ClubHubAppwriteConfig || null;
-  const APP_CONFIG = window.__EMPERORS_CONFIG__ || {};
-  const API_BASE_URL = String(APP_CONFIG.apiBaseUrl || "").trim().replace(/\/$/, "");
 
   const demoData = {
     source: "demo",
@@ -87,7 +85,10 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  // Local API calls removed - pure Appwrite only
+  function apiUrl(path) {
+    const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
+    return normalizedPath;
+  }
 
   function loadStoredValue(key, fallback) {
     const saved = localStorage.getItem(key);

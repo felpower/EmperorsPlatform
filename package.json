@@ -5,11 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node server.mjs",
-    "import:supabase": "node scripts/import-sqlite-to-supabase.mjs",
     "setup:appwrite": "node scripts/setup-appwrite-collections.mjs",
-    "migrate:members:supabase-to-appwrite": "node scripts/migrate-members-supabase-to-appwrite.mjs",
-    "migrate:fees:supabase-to-appwrite": "node scripts/migrate-fees-supabase-to-appwrite.mjs",
-    "migrate:events:supabase-to-appwrite": "node scripts/migrate-events-supabase-to-appwrite.mjs",
     "auth:create-user": "node scripts/create-appwrite-auth-user.mjs",
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
     "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
@@ -20,7 +16,6 @@
     "express": "^5.2.1",
     "rg": "^0.0.2",
     "sqlite3": "^6.0.1",
-    "supabase": "^2.89.1",
     "xlsx": "^0.18.5"
   }
 }
