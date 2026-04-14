@@ -609,6 +609,8 @@
     const isInviteTargetMissing = (errorLike) => {
       const message = String(errorLike?.message || errorLike || "").trim().toLowerCase();
       return (
+        message.includes("requested id could not be found") ||
+        message.includes("user with requested id") ||
         message.includes("user with requested id could not get found") ||
         message.includes("user could not be found") ||
         message.includes("user not found")
