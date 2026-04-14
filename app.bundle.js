@@ -239,7 +239,8 @@
   function defaultTableSort() {
     return {
       members: { key: "lastName", direction: "asc" },
-      fees: { key: "member", direction: "asc" }
+      fees: { key: "member", direction: "asc" },
+      passes: { key: "firstName", direction: "asc" }
     };
   }
 
@@ -250,7 +251,8 @@
       const parsed = JSON.parse(saved);
       return {
         members: parsed?.members || defaultTableSort().members,
-        fees: parsed?.fees || defaultTableSort().fees
+        fees: parsed?.fees || defaultTableSort().fees,
+        passes: parsed?.passes || defaultTableSort().passes
       };
     } catch {
       return defaultTableSort();
@@ -1253,6 +1255,18 @@
       }
 
       return true;
+    });
+  }
+
+  function sortedPassMembers() {
+    return sortRows(filteredPassMembers(), "passes", (member, key) => {
+      if (key === "firstName") return member.firstName || "";
+      if (key === "lastName") return member.lastName || "";
+      if (key === "position") return (member.positions || []).join(", ") || "";
+      if (key === "expiry") return member.passExpiry || "";
+      if (key === "status") return displayPassStatus(member.passStatus) || "";
+      if (key === "profile") return member.id || "";
+      return member.firstName || "";
     });
   }
 
@@ -2578,15 +2592,10 @@
       return lockedState("Player pass data is hidden for this role.", "Only admins, coaches, and technical admins should see player pass details.");
     }
     const allPlayerMembers = state.members.filter((member) => (member.roles || []).includes("player"));
-    const playerMembers = filteredPassMembers();
     const options = passFilterOptions();
     if (!allPlayerMembers.length) return emptyState("No player pass data yet", "Import the roster and Clubee export to populate this area.");
 
-    const rows = [...playerMembers].sort((left, right) => {
-      const leftDate = left.passExpiry ? new Date(`${left.passExpiry}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
-      const rightDate = right.passExpiry ? new Date(`${right.passExpiry}T00:00:00`).getTime() : Number.POSITIVE_INFINITY;
-      return leftDate - rightDate;
-    });
+    const rows = sortedPassMembers();
 
     return `
       <div class="section-head">
@@ -2660,11 +2669,11 @@
           <thead>
             <tr>
               <th>Profile</th>
-              <th>First name</th>
-              <th>Last name</th>
-              <th>Position</th>
-              <th>Expiry</th>
-              <th>Status</th>
+              <th>${renderSortButton("passes", "firstName", "First name")}</th>
+              <th>${renderSortButton("passes", "lastName", "Last name")}</th>
+              <th>${renderSortButton("passes", "position", "Position")}</th>
+              <th>${renderSortButton("passes", "expiry", "Expiry")}</th>
+              <th>${renderSortButton("passes", "status", "Status")}</th>
             </tr>
           </thead>
           <tbody>
