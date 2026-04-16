@@ -4405,6 +4405,19 @@
     );
   }
 
+  function handleEquipmentSheetTabClick(event) {
+    const equipmentSection = document.getElementById("equipment");
+    const button = event.target.closest("[data-equipment-sheet]");
+    if (!equipmentSection || !button || !equipmentSection.contains(button)) return;
+
+    const sheetKey = String(button.dataset.equipmentSheet || "").trim();
+    if (!sheetKey) return;
+
+    saveEquipmentSheetKey(sheetKey);
+    mount();
+    switchView("equipment");
+  }
+
   function bindEquipmentActions() {
     // Use event delegation for equipment sheet tabs to avoid losing handlers on re-render
     const equipmentSection = document.getElementById("equipment");
