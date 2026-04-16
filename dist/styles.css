@@ -436,6 +436,8 @@ button {
 .status.active,
 .status.activated,
 .status.paid,
+.status.paid_rookie_fee,
+.status.paid_with_fee,
 .status.valid,
 .status.confirmed {
   background: rgba(32, 116, 79, 0.12);

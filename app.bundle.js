@@ -33,6 +33,10 @@
     { key: "all", label: "All sheets" }
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
+  const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"];
+  const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
+  const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
+  const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
   const viewIds = ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
@@ -1363,6 +1367,8 @@
 
   function statusLabel(value) {
     const normalized = String(value || "pending").toLowerCase();
+    if (normalized === "paid_rookie_fee") return "paid rookie fee";
+    if (normalized === "paid_with_fee") return "paid with fee";
     if (normalized === "not_applicable") return "not in team";
     return normalized.replaceAll("_", " ");
   }
@@ -1869,7 +1875,7 @@
 
   function defaultFeeStatuses() {
     const available = availableFeeStatuses();
-    const preferred = ["paid", "pending", "not_collected"];
+    const preferred = ["paid", "paid_rookie_fee", "paid_with_fee", "pending", "not_collected"];
     const selected = preferred.filter((status) => available.includes(status));
     return selected.length ? selected : available;
   }
@@ -2349,6 +2355,12 @@
     const normalized = String(value || "pending").trim().toLowerCase();
     const aliases = {
       paid: "paid",
+      paid_rookie_fee: "paid_rookie_fee",
+      "paid rookie fee": "paid_rookie_fee",
+      "paid rookie": "paid_rookie_fee",
+      paid_with_fee: "paid_with_fee",
+      "paid with fee": "paid_with_fee",
+      "paid with fees": "paid_with_fee",
       partial: "partial",
       pending: "pending",
       "not paid": "pending",
@@ -2560,7 +2572,7 @@
       for (const row of rows) {
         const amountCents = Number(row.amount_cents || 0);
         let paidCents = Number(row.paid_cents || 0);
-        if (normalizedStatus === "paid") paidCents = amountCents;
+        if (FEE_PAID_STATUSES.includes(normalizedStatus)) paidCents = amountCents;
         else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
         else paidCents = 0;
 
@@ -2590,8 +2602,8 @@
       const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
       let paidCents = Math.max(0, Math.round(Number(paidAmount || 0) * 100));
 
-      if (normalizedStatus === "paid") paidCents = amountCents;
-      else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
+      if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
+      else if (FEE_ZERO_PAID_STATUSES.includes(normalizedStatus)) paidCents = 0;
 
       const response = await backendClient
         .from("membership_fees")
@@ -3229,7 +3241,7 @@
                   return `<tr><td>${formatFeePeriod(period)}</td><td><span class="meta">No record</span></td></tr>`;
                 }
                 if (canEditSensitive) {
-                  return `<tr><td>${formatFeePeriod(period)}</td><td><select class="user-sensitive-fee-status" data-fee-id="${fee.id}" ${sensitiveDisabled}><option value="paid" ${fee.status === "paid" ? "selected" : ""}>paid</option><option value="partial" ${fee.status === "partial" ? "selected" : ""}>partial</option><option value="pending" ${fee.status === "pending" ? "selected" : ""}>pending</option><option value="not_collected" ${fee.status === "not_collected" ? "selected" : ""}>not collected</option><option value="exempt" ${fee.status === "exempt" ? "selected" : ""}>exempt</option><option value="exit" ${fee.status === "exit" ? "selected" : ""}>exit</option><option value="not_applicable" ${fee.status === "not_applicable" ? "selected" : ""}>not in team</option></select></td></tr>`;
+                  return `<tr><td>${formatFeePeriod(period)}</td><td><select class="user-sensitive-fee-status" data-fee-id="${fee.id}" ${sensitiveDisabled}>${FEE_STATUSES.map((status) => `<option value="${status}" ${fee.status === status ? "selected" : ""}>${statusLabel(status)}</option>`).join("")}</select></td></tr>`;
                 }
                 return `<tr><td>${formatFeePeriod(period)}</td><td>${statusPill(fee.status)}</td></tr>`;
               }).join("")}
@@ -3359,15 +3371,18 @@
     const periods = getFeePeriods();
     const visibleFees = sortedVisibleFees();
     const statuses = availableFeeStatuses();
-    const collectibleRows = visibleFees.filter((fee) => ["paid", "pending"].includes(fee.status));
+    const collectibleRows = visibleFees.filter((fee) => FEE_COLLECTIBLE_STATUSES.includes(fee.status));
     const totalTarget = collectibleRows.reduce((sum, fee) => sum + fee.amount, 0);
     const totalPaid = collectibleRows.reduce((sum, fee) => sum + fee.paidAmount, 0);
+    const collectedCount = collectibleRows.filter((fee) => FEE_PAID_STATUSES.includes(fee.status)).length;
+    const collectibleCount = collectibleRows.length;
+    const missingCount = Math.max(collectibleCount - collectedCount, 0);
     const selectedLabel = currentFeePeriod();
     const currentQuarter = currentQuarterToken();
     const selectedSet = new Set(selectedFeeMemberIds.map(String));
     const visibleMemberIds = Array.from(new Set(visibleFees.map((fee) => String(fee.memberId))));
     const selectedVisibleCount = visibleMemberIds.filter((memberId) => selectedSet.has(memberId)).length;
-    const editableStatuses = ["paid", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"];
+    const editableStatuses = FEE_STATUSES;
 
     return `
       <div class="section-head">
@@ -3386,7 +3401,7 @@
       </div>
       <div class="grid two-up">
         <article class="card finance-summary-card">
-          <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target.</p>
+          <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target. <strong>${collectedCount}/${collectibleCount} collected</strong> (${missingCount} missing)</p>
           <label class="filter-label" style="margin-top: 8px;">Choose fee quarter<select id="fee-period-select">${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
         </article>
       </div>
@@ -3424,7 +3439,7 @@
             <label>
               New status
               <select id="fee-bulk-status-select">
-                ${["paid", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"].map((status) => `<option value="${status}" ${feeBulkStatus === status ? "selected" : ""}>${statusLabel(status)}</option>`).join("")}
+                ${FEE_STATUSES.map((status) => `<option value="${status}" ${feeBulkStatus === status ? "selected" : ""}>${statusLabel(status)}</option>`).join("")}
               </select>
             </label>
             <button id="apply-fee-bulk-status" class="primary-button" type="button" ${selectedVisibleCount ? "" : "disabled"}>Apply to selected (${selectedVisibleCount})</button>
@@ -3448,7 +3463,7 @@
                 </td>
                 <td>
                   ${String(feeInlineEditId) === String(fee.id)
-                    ? `<input type="number" class="fee-row-input fee-row-paid" data-fee-id="${fee.id}" min="0" step="0.01" value="${Number(fee.paidAmount || 0).toFixed(2)}" ${fee.status === "paid" ? "readonly" : ""} />`
+                    ? `<input type="number" class="fee-row-input fee-row-paid" data-fee-id="${fee.id}" min="0" step="0.01" value="${Number(fee.paidAmount || 0).toFixed(2)}" ${["paid", "paid_rookie_fee"].includes(fee.status) ? "readonly" : ""} />`
                     : formatMoney(fee.paidAmount)}
                 </td>
                 <td>
@@ -5242,7 +5257,7 @@
         const amountInput = document.querySelector(`.fee-row-amount[data-fee-id="${feeId}"]`);
         const paidInput = document.querySelector(`.fee-row-paid[data-fee-id="${feeId}"]`);
         if (!amountInput || !paidInput) return;
-        if (select.value === "paid") {
+        if (["paid", "paid_rookie_fee"].includes(select.value)) {
           paidInput.value = amountInput.value;
           paidInput.readOnly = true;
         } else {

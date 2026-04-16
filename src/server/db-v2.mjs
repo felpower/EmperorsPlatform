@@ -136,7 +136,9 @@ function mapFeeStatus(value, { treatBlankAsNotCollected = false } = {}) {
       ? { status: "not_collected", paidCents: 0, note: null }
       : null;
   }
-  if (["paid", "paid with fees", "paid rookie"].includes(normalized)) return { status: "paid", paidCents: 8250, note: null };
+  if (["paid", "paid full"].includes(normalized)) return { status: "paid", paidCents: 8250, note: null };
+  if (["paid rookie", "paid rookie fee"].includes(normalized)) return { status: "paid_rookie_fee", paidCents: 5000, note: null };
+  if (["paid with fee", "paid with fees"].includes(normalized)) return { status: "paid_with_fee", paidCents: 8250, note: null };
   if (["pending", "not paid"].includes(normalized)) return { status: "pending", paidCents: 0, note: null };
   if (["not collected", "not_collected", "notcollected"].includes(normalized)) return { status: "not_collected", paidCents: 0, note: null };
   if (normalized === "exempt") return { status: "exempt", paidCents: 0, note: null };
@@ -149,6 +151,12 @@ function normalizeFeeStatusForUpdate(value) {
   const normalized = String(value || "").trim().toLowerCase();
   const aliases = {
     paid: "paid",
+    paid_rookie_fee: "paid_rookie_fee",
+    "paid rookie fee": "paid_rookie_fee",
+    "paid rookie": "paid_rookie_fee",
+    paid_with_fee: "paid_with_fee",
+    "paid with fee": "paid_with_fee",
+    "paid with fees": "paid_with_fee",
     pending: "pending",
     "not paid": "pending",
     not_collected: "not_collected",
@@ -1183,7 +1191,11 @@ export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }) {
   }
 
   const placeholders = normalizedMemberIds.map(() => "?").join(", ");
-  const paidCentsSql = normalizedStatus === "paid" ? "amount_cents" : normalizedStatus === "partial" ? "paid_cents" : "0";
+  const paidCentsSql = ["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalizedStatus)
+    ? "amount_cents"
+    : normalizedStatus === "partial"
+      ? "paid_cents"
+      : "0";
 
   const result = await run(
     `
@@ -1217,7 +1229,7 @@ export async function updateFeeRecord(feeId, payload) {
   const amountCents = normalizeCurrencyToCents(payload.amount, "Fee amount");
   let paidCents = normalizeCurrencyToCents(payload.paidAmount, "Paid amount");
 
-  if (status === "paid") {
+  if (["paid", "paid_rookie_fee"].includes(status)) {
     paidCents = amountCents;
   } else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(status)) {
     paidCents = 0;

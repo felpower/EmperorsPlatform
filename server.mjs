@@ -152,6 +152,12 @@ function normalizeFeeStatusServer(value) {
   const normalized = String(value || "pending").trim().toLowerCase();
   const aliases = {
     paid: "paid",
+    paid_rookie_fee: "paid_rookie_fee",
+    "paid rookie fee": "paid_rookie_fee",
+    "paid rookie": "paid_rookie_fee",
+    paid_with_fee: "paid_with_fee",
+    "paid with fee": "paid_with_fee",
+    "paid with fees": "paid_with_fee",
     partial: "partial",
     pending: "pending",
     "not paid": "pending",
@@ -305,7 +311,7 @@ async function updateFeeRecordViaAppwriteAdmin(feeId, input) {
   const amountCents = Math.max(0, Math.round(Number(input?.amount || 0) * 100));
   let paidCents = Math.max(0, Math.round(Number(input?.paidAmount || 0) * 100));
 
-  if (normalizedStatus === "paid") paidCents = amountCents;
+  if (["paid", "paid_rookie_fee"].includes(normalizedStatus)) paidCents = amountCents;
   else if (["pending", "not_collected", "exempt", "exit", "not_applicable"].includes(normalizedStatus)) paidCents = 0;
 
   await appwriteAdminRequest(
@@ -338,7 +344,7 @@ async function bulkUpdateFeeStatusViaAppwriteAdmin(input) {
   for (const row of targets) {
     const amountCents = Math.max(0, Number(row?.amount_cents || 0));
     let paidCents = Math.max(0, Number(row?.paid_cents || 0));
-    if (normalizedStatus === "paid") paidCents = amountCents;
+    if (["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalizedStatus)) paidCents = amountCents;
     else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
     else paidCents = 0;
 
@@ -491,7 +497,7 @@ function csvEscape(value) {
 function sepaStatusCellValue(status) {
   const normalized = String(status || "").trim().toLowerCase();
   if (!normalized) return "";
-  if (normalized === "paid") return "Paid";
+  if (["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalized)) return "Paid";
   if (normalized === "exempt") return "Exempt";
   if (normalized === "exit") return "Exit";
   if (normalized === "not_applicable") return "Exempt";
