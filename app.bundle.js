@@ -4406,6 +4406,13 @@
   }
 
   function bindEquipmentActions() {
+    // Use event delegation for equipment sheet tabs to avoid losing handlers on re-render
+    const equipmentSection = document.getElementById("equipment");
+    if (equipmentSection) {
+      equipmentSection.removeEventListener("click", handleEquipmentSheetTabClick);
+      equipmentSection.addEventListener("click", handleEquipmentSheetTabClick);
+    }
+    
     document.querySelectorAll("[data-equipment-sheet]").forEach((button) => {
       button.onclick = function () {
         const sheetKey = String(button.dataset.equipmentSheet || "").trim();
@@ -5266,7 +5273,7 @@
   }
 
   function bindTableSorts() {
-    document.querySelectorAll(".sort-button").forEach((button) => {
+    document.querySelectorAll(".sort-button[data-sort-table][data-sort-key]").forEach((button) => {
       button.onclick = function () {
         const table = button.dataset.sortTable;
         const key = button.dataset.sortKey;
