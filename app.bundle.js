@@ -1044,6 +1044,7 @@
       deletedAt: member.deletedAt || null,
       profileId: member.profileId || null,
       inviteSentAt: member.inviteSentAt || null,
+      activatedAt: member.activatedAt || null,
       passStatus: member.passStatus || "missing",
       passExpiry: member.passExpiry || "",
       licenseName: member.licenseName || "",
@@ -1396,8 +1397,9 @@
   }
 
   function memberInviteState(member) {
+    if (member?.activatedAt) return "activated";
     if (member?.inviteSentAt) return "invited";
-    if (member?.profileId) return "activated";
+    if (member?.profileId) return "activated"; // Fallback for old records without activatedAt
     return "ready";
   }
 
@@ -1433,6 +1435,37 @@
     const profileId = String(authState.user?.id || "").trim();
     if (!profileId) return;
 
+    // Find member(s) by profile_id where invite_sent_at is set
+    const memberQueryResponse = await backendClient
+      .from("members")
+      .select("id, invite_sent_at")
+      .eq("profile_id", profileId)
+      .not("invite_sent_at", "is", null);
+
+    if (memberQueryResponse.error) {
+      if (!/invite_sent_at/i.test(String(memberQueryResponse.error?.message || ""))) {
+        throw memberQueryResponse.error;
+      }
+      return;
+    }
+
+    const members = memberQueryResponse.data || [];
+    for (const member of members) {
+      const memberId = String(member.id || "").trim();
+      if (!memberId) continue;
+
+      // Mark member as activated
+      try {
+        await fetch(apiUrl(`/api/members/${encodeURIComponent(memberId)}/activate`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (error) {
+        console.error("Could not mark member as activated:", error);
+      }
+    }
+
+    // Clear invite_sent_at for this profile
     const updateResponse = await backendClient
       .from("members")
       .update({ invite_sent_at: null })
@@ -1440,10 +1473,9 @@
       .not("invite_sent_at", "is", null);
 
     if (updateResponse.error) {
-      if (/invite_sent_at/i.test(String(updateResponse.error?.message || ""))) {
-        return;
+      if (!/invite_sent_at/i.test(String(updateResponse.error?.message || ""))) {
+        throw updateResponse.error;
       }
-      throw updateResponse.error;
     }
   }
 
@@ -1976,8 +2008,8 @@
       return response.data || [];
     };
 
-    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at");
-    if (memberRowsResponse.error && /invite_sent_at/i.test(String(memberRowsResponse.error?.message || ""))) {
+    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    if (memberRowsResponse.error && /(invite_sent_at|activated_at)/i.test(String(memberRowsResponse.error?.message || ""))) {
       memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
     }
     if (memberRowsResponse.error) {
@@ -2064,6 +2096,7 @@
         deletedAt: row.deleted_at || null,
         profileId: row.profile_id || null,
         inviteSentAt: row.invite_sent_at || null,
+        activatedAt: row.activated_at || null,
         passStatus: normalizePassStatus({
           status: rawPassStatus,
           expiry: passExpiry,
@@ -4315,7 +4348,9 @@
           window.alert("This person already activated their account. No invite is needed.");
           return;
         }
+        const originalButtonHTML = button.innerHTML;
         button.disabled = true;
+        button.innerHTML = `<span class="auth-spinner"></span> Inviting...`;
         try {
           button.blur();
           await inviteMember(member.id);
@@ -4342,6 +4377,7 @@
           });
         } finally {
           button.disabled = false;
+          button.innerHTML = originalButtonHTML;
         }
       };
     });

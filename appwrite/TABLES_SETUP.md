@@ -32,6 +32,7 @@ Recommended extra columns for better parity:
 - notes (string, optional)
 - profile_id (string, optional)
 - invite_sent_at (datetime, optional)
+- activated_at (datetime, optional) - set when member first activates their account
 - deleted_at (datetime, optional)
 
 ## 2) member_roles

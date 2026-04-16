@@ -451,6 +451,22 @@ async function markAppwriteMemberInviteSent(memberId, profileId) {
   );
 }
 
+async function markAppwriteMemberActivated(memberId) {
+  if (!hasAppwriteAdminConfig()) return;
+
+  await appwriteAdminRequest(
+    `/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_MEMBERS_COLLECTION_ID}/documents/${encodeURIComponent(String(memberId || "").trim())}`,
+    {
+      method: "PATCH",
+      body: {
+        data: {
+          activated_at: new Date().toISOString()
+        }
+      }
+    }
+  );
+}
+
 async function sendAppwriteInvite({ email, fullName, req }) {
   if (!hasAppwriteAdminConfig()) {
     throw new Error("Set APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY, and APPWRITE_DATABASE_ID on the server to send invites.");
@@ -809,6 +825,26 @@ app.post("/api/auth/invites", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : "Could not send invitation."
+    });
+  }
+});
+
+app.post("/api/members/:memberId/activate", async (req, res) => {
+  try {
+    if (hasAppwriteAdminConfig()) {
+      const memberId = String(req.params.memberId || "").trim();
+      if (!memberId) {
+        res.status(400).json({ error: "memberId is required." });
+        return;
+      }
+      await markAppwriteMemberActivated(memberId);
+      res.json({ ok: true, memberId });
+      return;
+    }
+    res.status(503).json({ error: "Server not configured. Appwrite admin key missing." });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Could not mark member as activated."
     });
   }
 });
