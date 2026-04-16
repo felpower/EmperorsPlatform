@@ -1125,7 +1125,7 @@
         quantity: initial.quantity || "",
         condition: initial.condition || "",
         location: initial.location || "",
-        checkedAt: initial.checkedAt || "",
+        checkedAt: initial.checkedAt ? normalizeToIsoDate(initial.checkedAt) : (initial.id ? "" : getTodayIsoDate()),
         notes: initial.notes || ""
       },
       0
@@ -1166,7 +1166,7 @@
       quantity: String(item?.quantity || "").trim(),
       condition: String(item?.condition || "").trim(),
       location: String(item?.location || "").trim(),
-      checkedAt: String(item?.checkedAt || "").trim(),
+      checkedAt: normalizeToIsoDate(item?.checkedAt),
       notes: String(item?.notes || "").trim()
     };
   }
@@ -1542,6 +1542,36 @@
     const year = Number(text.slice(0, 4));
     if (!Number.isFinite(year) || year < 2020) return "";
     return text;
+  }
+
+  function normalizeToIsoDate(dateValue) {
+    if (!dateValue) return "";
+    const text = String(dateValue || "").trim();
+    
+    // Already ISO format (YYYY-MM-DD)
+    if (isIsoDateText(text)) {
+      return text;
+    }
+
+    // Try parsing as Date object
+    const date = new Date(text);
+    if (!Number.isNaN(date.getTime())) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    // Couldn't normalize, return empty
+    return "";
+  }
+
+  function getTodayIsoDate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function formatFeePeriod(period) {
@@ -3677,7 +3707,7 @@
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
-            <td>${item.checkedAt || "-"}</td>
+            <td>${formatDate(item.checkedAt)}</td>
             <td>${item.notes || "-"}</td>
             ${canEdit
               ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
