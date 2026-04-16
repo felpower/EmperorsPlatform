@@ -3995,6 +3995,46 @@
     }
   }
 
+  function bindMobileMenu() {
+    const menuToggle = document.getElementById("menu-toggle");
+    const sidebar = document.querySelector(".sidebar");
+    const sidebarOverlay = document.getElementById("sidebar-overlay");
+
+    if (!menuToggle || !sidebar) return;
+
+    const closeMenu = () => {
+      menuToggle.classList.remove("open");
+      sidebar.classList.remove("open");
+      sidebarOverlay.classList.remove("open");
+    };
+
+    const openMenu = () => {
+      menuToggle.classList.add("open");
+      sidebar.classList.add("open");
+      sidebarOverlay.classList.add("open");
+    };
+
+    menuToggle.onclick = () => {
+      if (sidebar.classList.contains("open")) {
+        closeMenu();
+      } else {
+        openMenu();
+      }
+    };
+
+    if (sidebarOverlay) {
+      sidebarOverlay.onclick = closeMenu;
+    }
+
+    // Close menu when a nav link is clicked
+    document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
+      link.addEventListener("click", closeMenu);
+    });
+
+    // Close menu when view changes
+    window.addEventListener("hashchange", closeMenu);
+  }
+
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
     viewIds.forEach((viewId) => {
@@ -5964,6 +6004,7 @@
 
   bindNavigation();
   bindButtonFeedback();
+  bindMobileMenu();
   window.addEventListener("hashchange", function () {
     updateNavigationVisibility();
     switchView(getRouteView());
