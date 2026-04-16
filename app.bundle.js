@@ -42,11 +42,8 @@
   ];
   const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
   const MAX_AVATAR_DIMENSION = 1280;
-  const DEFAULT_PROFILE_AVATAR_URL = String(
-    APPWRITE_CONFIG?.fallbackProfileImageUrl ||
-    "https://fra.cloud.appwrite.io/v1/storage/buckets/ProfilePictures/files/69de561b001bd1c509de/view?project=69dd0fdd00336ea1b4b5&mode=admin"
-  ).trim();
   const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
+  const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
 
   const backendClient =
     window.ClubHubDataClient && typeof window.ClubHubDataClient.createClient === "function"
@@ -201,9 +198,8 @@
   }
 
   function avatarFallbackOnErrorAttr() {
-    const fallbackUrl = DEFAULT_PROFILE_AVATAR_URL.replaceAll("\"", "&quot;");
     const inlineFallback = INLINE_AVATAR_PLACEHOLDER.replaceAll("\"", "&quot;");
-    return `var backup=&quot;${fallbackUrl}&quot;;var inline=&quot;${inlineFallback}&quot;;if(this.dataset.avatarFallbackApplied===\"1\"){this.onerror=null;this.src=inline;return;}this.dataset.avatarFallbackApplied=\"1\";this.src=backup;`;
+    return `this.src=&quot;${inlineFallback}&quot;;this.onerror=null;`;
   }
 
   async function uploadProfileAvatarToStorage(file) {
@@ -252,7 +248,8 @@
       const localAvatar = loadProfileAvatar();
       if (localAvatar) return localAvatar;
     }
-    return DEFAULT_PROFILE_AVATAR_URL || INLINE_AVATAR_PLACEHOLDER;
+    if (DEFAULT_PROFILE_AVATAR_URL) return DEFAULT_PROFILE_AVATAR_URL;
+    return INLINE_AVATAR_PLACEHOLDER;
   }
 
   function profileAvatarStorageKey() {
