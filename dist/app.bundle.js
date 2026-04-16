@@ -78,7 +78,10 @@
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
   let passFilters = loadPassFilters();
-  let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "training");
+  let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
+  let equipmentInlineEditId = "";
+  let equipmentInlineDraftById = {};
+  let equipmentCreateDraft = null;
   let passSyncPreview = null;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
@@ -99,9 +102,44 @@
   let buttonFeedbackBound = false;
   let equipmentStorageMode = "local";
   let equipmentStatus = "";
+  let isSyncing = false;
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v1";
+  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v1";
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function getCacheWithTTL(key) {
+    try {
+      const cached = localStorage.getItem(key);
+      if (!cached) return null;
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp > CACHE_TTL) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function setCacheWithTTL(key, data) {
+    try {
+      localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
+    } catch (error) {
+      console.warn("[Cache] Failed to save cache:", error);
+    }
+  }
+
+  function invalidateCache(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Ignore
+    }
   }
 
   function apiUrl(path) {
@@ -461,7 +499,8 @@
     return {
       members: { key: "lastName", direction: "asc" },
       fees: { key: "member", direction: "asc" },
-      passes: { key: "firstName", direction: "asc" }
+      passes: { key: "firstName", direction: "asc" },
+      equipment: { key: "article", direction: "asc" }
     };
   }
 
@@ -473,7 +512,8 @@
       return {
         members: parsed?.members || defaultTableSort().members,
         fees: parsed?.fees || defaultTableSort().fees,
-        passes: parsed?.passes || defaultTableSort().passes
+        passes: parsed?.passes || defaultTableSort().passes,
+        equipment: parsed?.equipment || defaultTableSort().equipment
       };
     } catch {
       return defaultTableSort();
@@ -549,7 +589,16 @@
     return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   }
 
+  function isLocalhostAuthBypassEnabled() {
+    return isLocalDevHost() && window.ClubHubLocalhostAuthBypass !== false;
+  }
+
+  function isLocalPreviewMode() {
+    return isLocalhostAuthBypassEnabled() && !authState.user;
+  }
+
   function shouldRequireAuth() {
+    if (isLocalhostAuthBypassEnabled()) return false;
     const hasAppwriteConfig = Boolean(
       APPWRITE_CONFIG &&
       String(APPWRITE_CONFIG.projectId || "").trim() &&
@@ -619,7 +668,9 @@
     }
     currentAccessRole = loadStoredValue(ACCESS_KEY, "admin");
     authState.mode = backendClient ? "remote" : "local";
-    authState.status = shouldRequireAuth()
+    authState.status = isLocalPreviewMode()
+      ? "Local preview mode active. Choose Admin or Athlete to test without sign-in."
+      : shouldRequireAuth()
       ? "Sign in with email and password to continue."
       : (window.location.hostname.includes("localhost") || window.location.hostname === "127.0.0.1"
         ? "Local database mode active."
@@ -1040,7 +1091,7 @@
     if (EQUIPMENT_SHEETS.some((sheet) => sheet.key === normalized)) {
       return normalized;
     }
-    return "training";
+    return "all";
   }
 
   function equipmentSheetLabel(sheetKey) {
@@ -1053,6 +1104,30 @@
     const normalized = resolveEquipmentSheetKey(sheetKey);
     if (normalized === "all") return "Training";
     return equipmentSheetLabel(normalized);
+  }
+
+  function equipmentGroupOptions() {
+    const defaults = ["Training", "Gameday", "Technik"];
+    const fromRows = Array.from(new Set((state.equipment || []).map((item) => String(item.group || "").trim()).filter(Boolean)));
+    const all = Array.from(new Set([...defaults, ...fromRows]));
+    return all.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+  }
+
+  function createEquipmentDraft(initial = {}, fallbackGroup = "Training") {
+    return normalizeEquipmentItem(
+      {
+        id: initial.id || generateEquipmentId(),
+        group: initial.group || fallbackGroup,
+        category: initial.category || "",
+        article: initial.article || "",
+        quantity: initial.quantity || "",
+        condition: initial.condition || "",
+        location: initial.location || "",
+        checkedAt: initial.checkedAt || "",
+        notes: initial.notes || ""
+      },
+      0
+    );
   }
 
   function equipmentSheetRows(rows, sheetKey) {
@@ -2075,6 +2150,60 @@
     }
   }
 
+  async function loadBootstrapDataWithCache() {
+    // Try cache first
+    const cached = getCacheWithTTL(BOOTSTRAP_CACHE_KEY);
+    if (cached) {
+      applyBootstrap(cached);
+      return;
+    }
+
+    // Load from source and cache
+    await loadBootstrapData();
+
+    // Cache the loaded state
+    setCacheWithTTL(BOOTSTRAP_CACHE_KEY, {
+      members: state.members,
+      fees: state.fees,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel
+    });
+  }
+
+  async function loadEquipmentDataWithCache() {
+    // Try cache first
+    const cached = getCacheWithTTL(EQUIPMENT_CACHE_KEY);
+    if (cached) {
+      state.equipment = cached;
+      return;
+    }
+
+    // Load from source and cache
+    await loadEquipmentData();
+
+    // Cache the loaded equipment
+    setCacheWithTTL(EQUIPMENT_CACHE_KEY, state.equipment);
+  }
+
+  async function backgroundLoadData() {
+    try {
+      isSyncing = true;
+      renderHeroNotice(); // Update syncing indicator
+      await loadBootstrapDataWithCache();
+      await loadEquipmentDataWithCache();
+      isSyncing = false;
+      renderHeroNotice(); // Remove syncing indicator
+      mount(); // Re-render with new data
+    } catch (error) {
+      console.error("[Background Load] Failed:", error);
+      isSyncing = false;
+      renderHeroNotice();
+    }
+  }
+
   async function loadBootstrapData() {
     // Pure Appwrite only
     if (backendClient && authState.user) {
@@ -2086,6 +2215,16 @@
 
   async function loadLocalBootstrap() {
     // Pure Appwrite - no local API
+    if (isLocalPreviewMode()) {
+      authState.status = "Local preview mode active. Role controls are available in the header.";
+      bootstrapMeta = {
+        source: state.source || "demo",
+        permissionsModel: state.permissionsModel || demoData.permissionsModel
+      };
+      ensureValidFeeFilter();
+      return;
+    }
+
     if (!backendClient) {
       authState.status = "Static demo mode. No data persistence.";
       bootstrapMeta = {
@@ -2345,6 +2484,7 @@
         if (passResponse.error) throw passResponse.error;
       }
 
+      invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
     } catch (error) {
       console.error("[Appwrite Save Failed]", error);
@@ -2359,6 +2499,7 @@
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", memberId);
     if (response.error) throw response.error;
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
   }
 
@@ -2366,6 +2507,7 @@
     if (!backendClient) throw new Error("Appwrite client not available.");
     const response = await backendClient.from("members").update({ deleted_at: null }).eq("id", memberId);
     if (response.error) throw response.error;
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
   }
 
@@ -2398,6 +2540,7 @@
     const deleteMember = await backendClient.from("members").delete().eq("id", removeId);
     if (deleteMember.error) throw deleteMember.error;
 
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
   }
 
@@ -2431,6 +2574,7 @@
         if (update.error) throw update.error;
       }
 
+      invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
     } catch (error) {
       if (isPermissionDeniedError(error)) {
@@ -2464,6 +2608,7 @@
         .eq("id", String(feeId || ""));
       if (response.error) throw response.error;
 
+      invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
     } catch (error) {
       if (isPermissionDeniedError(error)) {
@@ -2679,6 +2824,7 @@
   async function applyClubeePassSync(memberIds) {
     const functionPayload = await invokePassSyncFunction({ mode: "apply", memberIds });
     if (functionPayload) {
+      invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
       return functionPayload.passSyncApply || null;
     }
@@ -2704,6 +2850,7 @@
     if (Array.isArray(payload?.members) || Array.isArray(payload?.fees)) {
       applyBootstrap(payload);
     } else {
+      invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
     }
     return payload.passSyncApply || null;
@@ -2754,11 +2901,24 @@
   function renderHeroNotice() {
     const heroActions = document.querySelector(".hero-actions");
     if (!heroActions) return;
-    const signedInLabel = authState.user ? authDisplayName() || authState.user.email : "Not signed in";
+    const signedInLabel = authState.user ? authDisplayName() || authState.user.email : "Local preview";
+    const roleOptions = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
+    const isLocalhost = isLocalhostAuthBypassEnabled();
+    const dataSourceLabel = authState.user ? "Appwrite live" : "Local preview";
     heroActions.innerHTML = `
       <div class="hero-stack">
         <div class="toolbar-row">
-          ${authState.user ? `<div class="role-switcher"><span>Signed in</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : ""}
+          ${authState.user || isLocalPreviewMode() ? `<div class="role-switcher"><span>${authState.user ? "Signed in" : "Local mode"}</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : ""}
+          ${isLocalhostAuthBypassEnabled() ? `
+            <label class="role-switcher" for="localhost-role-select" style="gap:6px;">
+              <span>Preview as</span>
+              <select id="localhost-role-select" data-no-toast="true">
+                ${roleOptions.map((role) => `<option value="${role}" ${currentAccessRole === role ? "selected" : ""}>${roleLabel(role)}</option>`).join("")}
+              </select>
+            </label>
+          ` : ""}
+          ${isSyncing ? `<div class="syncing-indicator"><span class="sync-dot"></span>Syncing...</div>` : ""}
+          ${isLocalhost ? `<div class="data-source-badge">Data source: <strong>${dataSourceLabel}</strong></div>` : ""}
         </div>
       </div>
     `;
@@ -3429,11 +3589,76 @@
       saveEquipmentSheetKey(activeSheet);
     }
     const visibleRows = equipmentSheetRows(rows, activeSheet);
+    const sortedRows = sortRows(visibleRows, "equipment", (item, key) => {
+      if (key === "group") return String(item.group || "");
+      if (key === "article") return String(item.article || "");
+      if (key === "condition") return String(item.condition || "");
+      if (key === "location") return String(item.location || "");
+      if (key === "checkedAt") return String(item.checkedAt || "");
+      if (key === "notes") return String(item.notes || "");
+      if (key === "quantity") {
+        const numeric = Number(String(item.quantity || "").replace(/[^\d.-]/g, ""));
+        return Number.isFinite(numeric) ? numeric : String(item.quantity || "");
+      }
+      return String(item.article || "");
+    });
     const showGroupColumn = activeSheet === "all";
     const sheetTabs = equipmentSheetCounts(rows)
       .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
       .join("");
     const canEdit = currentAccessRole === "admin";
+    const groupOptions = equipmentGroupOptions();
+    const createDraft = equipmentCreateDraft
+      ? createEquipmentDraft(equipmentCreateDraft, equipmentSheetPromptDefaultGroup(activeSheet))
+      : null;
+
+    const renderGroupSelect = (selectedGroup, mode, itemId = "") => `
+      <select class="equipment-inline-input" data-mode="${mode}" data-field="group" ${itemId ? `data-equipment-id="${itemId}"` : ""}>
+        ${groupOptions.map((groupName) => `<option value="${groupName.replaceAll('"', '&quot;')}" ${String(selectedGroup || "").toLowerCase() === groupName.toLowerCase() ? "selected" : ""}>${groupName}</option>`).join("")}
+      </select>
+    `;
+
+    const renderEditCell = (itemId, field, value, type = "text", placeholder = "") => `<input class="equipment-inline-input" data-mode="edit" data-equipment-id="${itemId}" data-field="${field}" type="${type}" value="${String(value || "").replaceAll('"', '&quot;')}" placeholder="${placeholder}" />`;
+    const renderCreateCell = (field, value, type = "text", placeholder = "") => `<input class="equipment-inline-input" data-mode="create" data-field="${field}" type="${type}" value="${String(value || "").replaceAll('"', '&quot;')}" placeholder="${placeholder}" />`;
+
+    const rowsHtml = sortedRows.map((item) => {
+      const isEditing = canEdit && String(equipmentInlineEditId || "") === String(item.id || "");
+      const draft = isEditing ? createEquipmentDraft(equipmentInlineDraftById[item.id] || item, item.group || equipmentSheetPromptDefaultGroup(activeSheet)) : item;
+      if (!isEditing) {
+        return `
+          <tr>
+            ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
+            <td><strong>${item.article || "-"}</strong></td>
+            <td>${item.quantity || "-"}</td>
+            <td>${item.condition || "-"}</td>
+            <td>${item.location || "-"}</td>
+            <td>${item.checkedAt || "-"}</td>
+            <td>${item.notes || "-"}</td>
+            ${canEdit
+              ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
+              : ""}
+          </tr>
+        `;
+      }
+
+      return `
+        <tr class="equipment-inline-edit-row">
+          ${showGroupColumn ? `<td>${renderGroupSelect(draft.group, "edit", item.id)}</td>` : ""}
+          <td>${renderEditCell(item.id, "article", draft.article, "text", "Required")}</td>
+          <td>${renderEditCell(item.id, "quantity", draft.quantity)}</td>
+          <td>${renderEditCell(item.id, "condition", draft.condition)}</td>
+          <td>${renderEditCell(item.id, "location", draft.location)}</td>
+          <td>${renderEditCell(item.id, "checkedAt", draft.checkedAt, "date")}</td>
+          <td>${renderEditCell(item.id, "notes", draft.notes)}</td>
+          <td>
+            <div class="action-row">
+              <button type="button" class="primary-button small-button equipment-save-inline-button" data-equipment-id="${item.id}" data-no-toast="true">Save</button>
+              <button type="button" class="ghost-button small-button equipment-cancel-inline-button" data-equipment-id="${item.id}" data-no-toast="true">Cancel</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
 
     return `
       <div class="section-head">
@@ -3447,6 +3672,24 @@
         </div>
       </div>
       ${equipmentStatus ? `<article class="card" style="margin-bottom: 12px;"><p class="meta">${equipmentStatus}</p></article>` : ""}
+      ${canEdit && createDraft ? `
+        <article class="card" style="margin-bottom: 12px;">
+          <p class="eyebrow">Add equipment</p>
+          <div class="form-grid" style="margin-bottom: 10px;">
+            <label>Group ${renderGroupSelect(createDraft.group, "create")}</label>
+            <label>Article ${renderCreateCell("article", createDraft.article, "text", "Required")}</label>
+            <label>Quantity ${renderCreateCell("quantity", createDraft.quantity)}</label>
+            <label>Condition ${renderCreateCell("condition", createDraft.condition)}</label>
+            <label>Location ${renderCreateCell("location", createDraft.location)}</label>
+            <label>Last checked ${renderCreateCell("checkedAt", createDraft.checkedAt, "date")}</label>
+            <label>Notes ${renderCreateCell("notes", createDraft.notes)}</label>
+          </div>
+          <div class="button-row">
+            <button id="equipment-save-create" type="button" class="primary-button" data-no-toast="true">Save item</button>
+            <button id="equipment-cancel-create" type="button" class="ghost-button" data-no-toast="true">Cancel</button>
+          </div>
+        </article>
+      ` : ""}
       <div class="card" style="margin-bottom: 12px;">
         <div class="button-row equipment-sheet-tabs" style="margin-bottom: 0;">
           ${sheetTabs}
@@ -3456,33 +3699,18 @@
         <table>
           <thead>
             <tr>
-              ${showGroupColumn ? "<th>Group</th>" : ""}
-              <th>Category</th>
-              <th>Article</th>
-              <th>Quantity</th>
-              <th>Condition</th>
-              <th>Location</th>
-              <th>Last checked</th>
-              <th>Notes</th>
+              ${showGroupColumn ? `<th>${renderSortButton("equipment", "group", "Group")}</th>` : ""}
+              <th>${renderSortButton("equipment", "article", "Article")}</th>
+              <th>${renderSortButton("equipment", "quantity", "Quantity")}</th>
+              <th>${renderSortButton("equipment", "condition", "Condition")}</th>
+              <th>${renderSortButton("equipment", "location", "Location")}</th>
+              <th>${renderSortButton("equipment", "checkedAt", "Last checked")}</th>
+              <th>${renderSortButton("equipment", "notes", "Notes")}</th>
               ${canEdit ? "<th>Actions</th>" : ""}
             </tr>
           </thead>
           <tbody>
-            ${visibleRows.map((item) => `
-              <tr>
-                ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-                <td>${item.category || "-"}</td>
-                <td><strong>${item.article || "-"}</strong></td>
-                <td>${item.quantity || "-"}</td>
-                <td>${item.condition || "-"}</td>
-                <td>${item.location || "-"}</td>
-                <td>${item.checkedAt || "-"}</td>
-                <td>${item.notes || "-"}</td>
-                ${canEdit
-                  ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}">Delete</button></div></td>`
-                  : ""}
-              </tr>
-            `).join("") || `<tr><td colspan="${canEdit ? (showGroupColumn ? 9 : 8) : (showGroupColumn ? 8 : 7)}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6)}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -3621,7 +3849,7 @@
   }
 
   function updateNavigationVisibility() {
-    const signedIn = Boolean(authState.user);
+    const signedIn = Boolean(authState.user) || isLocalPreviewMode();
     document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
       const viewId = String(link.dataset.view || "").trim();
       const visible = signedIn && canAccessView(viewId);
@@ -3642,9 +3870,23 @@
       profileNavButton.classList.remove("active");
     }
     if (logoutNavButton) {
-      logoutNavButton.style.display = signedIn ? "block" : "none";
+      logoutNavButton.style.display = authState.user ? "block" : "none";
       logoutNavButton.classList.remove("active");
     }
+  }
+
+  function bindLocalPreviewActions() {
+    const roleSelect = document.getElementById("localhost-role-select");
+    if (!roleSelect) return;
+    roleSelect.onchange = function () {
+      const selected = String(roleSelect.value || "").trim().toLowerCase();
+      const allowed = new Set(["admin", "coach", "finance_admin", "tech_admin", "player", "staff"]);
+      currentAccessRole = allowed.has(selected) ? selected : "player";
+      saveStoredValue(ACCESS_KEY, currentAccessRole);
+      authState.status = `Local preview role switched to ${roleLabel(currentAccessRole)}.`;
+      mount();
+      switchView(resolveAllowedView(getRouteView()));
+    };
   }
 
   function bindNavigation() {
@@ -3665,6 +3907,16 @@
     if (profileNavButton) {
       profileNavButton.onclick = function () {
         if (!authState.user) {
+          if (isLocalPreviewMode()) {
+            profileRouteMode = "member";
+            if (!selectedUserMemberId && state.members.length) {
+              selectedUserMemberId = String(state.members[0].id || "");
+            }
+            window.location.hash = "user";
+            mount();
+            switchView("user");
+            return;
+          }
           window.location.hash = "dashboard";
           mount();
           switchView("dashboard");
@@ -4413,6 +4665,7 @@
     const sheetKey = String(button.dataset.equipmentSheet || "").trim();
     if (!sheetKey) return;
 
+    equipmentInlineEditId = "";
     saveEquipmentSheetKey(sheetKey);
     mount();
     switchView("equipment");
@@ -4425,29 +4678,29 @@
       equipmentSection.removeEventListener("click", handleEquipmentSheetTabClick);
       equipmentSection.addEventListener("click", handleEquipmentSheetTabClick);
     }
-    
-    document.querySelectorAll("[data-equipment-sheet]").forEach((button) => {
-      button.onclick = function () {
-        const sheetKey = String(button.dataset.equipmentSheet || "").trim();
-        if (!sheetKey) return;
-        saveEquipmentSheetKey(sheetKey);
-        mount();
-        switchView("equipment");
-      };
-    });
 
     const addButton = document.getElementById("equipment-add-item");
     if (addButton) {
-      addButton.onclick = async function () {
+      addButton.onclick = function () {
         if (currentAccessRole !== "admin") return;
-        const draft = promptEquipmentRow({ group: equipmentSheetPromptDefaultGroup(selectedEquipmentSheet) });
-        if (!draft) return;
-        if (!draft.article) {
+        equipmentInlineEditId = "";
+        equipmentCreateDraft = createEquipmentDraft({}, equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+        mount();
+        switchView("equipment");
+      };
+    }
+
+    const saveCreateButton = document.getElementById("equipment-save-create");
+    if (saveCreateButton) {
+      saveCreateButton.onclick = async function () {
+        if (currentAccessRole !== "admin" || !equipmentCreateDraft) return;
+        if (!String(equipmentCreateDraft.article || "").trim()) {
           showToast("Article is required.", "error");
           return;
         }
         try {
-          await upsertEquipmentRow(draft);
+          await upsertEquipmentRow(equipmentCreateDraft);
+          equipmentCreateDraft = null;
           showToast("Equipment item added.", "success");
           mount();
           switchView("equipment");
@@ -4457,26 +4710,93 @@
       };
     }
 
+    const cancelCreateButton = document.getElementById("equipment-cancel-create");
+    if (cancelCreateButton) {
+      cancelCreateButton.onclick = function () {
+        equipmentCreateDraft = null;
+        mount();
+        switchView("equipment");
+      };
+    }
+
+    document.querySelectorAll(".equipment-inline-input").forEach((input) => {
+      input.oninput = function () {
+        const mode = String(input.dataset.mode || "").trim();
+        const field = String(input.dataset.field || "").trim();
+        const value = String(input.value || "");
+        if (!field) return;
+
+        if (mode === "create") {
+          equipmentCreateDraft = createEquipmentDraft({ ...(equipmentCreateDraft || {}), [field]: value }, equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+          return;
+        }
+
+        if (mode === "edit") {
+          const rowId = String(input.dataset.equipmentId || "").trim();
+          if (!rowId) return;
+          const currentRow = (state.equipment || []).find((item) => String(item.id) === rowId);
+          if (!currentRow) return;
+          const currentDraft = equipmentInlineDraftById[rowId] || createEquipmentDraft(currentRow, currentRow.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+          equipmentInlineDraftById = {
+            ...equipmentInlineDraftById,
+            [rowId]: createEquipmentDraft({ ...currentDraft, [field]: value }, currentDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet))
+          };
+        }
+      };
+    });
+
     document.querySelectorAll(".equipment-edit-button").forEach((button) => {
-      button.onclick = async function () {
+      button.onclick = function () {
         if (currentAccessRole !== "admin") return;
         const rowId = String(button.dataset.equipmentId || "").trim();
         const currentRow = (state.equipment || []).find((item) => String(item.id) === rowId);
         if (!currentRow) return;
-        const draft = promptEquipmentRow(currentRow);
+        equipmentCreateDraft = null;
+        equipmentInlineEditId = rowId;
+        equipmentInlineDraftById = {
+          ...equipmentInlineDraftById,
+          [rowId]: createEquipmentDraft(currentRow, currentRow.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet))
+        };
+        mount();
+        switchView("equipment");
+      };
+    });
+
+    document.querySelectorAll(".equipment-save-inline-button").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const rowId = String(button.dataset.equipmentId || "").trim();
+        if (!rowId) return;
+        const draft = equipmentInlineDraftById[rowId];
         if (!draft) return;
-        if (!draft.article) {
+        if (!String(draft.article || "").trim()) {
           showToast("Article is required.", "error");
           return;
         }
         try {
           await upsertEquipmentRow(draft);
+          equipmentInlineEditId = "";
+          const { [rowId]: _removed, ...restDrafts } = equipmentInlineDraftById;
+          equipmentInlineDraftById = restDrafts;
           showToast("Equipment item updated.", "success");
           mount();
           switchView("equipment");
         } catch (error) {
           showToast(error?.message || "Could not update equipment item.", "error");
         }
+      };
+    });
+
+    document.querySelectorAll(".equipment-cancel-inline-button").forEach((button) => {
+      button.onclick = function () {
+        const rowId = String(button.dataset.equipmentId || "").trim();
+        equipmentInlineEditId = "";
+        if (rowId) {
+          const { [rowId]: _removed, ...restDrafts } = equipmentInlineDraftById;
+          equipmentInlineDraftById = restDrafts;
+        }
+        mount();
+        switchView("equipment");
       };
     });
 
@@ -4489,6 +4809,11 @@
         if (!window.confirm(`Delete equipment item '${currentRow.article || currentRow.id}'?`)) return;
         try {
           await deleteEquipmentRow(rowId);
+          if (equipmentInlineEditId === rowId) {
+            equipmentInlineEditId = "";
+          }
+          const { [rowId]: _removed, ...restDrafts } = equipmentInlineDraftById;
+          equipmentInlineDraftById = restDrafts;
           showToast("Equipment item deleted.", "success");
           mount();
           switchView("equipment");
@@ -5534,6 +5859,7 @@
       const visibleIds = new Set(sortedVisibleFees().map((fee) => String(fee.memberId)));
       selectedFeeMemberIds = selectedFeeMemberIds.filter((memberId) => visibleIds.has(String(memberId)));
       renderHeroNotice();
+      bindLocalPreviewActions();
       document.getElementById("dashboard").innerHTML = renderDashboard();
       bindDashboardActions();
       document.getElementById("members").innerHTML = renderMembers();
@@ -5604,8 +5930,8 @@
       syncAuthSession(session || null);
       Promise.resolve()
         .then(() => promoteInvitedMemberOnFirstSignIn())
-        .then(() => loadBootstrapData())
-        .then(() => loadEquipmentData())
+        .then(() => loadBootstrapDataWithCache())
+        .then(() => loadEquipmentDataWithCache())
         .then(() => mount())
         .catch((error) => {
           authState.status = error.message;
@@ -5616,12 +5942,18 @@
     syncAuthSession(null);
   }
   try {
-    await loadBootstrapData();
-    await loadEquipmentData();
+    await loadBootstrapDataWithCache();
+    await loadEquipmentDataWithCache();
   } catch (error) {
     authState.status = error?.message || "Startup failed while loading remote data.";
   }
   mount();
+
+  // Background sync for fresh data
+  if (backendClient && authState.user) {
+    setTimeout(() => backgroundLoadData(), 2000);
+  }
+
   unregisterServiceWorkers();
 
   // Debug utilities exposed to window for troubleshooting
