@@ -1200,6 +1200,7 @@
   function saveEquipmentToStorage(rows) {
     const normalizedRows = sortEquipmentRows(rows);
     localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(normalizedRows));
+    setCacheWithTTL(EQUIPMENT_CACHE_KEY, normalizedRows);
     state.equipment = normalizedRows;
     saveState();
   }
@@ -1507,7 +1508,8 @@
 
   function formatDate(dateText) {
     if (!dateText) return "-";
-    const date = new Date(dateText);
+    const normalized = normalizeToIsoDate(dateText) || String(dateText || "").trim();
+    const date = new Date(normalized);
     if (Number.isNaN(date.getTime())) return String(dateText);
     return new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
   }
@@ -1553,7 +1555,22 @@
       return text;
     }
 
-    // Try parsing as Date object
+    // Try parsing D.M.YYYY / DD.MM.YYYY / D.M.YY and similar separators.
+    const localMatch = text.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2}|\d{4})\.?$/);
+    if (localMatch) {
+      const dayNum = Number(localMatch[1]);
+      const monthNum = Number(localMatch[2]);
+      const yearRaw = localMatch[3];
+      const yearNum = yearRaw.length === 2 ? 2000 + Number(yearRaw) : Number(yearRaw);
+      if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12 && yearNum >= 1900 && yearNum <= 2100) {
+        const day = String(dayNum).padStart(2, "0");
+        const month = String(monthNum).padStart(2, "0");
+        const year = String(yearNum);
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    // Try parsing as Date object for remaining browser-supported formats
     const date = new Date(text);
     if (!Number.isNaN(date.getTime())) {
       const year = date.getFullYear();
@@ -2305,6 +2322,7 @@
   }
 
   function mapEquipmentRowFromRemote(row, index) {
+    const checkedAt = row?.checked_at ?? row?.checkedAt ?? row?.checkedDate ?? row?.last_checked ?? "";
     return normalizeEquipmentItem(
       {
         id: row?.id,
@@ -2314,7 +2332,7 @@
         quantity: row?.quantity,
         condition: row?.condition,
         location: row?.location,
-        checkedAt: row?.checked_at,
+        checkedAt,
         notes: row?.notes
       },
       index
@@ -2379,12 +2397,14 @@
 
     const normalizedRow = normalizeEquipmentItem({ ...row, id: row?.id || generateEquipmentId() }, 0);
 
-    if (backendClient && authState.user && equipmentStorageMode === "remote") {
+    if (backendClient && authState.user) {
       const remotePayload = mapEquipmentRowToRemote(normalizedRow);
       const response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
       if (response.error) {
         throw response.error;
       }
+      equipmentStorageMode = "remote";
+      equipmentStatus = "";
     }
 
     const currentRows = Array.isArray(state.equipment) ? state.equipment : [];
@@ -2403,11 +2423,13 @@
     const normalizedId = String(equipmentId || "").trim();
     if (!normalizedId) return;
 
-    if (backendClient && authState.user && equipmentStorageMode === "remote") {
+    if (backendClient && authState.user) {
       const response = await backendClient.from("equipment_inventory").delete().eq("id", normalizedId);
       if (response.error) {
         throw response.error;
       }
+      equipmentStorageMode = "remote";
+      equipmentStatus = "";
     }
 
     const nextRows = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.id) !== normalizedId);

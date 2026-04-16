@@ -271,6 +271,14 @@
     return sanitized;
   }
 
+  function sanitizeNonMembersPayload(payload) {
+    const sanitized = clone(payload || {});
+    // Appwrite document ids must be passed as documentId, never as data attributes.
+    delete sanitized.id;
+    delete sanitized.$id;
+    return sanitized;
+  }
+
   class Builder {
     constructor(tableName) {
       this.tableName = String(tableName || "");
@@ -377,8 +385,12 @@
           const tableId = tableIdFor(this.tableName);
           const created = [];
           for (const row of this.payload || []) {
-            const payload = this.tableName === "members" ? sanitizeMembersPayload(row || {}, { forInsert: true }) : clone(row || {});
-            const inserted = await dbApi.createRow(String(config.databaseId), tableId, ID.unique(), payload);
+            const rawRow = row || {};
+            const payload = this.tableName === "members"
+              ? sanitizeMembersPayload(rawRow, { forInsert: true })
+              : sanitizeNonMembersPayload(rawRow);
+            const requestedDocumentId = String(rawRow.id || rawRow.$id || "").trim();
+            const inserted = await dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
             created.push(this.tableName === "members" ? normalizeMembersRow(inserted) : Object.assign({}, inserted, { id: inserted.$id || inserted.id }));
           }
           data = created;
@@ -387,7 +399,9 @@
           const rows = await this.fetchRows();
           const updated = [];
           for (const row of rows) {
-            const payload = this.tableName === "members" ? sanitizeMembersPayload(this.payload || {}) : clone(this.payload || {});
+            const payload = this.tableName === "members"
+              ? sanitizeMembersPayload(this.payload || {})
+              : sanitizeNonMembersPayload(this.payload || {});
             const next = await dbApi.updateRow(String(config.databaseId), tableId, String(row.$id || row.id), payload);
             updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
           }
@@ -409,10 +423,13 @@
               return String(rowValue(row, conflictField) || "") === String(rowValue(this.payload || {}, conflictField) || "");
             }, this);
           }
-          const payload = this.tableName === "members" ? sanitizeMembersPayload(this.payload || {}, { forInsert: !target }) : clone(this.payload || {});
+          const payload = this.tableName === "members"
+            ? sanitizeMembersPayload(this.payload || {}, { forInsert: !target })
+            : sanitizeNonMembersPayload(this.payload || {});
+          const requestedDocumentId = String(this.payload?.id || this.payload?.$id || "").trim();
           const saved = target
             ? await dbApi.updateRow(String(config.databaseId), tableId, String(target.$id || target.id), payload)
-            : await dbApi.createRow(String(config.databaseId), tableId, ID.unique(), payload);
+            : await dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
           data = [this.tableName === "members" ? normalizeMembersRow(saved) : Object.assign({}, saved, { id: saved.$id || saved.id })];
         } else {
           data = [];
