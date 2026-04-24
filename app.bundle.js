@@ -1084,6 +1084,7 @@
       name: fullName,
       email: member.email || "",
       iban: String(member.iban || "").trim(),
+      memberIban: String(member.memberIban || member.iban || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
       jerseyNumber: member.jerseyNumber === null || member.jerseyNumber === undefined || member.jerseyNumber === "" ? null : Number(member.jerseyNumber),
@@ -1590,6 +1591,16 @@
 
   function formatMoney(amount) {
     return new Intl.NumberFormat("de-AT", { style: "currency", currency: "EUR" }).format(Number(amount || 0));
+  }
+
+  function normalizeIbanText(value) {
+    return String(value || "").replace(/\s+/g, "").toUpperCase().trim();
+  }
+
+  function formatIbanDisplay(value) {
+    const normalized = normalizeIbanText(value);
+    if (!normalized) return "";
+    return normalized.replace(/(.{4})/g, "$1 ").trim();
   }
 
   function formatDate(dateText) {
@@ -2147,13 +2158,11 @@
       return response.data || [];
     };
 
-    let memberIbanFieldAvailable = true;
     let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
     if (memberRowsResponse.error && /(invite_sent_at|activated_at)/i.test(String(memberRowsResponse.error?.message || ""))) {
       memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
     }
     if (memberRowsResponse.error && /iban/i.test(String(memberRowsResponse.error?.message || ""))) {
-      memberIbanFieldAvailable = false;
       memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
     }
     if (memberRowsResponse.error) {
@@ -2246,6 +2255,7 @@
         name: displayName,
         email: String(row.email || ""),
         iban: String(row.iban || latestFee?.iban || "").trim(),
+        memberIban: String(row.iban || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         jerseyNumber: row.jersey_number === null || row.jersey_number === undefined ? null : Number(row.jersey_number),
@@ -2316,26 +2326,6 @@
       opens: 0,
       confirmations: 0
     }));
-
-    const canBackfillMemberIban = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
-    if (memberIbanFieldAvailable && canBackfillMemberIban) {
-      const backfillCandidates = members.filter((member) => {
-        const row = (memberRows || []).find((entry) => String(entry.id || "") === String(member.id || ""));
-        const storedIban = String(row?.iban || "").trim();
-        const canonicalIban = String(member.iban || "").trim();
-        return !storedIban && canonicalIban;
-      });
-      for (const candidate of backfillCandidates) {
-        const response = await backendClient
-          .from("members")
-          .update({ iban: String(candidate.iban || "").trim() })
-          .eq("id", String(candidate.id || ""));
-        if (response.error) {
-          queryWarnings.push(`members iban backfill (${candidate.id || "unknown"}): ${response.error.message || "write failed"}`);
-          continue;
-        }
-      }
-    }
 
     const currentUserRoles = (memberRoleRows || [])
       .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
@@ -3222,17 +3212,18 @@
     if (currentAccessRole !== "admin") {
       throw new Error("Only admins can change IBAN or quarter payment statuses.");
     }
+    const normalizedIban = normalizeIbanText(iban);
     if (backendClient) {
       const memberUpdate = await backendClient
         .from("members")
-        .update({ iban: String(iban || "").trim() || null })
+        .update({ iban: normalizedIban || null })
         .eq("id", String(memberId || ""));
       if (memberUpdate.error && !/column|attribute|unknown|schema/i.test(String(memberUpdate.error?.message || ""))) {
         throw memberUpdate.error;
       }
     }
     const memberFees = state.fees.filter((fee) => String(fee.memberId) === String(memberId));
-    const ibanValue = String(iban || "").trim();
+    const ibanValue = normalizedIban;
     for (const fee of memberFees) {
       await updateFeeRow({
         feeId: fee.id,
@@ -3567,7 +3558,8 @@
     const canViewProfileEmail = currentAccessRole === "admin" || isOwnProfile(member);
     const feeMap = memberFeesByPeriod(member.id);
     const periods = profileQuarterWindowTokens();
-    const firstIban = memberIban(member.id);
+    const firstIban = String(member.memberIban || "").trim();
+    const firstIbanDisplay = formatIbanDisplay(firstIban);
     const sensitiveSection = canViewSensitive
       ? `
       <article class="card compact-card" style="display:grid; gap: 10px;">
@@ -3576,8 +3568,8 @@
           <h3 style="margin-top: 4px;">IBAN and quarter payment statuses</h3>
         </div>
         ${canEditSensitive
-          ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIban}" ${sensitiveDisabled} /></label>`
-          : `<div><p class="muted" style="margin-bottom: 4px;">IBAN</p><p>${firstIban || "No IBAN on file"}</p></div>`}
+          ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIbanDisplay}" ${sensitiveDisabled} /></label>`
+          : `<div><p class="muted" style="margin-bottom: 4px;">IBAN</p><p>${firstIbanDisplay || "No IBAN on file"}</p></div>`}
         <div class="table-wrap">
           <table>
             <thead><tr><th>Quarter</th><th>Status</th></tr></thead>
