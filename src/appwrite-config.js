@@ -5,6 +5,7 @@ window.ClubHubAppwriteConfig = {
   apiBaseUrl: "",
   inviteFunctionId: "CreateAuthAccount",
   passSyncFunctionId: "PassSyncFunction",
+  sepaExportFunctionId: "",
   profilePicturesBucketId: "ProfilePictures",
   membersTableId: "members",
   memberRolesTableId: "member_roles",

@@ -1,201 +1,122 @@
-# Appwrite + Deployment Guide
+# Appwrite Deployment Guide
 
-Your app is now **Appwrite-native**. Render and Supabase are no longer needed.
+This project now targets:
 
-## Architecture
+- GitHub Pages for the frontend
+- Appwrite for auth, data, storage, and functions
 
+## Production Shape
+
+```text
+GitHub Pages (static frontend)
+        |
+        v
+Appwrite
+- Accounts
+- Database collections
+- Storage
+- Functions
 ```
-┌─────────────────┐         ┌──────────────────┐
-│   Frontend      │ ◄────► │   Appwrite       │
-│ (Static HTML)   │         │   (Backend)      │
-│                 │         │ - Collections    │
-│ GitHub Pages or │         │ - Auth           │
-│ Appwrite        │         │ - Functions (opt)│
-└─────────────────┘         └──────────────────┘
-```
 
-## Step 1: Build Your Frontend
+## 1. Frontend Config
+
+Update:
+
+- `src/appwrite-config.js`
+
+Set the Appwrite values for your real project:
+
+- `endpoint`
+- `projectId`
+- `databaseId`
+- collection IDs
+- bucket IDs
+- `inviteFunctionId`
+- `passSyncFunctionId`
+- `sepaExportFunctionId`
+
+`apiBaseUrl` is optional now and should only be used if you intentionally still run the Node server somewhere.
+
+## 2. Build Frontend
 
 ```bash
 npm run build
 ```
 
-This creates a `dist/` folder with your static website.
+Deploy the contents of:
 
-## Deployment Option A: Appwrite Static Hosting (Best)
+- `dist/`
 
-Appwrite can host your frontend:
+to GitHub Pages.
 
-### Using Appwrite CLI
+## 3. Appwrite Permissions
 
-```bash
-# Install CLI
-npm install -g appwrite-cli
+Set proper collection permissions in Appwrite so the frontend can only read/write what each role should access.
 
-# Login to Appwrite
-appwrite login
+Important examples:
 
-# Deploy to Appwrite
-appwrite deploy --type=web dist/
-```
+- `membership_fees`: admin/finance only
+- `player_passes`: admin/coach/tech admin only
+- `members`: scoped appropriately for member self-access and admin management
 
-Or **manually** in Appwrite Console:
-1. Go to **Storage** section
-2. Create new bucket for frontend
-3. Upload contents of `dist/` folder
-4. Enable **Public access** 
-5. Set **CORS** to allow your domain
-6. Your app runs at: `https://[appwrite-endpoint]/v1/storage/buckets/[bucket-id]/files/index.html`
+## 4. Appwrite Functions
 
-### Enable Static Hosting (if available in your Appwrite version)
+Recommended functions:
 
-Modern Appwrite versions have built-in Static Hosting:
-1. **Settings** → **Static Hosting**
-2. Select your frontend bucket
-3. Get your public URL
+- invite/account provisioning
+- SEPA export
+- Clubee pass sync, if you want server-side processing
 
-## Deployment Option B: GitHub Pages (Free Alternative)
+Current function code in this repo:
 
-Host on GitHub Pages + Appwrite backend:
+- Invite function: `index.js`
+- SEPA export: `appwrite/functions/sepa-export/index.js`
 
-```bash
-# 1. Create GitHub repo if you don't have one
-git init
-git add .
-git commit -m "Appwrite-native app"
-git remote add origin https://github.com/YOUR_USERNAME/EmperorsApp
-git branch -M main
-git push -u origin main
+See:
 
-# 2. Enable GitHub Pages in your repo settings:
-# Settings → Pages → Source: Deploy from a branch
-# Select: main / (root)
+- `APPWRITE_FUNCTIONS_SETUP.md`
 
-# 3. Deploy frontend
-npm run build
+## 5. GitHub Pages
 
-# 4. Create deploy workflow file
-# .github/workflows/deploy.yml
-```
-
-Create `.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy to GitHub Pages
-on:
-  push:
-    branches: [ main ]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm install
-      - run: npm run build
-      - uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-```
-
-Then:
-```bash
-git add .github/workflows/deploy.yml
-git commit -m "Add GitHub Pages deployment"
-git push
-```
-
-Your site will be live at: `https://YOUR_USERNAME.github.io/EmperorsApp/`
-
-## Step 2: Configure Frontend
-
-Update your frontend config (`src/supabase-config.js`):
-
-```javascript
-window.ClubHubAppwriteConfig = {
-  projectId: "YOUR_PROJECT_ID",
-  databaseId: "emperor-app",
-  endpoint: "https://fra.cloud.appwrite.io/v1", // Your Appwrite endpoint
-  apiKey: "YOUR_API_KEY"  // Public API key, NOT admin key
-};
-```
-
-Rebuild and redeploy:
-```bash
-npm run build
-# Then deploy to Appwrite or GitHub Pages
-```
-
-## Step 3: Configure Appwrite Permissions
-
-See `APPWRITE_PERMISSIONS_SETUP.md` for how to set collection permissions.
-
-After setting permissions, test:
-1. Open your deployed app (GitHub Pages or Appwrite)
-2. Sign in as admin
-3. Try creating a member - should work now
-4. Check browser console for success messages
-
-## HTTPS & Custom Domain (Optional)
-
-### GitHub Pages with Custom Domain
-```
-Settings → Pages → Custom domain
-Enter: emperors.example.com
-```
-
-Then add DNS record:
-```
-CNAME emperors.example.com 
-CNAME -> YOUR_USERNAME.github.io
-```
-
-### Appwrite with Custom Domain
-Contact your Appwrite provider or use your own reverse proxy.
+Use your current repo/pages workflow. The frontend can run entirely as a static site once Appwrite config is correct.
 
 ## Environment Variables
 
-Remove all these since they're no longer used:
-- `RENDER` ✗
-- `SUPABASE_URL` ✗
-- `SUPABASE_SERVICE_ROLE_KEY` ✗
-- `APPWRITE_API_KEY` (server admin key) ✗ 
+Frontend:
 
-Keep only:
-- `APPWRITE_ENDPOINT` (your Appwrite cloud endpoint)
-- `APPWRITE_PROJECT_ID`
+- no admin secrets
+- only public Appwrite identifiers in `src/appwrite-config.js`
 
-These go in your deployment settings (GitHub Secrets, Appwrite environment, etc).
+Appwrite Functions:
+
+- keep `APPWRITE_API_KEY` in Appwrite Function env vars only
+- keep all SEPA creditor values in Appwrite Function env vars only
 
 ## Troubleshooting
 
-### "Permission denied" errors
-→ See `APPWRITE_PERMISSIONS_SETUP.md` - your collections need proper permissions
+### Auth works locally but not on GitHub Pages
 
-### "Appwrite client not available"
-→ Verify `window.ClubHubAppwriteConfig` is set correctly in `src/supabase-config.js`
+- check Appwrite platform/site URL settings
+- check allowed redirect/recovery URLs
+- check `src/appwrite-config.js`
 
-### "Static mode - no data persistence"
-→ You're running locally without Appwrite. Sign in with email to use Appwrite backend.
+### Invite works inconsistently
 
-### Member invites not working 
-→ See `APPWRITE_FUNCTIONS_SETUP.md` (optional feature using Appwrite Functions)
+- inspect Appwrite Function logs for the invite function
+- verify the function has correct admin key env vars
+- verify the member row has the right `profile_id`, `invite_sent_at`, and email
 
-## Cost
+### SEPA button is disabled on GitHub Pages
 
-- **GitHub Pages**: Free
-- **Appwrite Community**: Free tier available
-- **Appwrite Cloud**: Pay-as-you-go ($5+/month depending on usage)
+- set `sepaExportFunctionId` in `src/appwrite-config.js`
+- deploy `appwrite/functions/sepa-export/index.js`
+- add the required SEPA env vars in Appwrite
 
-## Next Steps
+### Pass sync fails on GitHub Pages
 
-1. ✅ Set up Appwrite permissions (APPWRITE_PERMISSIONS_SETUP.md)
-2. ✅ Build your frontend: `npm run build`
-3. ✅ Deploy to GitHub Pages or Appwrite
-4. ✅ Test member creation
-5. (Optional) Set up Appwrite Functions for email invites
+- either configure `passSyncFunctionId`
+- or intentionally provide a backend `apiBaseUrl`
 
-**Done!** Your app is now in the cloud, no server management needed.
+## Production Goal
+
+The intended production setup is a clean Appwrite-only backend behind a static GitHub Pages frontend.

@@ -153,6 +153,18 @@
     return `${sanitizedBase}${normalizedPath}`;
   }
 
+  function hasConfiguredApiBaseUrl() {
+    return Boolean(String(APPWRITE_CONFIG?.apiBaseUrl || window.ClubHubApiBaseUrl || "").trim());
+  }
+
+  function hasSepaExportCapability() {
+    return Boolean(
+      String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim() ||
+      hasConfiguredApiBaseUrl() ||
+      isLocalDevHost()
+    );
+  }
+
   function loadStoredValue(key, fallback) {
     const saved = localStorage.getItem(key);
     return saved || fallback;
@@ -1008,9 +1020,45 @@
       }),
       false
     );
-    const status = String(execution?.status || "").toLowerCase();
-    if (status && ["failed", "crashed", "timeout", "canceled"].includes(status)) {
-      throw new Error(`Auth provisioning function failed (${status}).`);
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    let finalExecution = execution;
+
+    for (let i = 0; i < 8; i += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(350);
+        finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyText = String(finalExecution?.responseBody || "").trim();
+      throw new Error(
+        `Auth provisioning function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    if (responseBodyRaw) {
+      try {
+        const parsedBody = JSON.parse(responseBodyRaw);
+        if (parsedBody?.error) {
+          throw new Error(String(parsedBody.error));
+        }
+      } catch (parseError) {
+        const parseMessage = String(parseError?.message || "");
+        if (!parseMessage.toLowerCase().includes("json")) {
+          throw parseError;
+        }
+      }
     }
   }
 
@@ -1268,11 +1316,60 @@
 
   function signedInMemberRecord() {
     if (!authState.user) return null;
+    const explicitMemberId = signedInUserMemberId();
+    if (explicitMemberId) {
+      const explicitMatch = state.members.find((member) => String(member.id || "") === explicitMemberId);
+      if (explicitMatch) return explicitMatch;
+    }
     const profileMatch = state.members.find((member) => String(member.profileId || "") === String(authState.user.id || ""));
     if (profileMatch) return profileMatch;
     const email = signedInUserEmail();
     if (!email) return null;
     return state.members.find((member) => String(member.email || "").trim().toLowerCase() === email) || null;
+  }
+
+  async function repairCurrentUserMemberLink() {
+    if (!backendClient || !authState.user) return;
+
+    const currentUserId = String(authState.user?.id || "").trim();
+    const currentUserEmail = String(authState.user?.email || "").trim().toLowerCase();
+    if (!currentUserId || !currentUserEmail) return;
+
+    const memberRowsResponse = await backendClient
+      .from("members")
+      .select("id, email, profile_id, deleted_at");
+
+    if (memberRowsResponse.error) {
+      throw memberRowsResponse.error;
+    }
+
+    const memberRows = Array.isArray(memberRowsResponse.data) ? memberRowsResponse.data : [];
+    const exactEmailMatches = memberRows.filter((row) => String(row?.email || "").trim().toLowerCase() === currentUserEmail);
+    if (!exactEmailMatches.length) return;
+
+    if (exactEmailMatches.some((row) => String(row?.profile_id || "").trim() === currentUserId)) {
+      return;
+    }
+
+    const nonDeletedMatches = exactEmailMatches.filter((row) => !row?.deleted_at);
+    const preferredPool = nonDeletedMatches.length ? nonDeletedMatches : exactEmailMatches;
+    const candidates = preferredPool.filter((row) => !String(row?.profile_id || "").trim());
+
+    if (candidates.length !== 1) {
+      return;
+    }
+
+    const targetMemberId = String(candidates[0]?.id || "").trim();
+    if (!targetMemberId) return;
+
+    const updateResponse = await backendClient
+      .from("members")
+      .update({ profile_id: currentUserId })
+      .eq("id", targetMemberId);
+
+    if (updateResponse.error) {
+      throw updateResponse.error;
+    }
   }
 
   function canEditMemberProfile(member) {
@@ -1436,45 +1533,29 @@
     const profileId = String(authState.user?.id || "").trim();
     if (!profileId) return;
 
-    // Find member(s) by profile_id where invite_sent_at is set
     const memberQueryResponse = await backendClient
       .from("members")
-      .select("id, invite_sent_at")
-      .eq("profile_id", profileId)
-      .not("invite_sent_at", "is", null);
+      .select("id, invite_sent_at, activated_at")
+      .eq("profile_id", profileId);
 
     if (memberQueryResponse.error) {
-      if (!/invite_sent_at/i.test(String(memberQueryResponse.error?.message || ""))) {
-        throw memberQueryResponse.error;
-      }
-      return;
+      throw memberQueryResponse.error;
     }
 
-    const members = memberQueryResponse.data || [];
+    const members = (memberQueryResponse.data || []).filter((member) => member && member.invite_sent_at);
     for (const member of members) {
       const memberId = String(member.id || "").trim();
       if (!memberId) continue;
 
-      // Mark member as activated
-      try {
-        await fetch(apiUrl(`/api/members/${encodeURIComponent(memberId)}/activate`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
-      } catch (error) {
-        console.error("Could not mark member as activated:", error);
-      }
-    }
+      const updateResponse = await backendClient
+        .from("members")
+        .update({
+          invite_sent_at: null,
+          activated_at: member.activated_at || new Date().toISOString()
+        })
+        .eq("id", memberId);
 
-    // Clear invite_sent_at for this profile
-    const updateResponse = await backendClient
-      .from("members")
-      .update({ invite_sent_at: null })
-      .eq("profile_id", profileId)
-      .not("invite_sent_at", "is", null);
-
-    if (updateResponse.error) {
-      if (!/invite_sent_at/i.test(String(updateResponse.error?.message || ""))) {
+      if (updateResponse.error) {
         throw updateResponse.error;
       }
     }
@@ -1618,6 +1699,21 @@
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function decodeBase64Unicode(base64Value) {
+    const normalized = String(base64Value || "").trim();
+    if (!normalized) return "";
+    const binary = window.atob(normalized);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    if (typeof TextDecoder === "function") {
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+    let escaped = "";
+    bytes.forEach((value) => {
+      escaped += `%${value.toString(16).padStart(2, "0")}`;
+    });
+    return decodeURIComponent(escaped);
   }
 
   function downloadCsv(columns, rows, fileName) {
@@ -2027,19 +2123,10 @@
       return;
     }
 
-    const currentUserId = String(authState.user?.id || "").trim();
-    const currentUserEmail = String(authState.user?.email || "").trim();
-    if (currentUserId && currentUserEmail) {
-      // Link member rows to current Appwrite auth user by exact email match.
-      // This also repairs rows migrated from legacy systems where profile_id references a non-Appwrite UUID.
-      await backendClient
-        .from("members")
-        .update({ profile_id: currentUserId })
-        .ilike("email", currentUserEmail);
-    }
+    await repairCurrentUserMemberLink();
 
-    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin" || currentAccessRole === "player";
-    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin" || currentAccessRole === "player";
+    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
 
     const queryWarnings = [];
@@ -2467,6 +2554,13 @@
   // Permission error fallback removed - trusting Appwrite permissions
 
   // Removed server admin fallback functions - now using pure Appwrite
+  async function updateFeeStatusesBulkViaServerAdmin() {
+    throw new Error("Fee bulk update fallback is disabled. Grant the current Appwrite admin role direct write access to membership_fees.");
+  }
+
+  async function updateFeeRowViaServerAdmin() {
+    throw new Error("Fee update fallback is disabled. Grant the current Appwrite admin role direct write access to membership_fees.");
+  }
 
   async function saveMemberViaRemote(memberPayload) {
     if (!backendClient) {
@@ -2948,6 +3042,83 @@
       await loadBootstrapData();
     }
     return payload.passSyncApply || null;
+  }
+
+  async function exportSepaXmlViaFunction(periodToken) {
+    const functionId = String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim();
+    if (!functionId) {
+      throw new Error("SEPA export function is not configured.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+
+    const functionClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+    const functionsApi = new appwriteSdk.Functions(functionClient);
+
+    const execution = await functionsApi.createExecution(
+      functionId,
+      JSON.stringify({ feePeriod: periodToken }),
+      false
+    );
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    let finalExecution = execution;
+
+    for (let index = 0; index < 12; index += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(350);
+        finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyText = String(finalExecution?.responseBody || "").trim();
+      throw new Error(
+        `SEPA export function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    if (!responseBodyRaw) {
+      throw new Error("SEPA export function returned an empty response body.");
+    }
+
+    let parsedBody = null;
+    try {
+      parsedBody = JSON.parse(responseBodyRaw);
+    } catch {
+      throw new Error("SEPA export function returned invalid JSON.");
+    }
+
+    if (!parsedBody?.ok) {
+      throw new Error(String(parsedBody?.error || "SEPA export did not return a file."));
+    }
+
+    const xmlText = decodeBase64Unicode(parsedBody.xmlBase64 || "");
+    if (!xmlText) {
+      throw new Error("SEPA export function returned no XML content.");
+    }
+
+    downloadBlobFile(
+      xmlText,
+      "application/xml;charset=utf-8",
+      String(parsedBody.fileName || `SEPA_Lastschrift_${periodToken}.xml`).trim()
+    );
+
+    return parsedBody;
   }
 
   function passSyncFieldLabel(field) {
@@ -3468,6 +3639,7 @@
     const visibleMemberIds = Array.from(new Set(visibleFees.map((fee) => String(fee.memberId))));
     const selectedVisibleCount = visibleMemberIds.filter((memberId) => selectedSet.has(memberId)).length;
     const editableStatuses = FEE_STATUSES;
+    const sepaExportAvailable = hasSepaExportCapability();
 
     return `
       <div class="section-head">
@@ -3478,7 +3650,7 @@
             <div class="export-menu-list">
               <button id="export-fees-csv-option" class="ghost-button small-button" type="button">CSV</button>
               <button id="export-fees-excel-option" class="ghost-button small-button" type="button">Excel</button>
-              <button id="export-fees-sepa-xml-option" class="ghost-button small-button" type="button">SEPA XML</button>
+              <button id="export-fees-sepa-xml-option" class="ghost-button small-button" type="button" ${sepaExportAvailable ? "" : "disabled title=\"Configure a SEPA Appwrite Function or backend endpoint first.\""}>SEPA XML</button>
             </div>
           </details>
           <button id="toggle-fee-edit-mode" class="ghost-button" type="button">${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
@@ -5077,15 +5249,20 @@
           if (!period) {
             throw new Error("Please select a quarter first.");
           }
-          await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
+          if (String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim()) {
+            await exportSepaXmlViaFunction(period);
+          } else {
+            await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
+          }
           authState.status = "SEPA XML exported.";
           mount();
           switchView("fees");
         } catch (error) {
-          const isGithubPages = /\.github\.io$/i.test(window.location.hostname || "");
           const baseMessage = String(error?.message || "SEPA export failed.");
-          authState.status = isGithubPages
-            ? `${baseMessage} SEPA XML requires a running backend API (the /api route is not available on static GitHub Pages alone).`
+          const noFunctionConfigured = !String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim();
+          const isGithubPages = /\.github\.io$/i.test(window.location.hostname || "");
+          authState.status = noFunctionConfigured && isGithubPages
+            ? `${baseMessage} Configure ClubHubAppwriteConfig.sepaExportFunctionId to run SEPA export through Appwrite on GitHub Pages.`
             : baseMessage;
           mount();
           switchView("fees");
