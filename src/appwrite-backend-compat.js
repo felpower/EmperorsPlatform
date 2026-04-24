@@ -197,13 +197,18 @@
   }
 
   function normalizeMembersRow(row) {
+    const canonicalId = row.$id || row.id;
+    const legacyId = row.$id && row.id && String(row.$id) !== String(row.id)
+      ? String(row.id)
+      : String(rowValue(row, "legacy_id") || "");
     const displayName = String(rowValue(row, "display_name") || rowValue(row, "displayName") || "").trim();
     const split = splitDisplayName(displayName);
     const firstName = String(rowValue(row, "first_name") || split.firstName || "").trim();
     const lastName = String(rowValue(row, "last_name") || split.lastName || "").trim();
 
     return Object.assign({}, row, {
-      id: row.$id || row.id,
+      id: canonicalId,
+      legacy_id: legacyId || null,
       first_name: firstName,
       last_name: lastName,
       display_name: displayName || ((firstName + " " + lastName).trim() || "Unknown member"),

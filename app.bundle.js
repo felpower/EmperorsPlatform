@@ -2183,14 +2183,29 @@
       rolesByProfile.set(profileId, roles);
     });
 
+    const canonicalMemberIdByAnyId = new Map();
+    (memberRows || []).forEach((row) => {
+      const canonicalMemberId = String(row.id || "").trim();
+      const legacyMemberId = String(row.legacy_id || "").trim();
+      if (canonicalMemberId) {
+        canonicalMemberIdByAnyId.set(canonicalMemberId, canonicalMemberId);
+      }
+      if (legacyMemberId && canonicalMemberId) {
+        canonicalMemberIdByAnyId.set(legacyMemberId, canonicalMemberId);
+      }
+    });
+
     const passesByMember = new Map();
     (passRows || []).forEach((row) => {
-      passesByMember.set(String(row.member_id || ""), row);
+      const rawMemberId = String(row.member_id || "").trim();
+      const canonicalMemberId = canonicalMemberIdByAnyId.get(rawMemberId) || rawMemberId;
+      passesByMember.set(canonicalMemberId, row);
     });
 
     const feesByMember = new Map();
     (feeRows || []).forEach((row) => {
-      const memberId = String(row.member_id || "");
+      const rawMemberId = String(row.member_id || "").trim();
+      const memberId = canonicalMemberIdByAnyId.get(rawMemberId) || rawMemberId;
       const list = feesByMember.get(memberId) || [];
       list.push(row);
       feesByMember.set(memberId, list);
@@ -2259,7 +2274,7 @@
 
     const fees = (feeRows || []).map((row) => ({
       id: String(row.id || ""),
-      memberId: String(row.member_id || ""),
+      memberId: canonicalMemberIdByAnyId.get(String(row.member_id || "").trim()) || String(row.member_id || "").trim(),
       season: String(row.season_label || ""),
       feePeriod: String(row.fee_period || row.season_label || ""),
       amount: Number(row.amount_cents || 0) / 100,
