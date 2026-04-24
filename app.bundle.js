@@ -86,6 +86,7 @@
   let passSyncPreview = null;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
+  let sepaExportPreview = null;
   let authState = {
     mode: "local",
     status: "Local development mode active.",
@@ -3118,7 +3119,19 @@
       String(parsedBody.fileName || `SEPA_Lastschrift_${periodToken}.xml`).trim()
     );
 
+    sepaExportPreview = parsedBody.preview || null;
     return parsedBody;
+  }
+
+  function formatSepaSkipReason(reason) {
+    const normalized = String(reason || "").trim().toLowerCase();
+    if (!normalized) return "unknown";
+    if (normalized === "missing_iban") return "Missing IBAN";
+    if (normalized === "missing_member") return "Missing member";
+    if (normalized === "missing_mandate_id") return "Missing mandate ID";
+    if (normalized === "no_outstanding_amount") return "No outstanding amount";
+    if (normalized.startsWith("status_")) return `Status: ${statusLabel(normalized.replace(/^status_/, ""))}`;
+    return normalized.replaceAll("_", " ");
   }
 
   function passSyncFieldLabel(field) {
@@ -3640,6 +3653,19 @@
     const selectedVisibleCount = visibleMemberIds.filter((memberId) => selectedSet.has(memberId)).length;
     const editableStatuses = FEE_STATUSES;
     const sepaExportAvailable = hasSepaExportCapability();
+    const sepaIncluded = Array.isArray(sepaExportPreview?.included) ? sepaExportPreview.included : [];
+    const sepaSkipped = Array.isArray(sepaExportPreview?.skipped) ? sepaExportPreview.skipped : [];
+    const sepaSummaryCard = sepaExportPreview
+      ? `
+        <article class="card" style="margin-bottom: 14px;">
+          <p class="eyebrow">SEPA Preview</p>
+          <h3>Last export summary</h3>
+          <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
+          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${item.name} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
+          ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${item.name || "Unknown"}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
+        </article>
+      `
+      : "";
 
     return `
       <div class="section-head">
@@ -3684,6 +3710,7 @@
           </div>
         </details>
       </article>
+      ${sepaSummaryCard}
       ${feeEditMode ? `
         <article class="card filter-card" style="margin-bottom: 12px;">
           <p class="eyebrow">Bulk edit</p>

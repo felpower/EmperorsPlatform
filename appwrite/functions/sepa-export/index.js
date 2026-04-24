@@ -147,30 +147,64 @@ module.exports = async ({ req, res, log }) => {
     }
 
     const transactions = [];
+    const includedMembers = [];
+    const skippedMembers = [];
     for (const fee of periodFees) {
       const feeStatus = String(fee?.status || "").trim().toLowerCase();
-      if (nonDebitableStatuses.has(feeStatus)) continue;
-      if (feeStatus && !debitableStatuses.has(feeStatus)) continue;
-
       const memberId = String(fee?.member_id || "").trim();
       const member = membersById.get(memberId);
-      if (!member) continue;
-
+      const memberName = compactName(member?.first_name, member?.last_name, member?.displayName || member?.display_name);
+      const feeId = String(fee?.$id || fee?.id || "").trim();
       const amountCents = Math.max(0, Number(fee?.amount_cents || 0));
       const paidCents = Math.max(0, Number(fee?.paid_cents || 0));
       const outstandingCents = Math.max(0, amountCents - paidCents);
-      if (!outstandingCents) continue;
-
       const debtorIban = sanitizeIban(fee?.iban);
-      if (!debtorIban) continue;
+      const mandateId = String(memberId || feeId || "").trim();
 
-      const debtorName = compactName(member?.first_name, member?.last_name, member?.displayName || member?.display_name);
-      const mandateId = String(memberId || fee?.$id || fee?.id || "").trim();
-      if (!mandateId) continue;
+      const skip = (reason) => {
+        skippedMembers.push({
+          memberId,
+          feeId,
+          name: memberName,
+          status: feeStatus || "unknown",
+          amount: amountString(amountCents),
+          paidAmount: amountString(paidCents),
+          outstandingAmount: amountString(outstandingCents),
+          ibanPresent: Boolean(debtorIban),
+          reason
+        });
+      };
+
+      if (nonDebitableStatuses.has(feeStatus)) {
+        skip(`status_${feeStatus}`);
+        continue;
+      }
+      if (feeStatus && !debitableStatuses.has(feeStatus)) {
+        skip(`status_${feeStatus}`);
+        continue;
+      }
+      if (!member) {
+        skip("missing_member");
+        continue;
+      }
+      if (!outstandingCents) {
+        skip("no_outstanding_amount");
+        continue;
+      }
+      if (!debtorIban) {
+        skip("missing_iban");
+        continue;
+      }
+      if (!mandateId) {
+        skip("missing_mandate_id");
+        continue;
+      }
+
+      const debtorName = memberName;
 
       transactions.push({
         memberId,
-        feeId: String(fee?.$id || fee?.id || "").trim(),
+        feeId,
         debtorName,
         debtorIban,
         debtorBic: String(fee?.bic || "").trim().toUpperCase(),
@@ -179,6 +213,16 @@ module.exports = async ({ req, res, log }) => {
         amountCents: outstandingCents,
         dueDate: normalizeDate(fee?.due_date) || "",
         description: `${requestedPeriod} membership fee`
+      });
+      includedMembers.push({
+        memberId,
+        feeId,
+        name: debtorName,
+        status: feeStatus || "pending",
+        amount: amountString(amountCents),
+        paidAmount: amountString(paidCents),
+        outstandingAmount: amountString(outstandingCents),
+        iban: debtorIban
       });
     }
 
@@ -303,7 +347,13 @@ ${transactionXml}
         transactionCount,
         totalAmount: amountString(controlSum),
         collectionDate,
-        skippedRows: periodFees.length - transactionCount
+        skippedRows: skippedMembers.length,
+        sourceRows: periodFees.length
+      },
+      preview: {
+        feePeriod: requestedPeriod,
+        included: includedMembers,
+        skipped: skippedMembers
       }
     });
   } catch (error) {
