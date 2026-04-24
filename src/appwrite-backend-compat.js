@@ -208,6 +208,7 @@
       last_name: lastName,
       display_name: displayName || ((firstName + " " + lastName).trim() || "Unknown member"),
       email: String(rowValue(row, "email") || "").trim(),
+      iban: String(rowValue(row, "iban") || "").trim(),
       positions_json: rowValue(row, "positions_json") || rowValue(row, "positionsJson") || [],
       roles_json: rowValue(row, "roles_json") || rowValue(row, "rolesJson") || ["player"],
       jersey_number: rowValue(row, "jersey_number") !== undefined ? rowValue(row, "jersey_number") : rowValue(row, "jerseyNumber"),
@@ -248,6 +249,7 @@
     }
 
     if (hasOwn(input, "email")) sanitized.email = input.email ? String(input.email).trim() : null;
+    if (hasOwn(input, "iban")) sanitized.iban = input.iban ? String(input.iban).trim() : null;
     if (hasOwn(input, "first_name")) sanitized.first_name = input.first_name ? String(input.first_name).trim() : null;
     if (hasOwn(input, "last_name")) sanitized.last_name = input.last_name ? String(input.last_name).trim() : null;
     if (hasOwn(input, "membership_status")) sanitized.membership_status = input.membership_status ? String(input.membership_status).trim() : "pending";

@@ -140,7 +140,8 @@ module.exports = async ({ req, res, log }) => {
       id: String(member?.id || "").trim(),
       first_name: String(member?.firstName || "").trim(),
       last_name: String(member?.lastName || "").trim(),
-      display_name: String(member?.name || "").trim()
+      display_name: String(member?.name || "").trim(),
+      iban: String(member?.iban || "").trim()
     }));
 
     const normalizePayloadFees = (rows) => rows.map((fee) => ({
@@ -199,7 +200,7 @@ module.exports = async ({ req, res, log }) => {
       const paidCents = Math.max(0, Number(fee?.paid_cents || 0));
       const outstandingCents = Math.max(0, amountCents - paidCents);
       const fallbackFee = latestFeeRowsByMember.get(memberId) || null;
-      const debtorIban = sanitizeIban(fee?.iban || fallbackFee?.iban);
+      const debtorIban = sanitizeIban(member?.iban || fee?.iban || fallbackFee?.iban);
       const mandateId = String(memberId || feeId || "").trim();
 
       const skip = (reason) => {

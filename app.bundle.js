@@ -1083,6 +1083,7 @@
       lastName,
       name: fullName,
       email: member.email || "",
+      iban: String(member.iban || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
       jerseyNumber: member.jerseyNumber === null || member.jerseyNumber === undefined || member.jerseyNumber === "" ? null : Number(member.jerseyNumber),
@@ -1445,6 +1446,9 @@
   }
 
   function memberIban(memberId) {
+    const member = memberById(memberId);
+    const memberLevelIban = String(member?.iban || "").trim();
+    if (memberLevelIban) return memberLevelIban;
     const fees = state.fees
       .filter((fee) => String(fee.memberId) === String(memberId) && String(fee.iban || "").trim())
       .sort((left, right) => String(right.feePeriod || "").localeCompare(String(left.feePeriod || "")));
@@ -2143,8 +2147,13 @@
       return response.data || [];
     };
 
-    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    let memberIbanFieldAvailable = true;
+    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
     if (memberRowsResponse.error && /(invite_sent_at|activated_at)/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+    }
+    if (memberRowsResponse.error && /iban/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberIbanFieldAvailable = false;
       memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
     }
     if (memberRowsResponse.error) {
@@ -2221,6 +2230,7 @@
         lastName,
         name: displayName,
         email: String(row.email || ""),
+        iban: String(row.iban || latestFee?.iban || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         jerseyNumber: row.jersey_number === null || row.jersey_number === undefined ? null : Number(row.jersey_number),
@@ -2291,6 +2301,25 @@
       opens: 0,
       confirmations: 0
     }));
+
+    if (memberIbanFieldAvailable && currentAccessRole === "admin") {
+      const backfillCandidates = members.filter((member) => {
+        const row = (memberRows || []).find((entry) => String(entry.id || "") === String(member.id || ""));
+        const storedIban = String(row?.iban || "").trim();
+        const canonicalIban = String(member.iban || "").trim();
+        return !storedIban && canonicalIban;
+      });
+      for (const candidate of backfillCandidates) {
+        const response = await backendClient
+          .from("members")
+          .update({ iban: String(candidate.iban || "").trim() })
+          .eq("id", String(candidate.id || ""));
+        if (response.error) {
+          queryWarnings.push(`members iban backfill: ${response.error.message || "write failed"}`);
+          break;
+        }
+      }
+    }
 
     const currentUserRoles = (memberRoleRows || [])
       .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
@@ -2605,6 +2634,9 @@
         notes: String(memberPayload.notes || "").trim(),
         deleted_at: null
       };
+      if (Object.prototype.hasOwnProperty.call(memberPayload, "iban")) {
+        patch.iban = String(memberPayload.iban || "").trim() || null;
+      }
 
       let savedMemberId = memberId;
 
@@ -3061,9 +3093,30 @@
       .setProject(String(APPWRITE_CONFIG?.projectId || ""));
     const functionsApi = new appwriteSdk.Functions(functionClient);
 
+    const membersPayload = state.members.map((member) => ({
+      id: String(member.id || "").trim(),
+      firstName: String(member.firstName || "").trim(),
+      lastName: String(member.lastName || "").trim(),
+      name: String(member.name || "").trim(),
+      iban: String(memberIban(member.id) || "").trim()
+    }));
+    const feesPayload = state.fees.map((fee) => ({
+      id: String(fee.id || "").trim(),
+      memberId: String(fee.memberId || "").trim(),
+      feePeriod: String(fee.feePeriod || "").trim(),
+      amount: Number(fee.amount || 0),
+      paidAmount: Number(fee.paidAmount || 0),
+      status: String(fee.status || "").trim(),
+      iban: String(fee.iban || "").trim()
+    }));
+
     const execution = await functionsApi.createExecution(
       functionId,
-      JSON.stringify({ feePeriod: periodToken }),
+      JSON.stringify({
+        feePeriod: periodToken,
+        members: membersPayload,
+        fees: feesPayload
+      }),
       false
     );
 
@@ -3152,6 +3205,15 @@
   async function updateMemberSensitiveFinance({ memberId, iban, statusByFeeId }) {
     if (currentAccessRole !== "admin") {
       throw new Error("Only admins can change IBAN or quarter payment statuses.");
+    }
+    if (backendClient) {
+      const memberUpdate = await backendClient
+        .from("members")
+        .update({ iban: String(iban || "").trim() || null })
+        .eq("id", String(memberId || ""));
+      if (memberUpdate.error && !/column|attribute|unknown|schema/i.test(String(memberUpdate.error?.message || ""))) {
+        throw memberUpdate.error;
+      }
     }
     const memberFees = state.fees.filter((fee) => String(fee.memberId) === String(memberId));
     const ibanValue = String(iban || "").trim();
