@@ -1,0 +1,7 @@
+{
+  "name": "emperors-sepa-export-function",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "UNLICENSED"
+}
