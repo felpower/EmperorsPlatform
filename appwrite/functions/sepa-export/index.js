@@ -55,6 +55,9 @@ module.exports = async ({ req, res, log }) => {
     return res.json({ ok: false, error: "feePeriod is required and must look like Q2_2026." }, 400);
   }
 
+  const payloadMembers = Array.isArray(body.members) ? body.members : null;
+  const payloadFees = Array.isArray(body.fees) ? body.fees : null;
+
   const base = endpoint.replace(/\/$/, "");
   const headers = {
     "X-Appwrite-Project": projectId,
@@ -132,10 +135,34 @@ module.exports = async ({ req, res, log }) => {
   const nonDebitableStatuses = new Set(["paid", "paid_rookie_fee", "paid_with_fee", "exempt", "exit", "not_applicable"]);
 
   try {
-    const [memberRows, feeRows] = await Promise.all([
-      listAppwriteRecords(membersCollectionId),
-      listAppwriteRecords(feesCollectionId)
-    ]);
+    const normalizePayloadMembers = (rows) => rows.map((member) => ({
+      $id: String(member?.id || "").trim(),
+      id: String(member?.id || "").trim(),
+      first_name: String(member?.firstName || "").trim(),
+      last_name: String(member?.lastName || "").trim(),
+      display_name: String(member?.name || "").trim()
+    }));
+
+    const normalizePayloadFees = (rows) => rows.map((fee) => ({
+      $id: String(fee?.id || "").trim(),
+      id: String(fee?.id || "").trim(),
+      member_id: String(fee?.memberId || "").trim(),
+      fee_period: String(fee?.feePeriod || "").trim(),
+      amount_cents: Math.round(Number(fee?.amount || 0) * 100),
+      paid_cents: Math.round(Number(fee?.paidAmount || 0) * 100),
+      status: String(fee?.status || "").trim(),
+      iban: String(fee?.iban || "").trim(),
+      bic: String(fee?.bic || "").trim(),
+      mandate_date: String(fee?.mandateDate || "").trim(),
+      due_date: String(fee?.dueDate || "").trim()
+    }));
+
+    const [memberRows, feeRows] = payloadMembers && payloadFees
+      ? [normalizePayloadMembers(payloadMembers), normalizePayloadFees(payloadFees)]
+      : await Promise.all([
+          listAppwriteRecords(membersCollectionId),
+          listAppwriteRecords(feesCollectionId)
+        ]);
 
     const membersById = new Map(
       memberRows.map((member) => [String(member?.$id || member?.id || "").trim(), member])
