@@ -68,15 +68,39 @@ module.exports = async ({ req, res, log }) => {
     return { response, payload };
   };
 
+  const listAllRows = async (tableId) => {
+    const query = encodeURIComponent("limit(5000)");
+    const { response, payload } = await request(
+      `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(tableId)}/rows?queries[]=${query}`
+    );
+    if (!response.ok) {
+      throw new Error(String(payload?.message || `Could not read table ${tableId}.`));
+    }
+    return Array.isArray(payload?.rows) ? payload.rows : [];
+  };
+
   const listAllDocuments = async (collectionId) => {
     const query = encodeURIComponent("limit(5000)");
     const { response, payload } = await request(
       `/databases/${encodeURIComponent(databaseId)}/collections/${encodeURIComponent(collectionId)}/documents?queries[]=${query}`
     );
     if (!response.ok) {
-      throw new Error(String(payload?.message || `Could not read ${collectionId}.`));
+      throw new Error(String(payload?.message || `Could not read collection ${collectionId}.`));
     }
     return Array.isArray(payload?.documents) ? payload.documents : [];
+  };
+
+  const listAppwriteRecords = async (resourceId) => {
+    try {
+      return await listAllRows(resourceId);
+    } catch (tableError) {
+      try {
+        return await listAllDocuments(resourceId);
+      } catch (documentError) {
+        const combinedMessage = `Could not load ${resourceId}. Tables error: ${String(tableError?.message || tableError)} Legacy collections error: ${String(documentError?.message || documentError)}`;
+        throw new Error(combinedMessage);
+      }
+    }
   };
 
   const sanitizeIban = (value) => String(value || "").replace(/\s+/g, "").toUpperCase();
@@ -109,8 +133,8 @@ module.exports = async ({ req, res, log }) => {
 
   try {
     const [memberRows, feeRows] = await Promise.all([
-      listAllDocuments(membersCollectionId),
-      listAllDocuments(feesCollectionId)
+      listAppwriteRecords(membersCollectionId),
+      listAppwriteRecords(feesCollectionId)
     ]);
 
     const membersById = new Map(
@@ -283,10 +307,12 @@ ${transactionXml}
       }
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not generate SEPA XML.";
+    log(`SEPA export failed: ${message}`);
     return res.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Could not generate SEPA XML."
+        error: message
       },
       500
     );
