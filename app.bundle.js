@@ -2302,7 +2302,8 @@
       confirmations: 0
     }));
 
-    if (memberIbanFieldAvailable && currentAccessRole === "admin") {
+    const canBackfillMemberIban = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    if (memberIbanFieldAvailable && canBackfillMemberIban) {
       const backfillCandidates = members.filter((member) => {
         const row = (memberRows || []).find((entry) => String(entry.id || "") === String(member.id || ""));
         const storedIban = String(row?.iban || "").trim();
@@ -2315,8 +2316,8 @@
           .update({ iban: String(candidate.iban || "").trim() })
           .eq("id", String(candidate.id || ""));
         if (response.error) {
-          queryWarnings.push(`members iban backfill: ${response.error.message || "write failed"}`);
-          break;
+          queryWarnings.push(`members iban backfill (${candidate.id || "unknown"}): ${response.error.message || "write failed"}`);
+          continue;
         }
       }
     }
