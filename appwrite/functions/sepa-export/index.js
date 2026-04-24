@@ -68,10 +68,11 @@ module.exports = async ({ req, res, log }) => {
     return { response, payload };
   };
 
+  const limitQuery = encodeURIComponent(JSON.stringify({ method: "limit", values: [5000] }));
+
   const listAllRows = async (tableId) => {
-    const query = encodeURIComponent("limit(5000)");
     const { response, payload } = await request(
-      `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(tableId)}/rows?queries[]=${query}`
+      `/tablesdb/${encodeURIComponent(databaseId)}/tables/${encodeURIComponent(tableId)}/rows?queries[0]=${limitQuery}`
     );
     if (!response.ok) {
       throw new Error(String(payload?.message || `Could not read table ${tableId}.`));
@@ -80,9 +81,8 @@ module.exports = async ({ req, res, log }) => {
   };
 
   const listAllDocuments = async (collectionId) => {
-    const query = encodeURIComponent("limit(5000)");
     const { response, payload } = await request(
-      `/databases/${encodeURIComponent(databaseId)}/collections/${encodeURIComponent(collectionId)}/documents?queries[]=${query}`
+      `/databases/${encodeURIComponent(databaseId)}/collections/${encodeURIComponent(collectionId)}/documents?queries[0]=${limitQuery}`
     );
     if (!response.ok) {
       throw new Error(String(payload?.message || `Could not read collection ${collectionId}.`));
