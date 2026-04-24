@@ -1,5 +1,9 @@
 (async function () {
   const APPWRITE_CONFIG = window.ClubHubAppwriteConfig || null;
+  const moduleRegistry = window.ClubHubModules || {};
+  const cacheModule = moduleRegistry.cache || null;
+  const ibanModule = moduleRegistry.iban || null;
+  const profileFinanceModule = moduleRegistry.profileFinance || null;
 
   const demoData = {
     source: "demo",
@@ -26,7 +30,8 @@
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
-  const EQUIPMENT_SHEETS = [
+  const EQUIPMENT_SHEETS_STORAGE_KEY = "emperors-equipment-sheets-v1";
+  const DEFAULT_EQUIPMENT_SHEETS = [
     { key: "training", label: "Training" },
     { key: "gameday", label: "Gameday" },
     { key: "technik", label: "Technik" },
@@ -79,6 +84,7 @@
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
   let passFilters = loadPassFilters();
+  let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
@@ -114,6 +120,9 @@
   }
 
   function getCacheWithTTL(key) {
+    if (cacheModule && typeof cacheModule.getCacheWithTTL === "function") {
+      return cacheModule.getCacheWithTTL(key, CACHE_TTL);
+    }
     try {
       const cached = localStorage.getItem(key);
       if (!cached) return null;
@@ -129,6 +138,10 @@
   }
 
   function setCacheWithTTL(key, data) {
+    if (cacheModule && typeof cacheModule.setCacheWithTTL === "function") {
+      cacheModule.setCacheWithTTL(key, data);
+      return;
+    }
     try {
       localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
     } catch (error) {
@@ -137,6 +150,10 @@
   }
 
   function invalidateCache(key) {
+    if (cacheModule && typeof cacheModule.invalidateCache === "function") {
+      cacheModule.invalidateCache(key);
+      return;
+    }
     try {
       localStorage.removeItem(key);
     } catch {
@@ -1128,20 +1145,112 @@
     return normalizeLookupToken(value).replace(/^sheet/, "");
   }
 
-  function availableEquipmentSheetKeys() {
-    const sheetKeys = new Set(EQUIPMENT_SHEETS.map((sheet) => sheet.key));
-    state.equipment.forEach((item) => {
-      const sheetKey = normalizeEquipmentSheetKey(item.group);
-      if (sheetKey && sheetKey !== "all") {
-        sheetKeys.add(sheetKey);
-      }
+  function prettifyEquipmentSheetLabel(value) {
+    const normalized = String(value || "").trim();
+    if (!normalized) return "Custom";
+    return normalized
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  function defaultEquipmentSheetEntries() {
+    return DEFAULT_EQUIPMENT_SHEETS.map((sheet) => ({ key: sheet.key, label: sheet.label }));
+  }
+
+  function equipmentSheetEntries() {
+    return Array.isArray(equipmentSheets) && equipmentSheets.length
+      ? equipmentSheets
+      : defaultEquipmentSheetEntries();
+  }
+
+  function isBuiltinEquipmentSheetKey(sheetKey) {
+    const normalized = normalizeEquipmentSheetKey(sheetKey);
+    return DEFAULT_EQUIPMENT_SHEETS.some((sheet) => sheet.key === normalized);
+  }
+
+  function saveEquipmentSheets() {
+    const custom = equipmentSheetEntries().filter((sheet) => !isBuiltinEquipmentSheetKey(sheet.key));
+    localStorage.setItem(EQUIPMENT_SHEETS_STORAGE_KEY, JSON.stringify(custom));
+  }
+
+  function loadEquipmentSheets() {
+    const byKey = new Map();
+    defaultEquipmentSheetEntries().forEach((sheet) => {
+      byKey.set(sheet.key, { key: sheet.key, label: sheet.label });
     });
-    return Array.from(sheetKeys);
+
+    try {
+      const saved = localStorage.getItem(EQUIPMENT_SHEETS_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) {
+        parsed.forEach((entry) => {
+          const rawLabel = typeof entry === "string" ? entry : String(entry?.label || entry?.key || "").trim();
+          const normalizedKey = normalizeEquipmentSheetKey(typeof entry === "string" ? entry : (entry?.key || rawLabel));
+          if (!normalizedKey || normalizedKey === "all" || isBuiltinEquipmentSheetKey(normalizedKey)) return;
+          const label = String(rawLabel || prettifyEquipmentSheetLabel(normalizedKey)).trim() || prettifyEquipmentSheetLabel(normalizedKey);
+          byKey.set(normalizedKey, { key: normalizedKey, label });
+        });
+      }
+    } catch {
+      // Ignore invalid stored sheet config.
+    }
+
+    const allEntry = byKey.get("all") || { key: "all", label: "All sheets" };
+    byKey.delete("all");
+
+    const base = DEFAULT_EQUIPMENT_SHEETS
+      .filter((sheet) => sheet.key !== "all")
+      .map((sheet) => byKey.get(sheet.key) || { key: sheet.key, label: sheet.label });
+
+    const custom = Array.from(byKey.values())
+      .filter((sheet) => !isBuiltinEquipmentSheetKey(sheet.key))
+      .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), undefined, { sensitivity: "base" }));
+
+    return [...base, ...custom, allEntry];
+  }
+
+  function addEquipmentSheet(sheetLabel) {
+    const label = String(sheetLabel || "").trim();
+    const key = normalizeEquipmentSheetKey(label);
+    if (!label) {
+      throw new Error("Sheet name is required.");
+    }
+    if (!key || key === "all") {
+      throw new Error("Choose a different sheet name.");
+    }
+    if (equipmentSheetEntries().some((sheet) => sheet.key === key)) {
+      throw new Error("A sheet with that name already exists.");
+    }
+
+    const allEntry = equipmentSheetEntries().find((sheet) => sheet.key === "all") || { key: "all", label: "All sheets" };
+    const withoutAll = equipmentSheetEntries().filter((sheet) => sheet.key !== "all");
+    equipmentSheets = [...withoutAll, { key, label }, allEntry];
+    saveEquipmentSheets();
+    saveEquipmentSheetKey(key);
+    return key;
+  }
+
+  function removeEquipmentSheet(sheetKey) {
+    const normalized = normalizeEquipmentSheetKey(sheetKey);
+    if (!normalized || normalized === "all" || isBuiltinEquipmentSheetKey(normalized)) {
+      throw new Error("This sheet cannot be removed.");
+    }
+    equipmentSheets = equipmentSheetEntries().filter((sheet) => sheet.key !== normalized);
+    saveEquipmentSheets();
+    if (selectedEquipmentSheet === normalized) {
+      saveEquipmentSheetKey("all");
+    }
+  }
+
+  function availableEquipmentSheetKeys() {
+    return equipmentSheetEntries().map((sheet) => sheet.key);
   }
 
   function resolveEquipmentSheetKey(sheetKey) {
     const normalized = normalizeEquipmentSheetKey(sheetKey);
-    if (EQUIPMENT_SHEETS.some((sheet) => sheet.key === normalized)) {
+    if (equipmentSheetEntries().some((sheet) => sheet.key === normalized)) {
       return normalized;
     }
     return "all";
@@ -1149,18 +1258,24 @@
 
   function equipmentSheetLabel(sheetKey) {
     const normalized = resolveEquipmentSheetKey(sheetKey);
-    const preset = EQUIPMENT_SHEETS.find((sheet) => sheet.key === normalized);
-    return preset?.label || "Training";
+    const preset = equipmentSheetEntries().find((sheet) => sheet.key === normalized);
+    return preset?.label || "General";
   }
 
   function equipmentSheetPromptDefaultGroup(sheetKey) {
     const normalized = resolveEquipmentSheetKey(sheetKey);
-    if (normalized === "all") return "Training";
+    if (normalized === "all") {
+      const first = equipmentSheetEntries().find((sheet) => sheet.key !== "all");
+      return first?.label || "Training";
+    }
     return equipmentSheetLabel(normalized);
   }
 
   function equipmentGroupOptions() {
-    const defaults = ["Training", "Gameday", "Technik"];
+    const defaults = equipmentSheetEntries()
+      .filter((sheet) => sheet.key !== "all")
+      .map((sheet) => String(sheet.label || "").trim())
+      .filter(Boolean);
     const fromRows = Array.from(new Set((state.equipment || []).map((item) => String(item.group || "").trim()).filter(Boolean)));
     const all = Array.from(new Set([...defaults, ...fromRows]));
     return all.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
@@ -1200,7 +1315,7 @@
 
   function equipmentSheetCounts(rows) {
     const normalizedRows = sortEquipmentRows(rows);
-    return EQUIPMENT_SHEETS.map((sheet) => ({
+    return equipmentSheetEntries().map((sheet) => ({
       ...sheet,
       count: sheet.key === "all"
         ? normalizedRows.length
@@ -1437,6 +1552,9 @@
   }
 
   function memberFeesByPeriod(memberId) {
+    if (profileFinanceModule && typeof profileFinanceModule.memberFeesByPeriod === "function") {
+      return profileFinanceModule.memberFeesByPeriod(state.fees, memberId);
+    }
     const map = new Map();
     state.fees
       .filter((fee) => String(fee.memberId) === String(memberId))
@@ -1448,6 +1566,9 @@
 
   function memberIban(memberId) {
     const member = memberById(memberId);
+    if (profileFinanceModule && typeof profileFinanceModule.memberIban === "function") {
+      return profileFinanceModule.memberIban(member, state.fees, memberId);
+    }
     const memberLevelIban = String(member?.iban || "").trim();
     if (memberLevelIban) return memberLevelIban;
     const fees = state.fees
@@ -1594,10 +1715,16 @@
   }
 
   function normalizeIbanText(value) {
+    if (ibanModule && typeof ibanModule.normalizeIbanText === "function") {
+      return ibanModule.normalizeIbanText(value);
+    }
     return String(value || "").replace(/\s+/g, "").toUpperCase().trim();
   }
 
   function formatIbanDisplay(value) {
+    if (ibanModule && typeof ibanModule.formatIbanDisplay === "function") {
+      return ibanModule.formatIbanDisplay(value);
+    }
     const normalized = normalizeIbanText(value);
     if (!normalized) return "";
     return normalized.replace(/(.{4})/g, "$1 ").trim();
@@ -3209,6 +3336,18 @@
   }
 
   async function updateMemberSensitiveFinance({ memberId, iban, statusByFeeId }) {
+    if (profileFinanceModule && typeof profileFinanceModule.updateMemberSensitiveFinance === "function") {
+      await profileFinanceModule.updateMemberSensitiveFinance({
+        currentAccessRole,
+        backendClient,
+        memberId,
+        iban,
+        statusByFeeId,
+        fees: state.fees,
+        updateFeeRow
+      });
+      return;
+    }
     if (currentAccessRole !== "admin") {
       throw new Error("Only admins can change IBAN or quarter payment statuses.");
     }
@@ -3973,6 +4112,7 @@
       .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
       .join("");
     const canEdit = currentAccessRole === "admin";
+    const canRemoveActiveSheet = canEdit && activeSheet !== "all" && !isBuiltinEquipmentSheetKey(activeSheet);
     const groupOptions = equipmentGroupOptions();
     const createDraft = equipmentCreateDraft
       ? createEquipmentDraft(equipmentCreateDraft, equipmentSheetPromptDefaultGroup(activeSheet))
@@ -4034,6 +4174,8 @@
           <p class="meta">Visible for all users${canEdit ? ", editable by admins" : "."}</p>
         </div>
         <div class="button-row">
+          ${canEdit ? `<button id="equipment-add-sheet" type="button" class="ghost-button" data-no-toast="true">Add sheet</button>` : ""}
+          ${canRemoveActiveSheet ? `<button id="equipment-remove-sheet" type="button" class="ghost-button danger-button" data-no-toast="true" data-sheet-key="${activeSheet}">Remove current sheet</button>` : ""}
           ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${equipmentSheetLabel(activeSheet)}`}</button>` : ""}
         </div>
       </div>
@@ -5096,6 +5238,49 @@
         equipmentCreateDraft = createEquipmentDraft({}, equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
         mount();
         switchView("equipment");
+      };
+    }
+
+    const addSheetButton = document.getElementById("equipment-add-sheet");
+    if (addSheetButton) {
+      addSheetButton.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const suggested = equipmentSheetPromptDefaultGroup("all");
+        const raw = window.prompt("New sheet name", suggested);
+        if (raw === null) return;
+        try {
+          const newKey = addEquipmentSheet(raw);
+          equipmentInlineEditId = "";
+          equipmentCreateDraft = null;
+          showToast("Sheet added.", "success");
+          saveEquipmentSheetKey(newKey);
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not add sheet.", "error");
+        }
+      };
+    }
+
+    const removeSheetButton = document.getElementById("equipment-remove-sheet");
+    if (removeSheetButton) {
+      removeSheetButton.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const sheetKey = String(removeSheetButton.dataset.sheetKey || "").trim();
+        if (!sheetKey) return;
+        const label = equipmentSheetLabel(sheetKey);
+        const confirmed = window.confirm(`Remove sheet \"${label}\"? This only removes the tab, not equipment rows.`);
+        if (!confirmed) return;
+        try {
+          removeEquipmentSheet(sheetKey);
+          equipmentInlineEditId = "";
+          equipmentCreateDraft = null;
+          showToast("Sheet removed.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not remove sheet.", "error");
+        }
       };
     }
 
