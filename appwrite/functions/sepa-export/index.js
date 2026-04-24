@@ -146,6 +146,19 @@ module.exports = async ({ req, res, log }) => {
       return res.json({ ok: false, error: `No fee rows found for ${requestedPeriod}.` }, 404);
     }
 
+    const latestFeeRowsByMember = new Map();
+    [...feeRows]
+      .sort((left, right) => {
+        const leftKey = String(left?.fee_period || left?.season_label || left?.due_date || left?.$createdAt || "");
+        const rightKey = String(right?.fee_period || right?.season_label || right?.due_date || right?.$createdAt || "");
+        return rightKey.localeCompare(leftKey);
+      })
+      .forEach((fee) => {
+        const memberId = String(fee?.member_id || "").trim();
+        if (!memberId || latestFeeRowsByMember.has(memberId)) return;
+        latestFeeRowsByMember.set(memberId, fee);
+      });
+
     const transactions = [];
     const includedMembers = [];
     const skippedMembers = [];
@@ -158,7 +171,8 @@ module.exports = async ({ req, res, log }) => {
       const amountCents = Math.max(0, Number(fee?.amount_cents || 0));
       const paidCents = Math.max(0, Number(fee?.paid_cents || 0));
       const outstandingCents = Math.max(0, amountCents - paidCents);
-      const debtorIban = sanitizeIban(fee?.iban);
+      const fallbackFee = latestFeeRowsByMember.get(memberId) || null;
+      const debtorIban = sanitizeIban(fee?.iban || fallbackFee?.iban);
       const mandateId = String(memberId || feeId || "").trim();
 
       const skip = (reason) => {
@@ -207,9 +221,9 @@ module.exports = async ({ req, res, log }) => {
         feeId,
         debtorName,
         debtorIban,
-        debtorBic: String(fee?.bic || "").trim().toUpperCase(),
+        debtorBic: String(fee?.bic || fallbackFee?.bic || "").trim().toUpperCase(),
         mandateId,
-        mandateDate: normalizeDate(fee?.mandate_date) || mandateDateOverride || todayIso(),
+        mandateDate: normalizeDate(fee?.mandate_date || fallbackFee?.mandate_date) || mandateDateOverride || todayIso(),
         amountCents: outstandingCents,
         dueDate: normalizeDate(fee?.due_date) || "",
         description: `${requestedPeriod} membership fee`
