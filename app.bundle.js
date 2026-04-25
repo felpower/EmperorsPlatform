@@ -136,6 +136,7 @@
   let selectedFeeMemberIds = [];
   let selectedUserMemberId = "";
   let profileRouteMode = "member";
+  let organizationDialogEditingId = "";
   let authInviteRole = "admin";
   let teardownMembersStickyHeader = null;
   let teardownFeesStickyHeader = null;
@@ -4597,7 +4598,7 @@
 
   function organizationTaskList(value) {
     return String(value || "")
-      .split(/\s*,\s*/)
+      .split(/\s*(?:,|\n)\s*/)
       .map((entry) => String(entry || "").trim())
       .filter(Boolean);
   }
@@ -4608,6 +4609,11 @@
     }
     const rows = sortOrganizationRows(state.organization || []);
     const canEdit = currentAccessRole === "admin";
+    const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
+    const branchRows = rootEntry ? rows.filter((entry) => String(entry.id) !== String(rootEntry.id)) : rows;
+    const renderTaskItems = (tasks) => tasks.length
+      ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${task}</div>`).join("")}</div>`
+      : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`;
     return `
       <div class="section-head">
         <div>
@@ -4620,41 +4626,56 @@
         </div>
       </div>
       <article class="card" style="margin-bottom: 16px; overflow: visible;">
-        <div style="display:grid; justify-items:center; gap:18px;">
-          <div style="padding:16px 22px; border-radius:20px; background:linear-gradient(135deg, rgba(245,184,55,0.18), rgba(106,196,233,0.16)); border:1px solid rgba(245,184,55,0.34); text-align:center; min-width:min(100%, 320px);">
-            <p class="eyebrow" style="margin-bottom:6px;">Top Level</p>
-            <h3 style="margin:0;">Head of Emperors</h3>
-          </div>
-          <div style="width:2px; height:28px; background:linear-gradient(180deg, rgba(245,184,55,0.7), rgba(106,196,233,0.55));"></div>
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; width:100%;">
-            ${rows.map((entry) => {
+        <div class="organization-chart">
+          ${rootEntry ? `
+            <article class="organization-root">
+              <div class="organization-root-header">Head of Emperors</div>
+              <div class="organization-root-body">
+                <div class="organization-people">
+                  <div class="organization-person-block">
+                    <p class="muted" style="margin:0 0 4px;">Verantwortlicher</p>
+                    <strong>${rootEntry.verantwortung || "Not assigned"}</strong>
+                  </div>
+                  <div class="organization-person-block">
+                    <p class="muted" style="margin:0 0 4px;">Co-Verantwortlicher</p>
+                    <strong>${rootEntry.coVerantwortung || "Not assigned"}</strong>
+                  </div>
+                </div>
+                <div>
+                  <p class="muted" style="margin:0 0 6px;">Aufgaben</p>
+                  ${renderTaskItems(organizationTaskList(rootEntry.aufgaben))}
+                </div>
+                ${canEdit ? `<div class="action-row"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${rootEntry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${rootEntry.id}" data-no-toast="true">Delete</button></div>` : ""}
+              </div>
+            </article>
+            <div class="organization-root-connector"></div>
+          ` : ""}
+          <div class="organization-branches">
+            ${branchRows.map((entry) => {
               const tasks = organizationTaskList(entry.aufgaben);
               return `
-                <article class="card" style="position:relative; padding-top:20px;">
-                  <div style="position:absolute; top:-14px; left:24px; width:2px; height:18px; background:rgba(106,196,233,0.55);"></div>
-                  <div class="pill-row" style="margin-bottom:10px;">
-                    ${plainPill(entry.headOf || "Section")}
-                  </div>
-                  <div style="display:grid; gap:10px;">
-                    <div>
-                      <p class="muted" style="margin:0 0 4px;">Verantwortlicher</p>
-                      <strong>${entry.verantwortung || "Not assigned"}</strong>
-                    </div>
-                    <div>
-                      <p class="muted" style="margin:0 0 4px;">Co-Verantwortlicher</p>
-                      <strong>${entry.coVerantwortung || "Not assigned"}</strong>
+                <article class="organization-branch">
+                  <div class="organization-branch-header">${entry.headOf || "Section"}</div>
+                  <div class="organization-branch-body">
+                    <div class="organization-people">
+                      <div class="organization-person-block">
+                        <p class="muted" style="margin:0 0 4px;">Verantwortlicher</p>
+                        <strong>${entry.verantwortung || "Not assigned"}</strong>
+                      </div>
+                      <div class="organization-person-block">
+                        <p class="muted" style="margin:0 0 4px;">Co-Verantwortlicher</p>
+                        <strong>${entry.coVerantwortung || "Not assigned"}</strong>
+                      </div>
                     </div>
                     <div>
                       <p class="muted" style="margin:0 0 6px;">Aufgaben</p>
-                      ${tasks.length
-                        ? `<div style="display:grid; gap:6px;">${tasks.map((task) => `<div class="meta" style="padding:7px 10px; border-radius:12px; background:rgba(255,255,255,0.7); border:1px solid rgba(15,23,42,0.08);">${task}</div>`).join("")}</div>`
-                        : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`}
+                      ${renderTaskItems(tasks)}
                     </div>
                     ${canEdit ? `<div class="action-row" style="margin-top:8px;"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${entry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${entry.id}" data-no-toast="true">Delete</button></div>` : ""}
                   </div>
                 </article>
               `;
-            }).join("") || `<article class="card"><p class="meta">No organization branches yet. Add your first section once the Appwrite table is ready.</p></article>`}
+            }).join("") || `<article class="organization-branch"><div class="organization-branch-header">No sections</div><div class="organization-branch-body"><p class="meta">Add your first section once the Appwrite table is ready.</p></div></article>`}
           </div>
         </div>
       </article>
@@ -4734,22 +4755,22 @@
     });
   }
 
-  function promptOrganizationEntry(initial = {}) {
-    const headOf = window.prompt("Section / Head-of", String(initial.headOf || ""));
-    if (headOf === null) return null;
-    const verantwortung = window.prompt("Verantwortlicher", String(initial.verantwortung || ""));
-    if (verantwortung === null) return null;
-    const coVerantwortung = window.prompt("Co-Verantwortlicher", String(initial.coVerantwortung || ""));
-    if (coVerantwortung === null) return null;
-    const aufgaben = window.prompt("Aufgaben (comma separated)", String(initial.aufgaben || ""));
-    if (aufgaben === null) return null;
-    return normalizeOrganizationEntry({
-      id: initial.id || generateOrganizationId(),
-      headOf,
-      verantwortung,
-      "co-verantwortung": coVerantwortung,
-      aufgaben
-    }, 0);
+  function openOrganizationDialog(entry) {
+    const dialog = document.getElementById("organization-dialog");
+    const form = document.getElementById("organization-form");
+    const title = document.getElementById("organization-dialog-title");
+    const submit = document.getElementById("organization-submit-button");
+    if (!dialog || !form) return;
+    organizationDialogEditingId = String(entry?.id || "").trim();
+    form.reset();
+    form.elements.organizationId.value = organizationDialogEditingId;
+    form.elements.headOf.value = entry?.headOf || "";
+    form.elements.verantwortung.value = entry?.verantwortung || "";
+    form.elements.coVerantwortung.value = entry?.coVerantwortung || "";
+    form.elements.aufgaben.value = String(entry?.aufgaben || "").replace(/\s*,\s*/g, "\n");
+    title.textContent = entry ? `Edit ${entry.headOf || "section"}` : "Add organization section";
+    submit.textContent = entry ? "Save changes" : "Save section";
+    dialog.showModal();
   }
 
   function viewsAllowedForRole(role) {
@@ -6892,38 +6913,70 @@
 
   function bindOrganizationActions() {
     const addButton = document.getElementById("organization-add-entry");
+    const dialog = document.getElementById("organization-dialog");
+    const form = document.getElementById("organization-form");
+    const submitButton = document.getElementById("organization-submit-button");
+    const closeButton = document.getElementById("organization-dialog-close");
+    const cancelButton = document.getElementById("organization-dialog-cancel");
     if (addButton) {
-      addButton.onclick = async function () {
+      addButton.onclick = function () {
         if (currentAccessRole !== "admin") return;
-        const draft = promptOrganizationEntry();
-        if (!draft) return;
+        openOrganizationDialog(null);
+      };
+    }
+
+    if (closeButton && dialog) {
+      closeButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (cancelButton && dialog) {
+      cancelButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (submitButton && form) {
+      submitButton.onclick = function () {
+        form.requestSubmit();
+      };
+    }
+
+    if (form) {
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        const payload = normalizeOrganizationEntry({
+          id: String(form.elements.organizationId.value || organizationDialogEditingId || generateOrganizationId()).trim(),
+          headOf: String(form.elements.headOf.value || "").trim(),
+          verantwortung: String(form.elements.verantwortung.value || "").trim(),
+          "co-verantwortung": String(form.elements.coVerantwortung.value || "").trim(),
+          aufgaben: String(form.elements.aufgaben.value || "").trim()
+        }, 0);
+        if (!payload.headOf) {
+          showToast("Section is required.", "error");
+          return;
+        }
         try {
-          await saveOrganizationEntry(draft);
-          showToast("Organization section added.", "success");
+          await saveOrganizationEntry(payload);
+          dialog?.close();
+          organizationDialogEditingId = "";
+          showToast("Organization section saved.", "success");
           mount();
           switchView("organization");
         } catch (error) {
-          showToast(error?.message || "Could not add organization section.", "error");
+          showToast(error?.message || "Could not save organization section.", "error");
         }
       };
     }
 
     document.querySelectorAll(".organization-edit-button").forEach((button) => {
-      button.onclick = async function () {
+      button.onclick = function () {
         if (currentAccessRole !== "admin") return;
         const organizationId = String(button.dataset.organizationId || "").trim();
         const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
         if (!currentRow) return;
-        const draft = promptOrganizationEntry(currentRow);
-        if (!draft) return;
-        try {
-          await saveOrganizationEntry({ ...draft, id: currentRow.id });
-          showToast("Organization section updated.", "success");
-          mount();
-          switchView("organization");
-        } catch (error) {
-          showToast(error?.message || "Could not update organization section.", "error");
-        }
+        openOrganizationDialog(currentRow);
       };
     });
 
