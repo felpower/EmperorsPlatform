@@ -4680,18 +4680,14 @@
       aufgaben: normalized.aufgaben || null
     };
     if (backendClient && authState.user) {
-      let response = await backendClient.from("organization").upsert(remotePayload, { onConflict: "id" });
-      if (response.error && /head_of/i.test(String(response.error?.message || ""))) {
-        const fallbackPayload = {
-          id: normalized.id,
-          "Head-of": normalized.headOf || null,
-          verantwortung: normalized.verantwortung || null,
-          "co-verantwortung": normalized.coVerantwortung || null,
-          aufgaben: normalized.aufgaben || null
-        };
-        response = await backendClient.from("organization").upsert(fallbackPayload, { onConflict: "id" });
+      const response = await backendClient.from("organization").upsert(remotePayload, { onConflict: "id" });
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the write. Please grant create/update/delete permissions on the 'organization' table to authenticated users, then rely on the app's admin-only UI for editing.");
+        }
+        throw response.error;
       }
-      if (response.error) throw response.error;
     }
     const existingIndex = (state.organization || []).findIndex((row) => String(row.id) === String(normalized.id));
     const nextRows = existingIndex >= 0
@@ -4717,7 +4713,13 @@
     if (!normalizedId) return;
     if (backendClient && authState.user) {
       const response = await backendClient.from("organization").delete().eq("id", normalizedId);
-      if (response.error) throw response.error;
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the delete. Please grant delete permissions on the 'organization' table to authenticated users.");
+        }
+        throw response.error;
+      }
     }
     const nextRows = (state.organization || []).filter((row) => String(row.id) !== normalizedId);
     applyBootstrap({
