@@ -97,6 +97,7 @@
       events: String(config.eventsTableId || "events"),
       event_recipients: String(config.eventRecipientsTableId || "event_recipients"),
       invites: String(config.invitesTableId || "invites"),
+      organization: String(config.organizationTableId || "organization"),
       equipment_inventory: String(config.equipmentTableId || "equipment_inventory")
     };
   }

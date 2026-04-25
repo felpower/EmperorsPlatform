@@ -18,6 +18,64 @@
     fees: [],
     events: [],
     invites: [],
+    organization: [
+      {
+        id: "org-emperors",
+        headOf: "Emperors",
+        verantwortung: "Jimmy Huynh",
+        coVerantwortung: "Lukas Steiner",
+        aufgaben: "Jahresbericht, Jahresvoranschlag, Stadlaukontakt/ Vertragsverlängerung, Raumbuchungen Stadlau, Camps planen & buchen, Weihnachtsfeier veranstalten"
+      },
+      {
+        id: "org-finanzen",
+        headOf: "Finanzen",
+        verantwortung: "Patrick Felbauer",
+        coVerantwortung: "",
+        aufgaben: "Jahresbericht, Jahresvoranschlag, Einzahler überprüfen, Auszahlungen tätigen, SEPA-Lastschriften austeilen & einsammeln"
+      },
+      {
+        id: "org-technik",
+        headOf: "Technik",
+        verantwortung: "Patrick Felbauer",
+        coVerantwortung: "",
+        aufgaben: ""
+      },
+      {
+        id: "org-coaching",
+        headOf: "Coaching",
+        verantwortung: "Max Frank",
+        coVerantwortung: "Benedikt Leitner",
+        aufgaben: "Trainingsplan- Erstellung, Hudl managen, Coaches organisieren, ACSL-Sitzungen"
+      },
+      {
+        id: "org-equipment",
+        headOf: "Equipment",
+        verantwortung: "Max Van der Werf",
+        coVerantwortung: "",
+        aufgaben: "Gameday-organisation, Inventur, Bestellungen von Equipment, Jerseyvergabe und -Überwachung, Jersey-Bestellung planen, Equipment überprüfen und pflegen, Equ.Transport planen"
+      },
+      {
+        id: "org-sportliche-leitung",
+        headOf: "Sportliche Leitung",
+        verantwortung: "Max Jeftenic",
+        coVerantwortung: "Benjamin Zitta",
+        aufgaben: "Camps planen & buchen, Tryouts organisieren, Rookie-Leitfaden erstellen/Updaten, Testspiele organisieren, Coaching-Qualitätsmonitoring: Feedbackbögen erstellen und auswerten + rückmelden"
+      },
+      {
+        id: "org-administration",
+        headOf: "Administration",
+        verantwortung: "Arthur Wäscher",
+        coVerantwortung: "",
+        aufgaben: "Förderungen erschließen, Weihnachtsfeier veranstalten, Stadlaukontakt/ Vertragsverlängerung, Raumbuchungen Stadlau, Spielerpässe überprüfen"
+      },
+      {
+        id: "org-social-media",
+        headOf: "Social Media",
+        verantwortung: "Angie",
+        coVerantwortung: "Martin Stockinger",
+        aufgaben: "Posts erstellen, Informationen nach außen transportieren, Insta-Anfragen beantworten, Media-Days planen"
+      }
+    ],
     equipment: []
   };
 
@@ -43,7 +101,7 @@
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
-  const viewIds = ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -1369,6 +1427,43 @@
       .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId);
   }
 
+  function generateOrganizationId() {
+    const randomPart = Math.random().toString(36).slice(2, 8);
+    return `organization-${Date.now()}-${randomPart}`;
+  }
+
+  function organizationRowValue(row, keys) {
+    const list = Array.isArray(keys) ? keys : [keys];
+    for (const key of list) {
+      const direct = row?.[key];
+      if (direct !== undefined) return direct;
+      const camel = String(key || "").replace(/-([a-z])/gi, function (_, letter) {
+        return String(letter || "").toUpperCase();
+      });
+      if (row && Object.prototype.hasOwnProperty.call(row, camel)) return row[camel];
+      const underscore = String(key || "").replace(/-/g, "_");
+      if (row && Object.prototype.hasOwnProperty.call(row, underscore)) return row[underscore];
+    }
+    return undefined;
+  }
+
+  function normalizeOrganizationEntry(row, index) {
+    return {
+      id: String(organizationRowValue(row, ["id", "$id"]) || `organization-${index + 1}`).trim(),
+      headOf: String(organizationRowValue(row, ["Head-of", "head_of", "headOf", "head"]) || "").trim(),
+      verantwortung: String(organizationRowValue(row, ["verantwortung"]) || "").trim(),
+      coVerantwortung: String(organizationRowValue(row, ["co-verantwortung", "co_verantwortung", "coVerantwortung"]) || "").trim(),
+      aufgaben: String(organizationRowValue(row, ["aufgaben"]) || "").trim()
+    };
+  }
+
+  function sortOrganizationRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => normalizeOrganizationEntry(row, index))
+      .filter((row) => row.headOf || row.verantwortung || row.coVerantwortung || row.aufgaben)
+      .sort((left, right) => String(left.headOf || "").localeCompare(String(right.headOf || ""), undefined, { sensitivity: "base" }));
+  }
+
   function sortEquipmentRows(rows) {
     const sorted = [...normalizeEquipmentRows(rows)].sort((left, right) => {
       const groupCompare = String(left.group || "").localeCompare(String(right.group || ""), undefined, { sensitivity: "base" });
@@ -1455,6 +1550,7 @@
       fees: Array.isArray(value.fees) ? value.fees.map(normalizeFee) : [],
       events: Array.isArray(value.events) ? value.events : [],
       invites: Array.isArray(value.invites) ? value.invites : [],
+      organization: sortOrganizationRows(value.organization),
       equipment: sortEquipmentRows(value.equipment)
     };
   }
@@ -2288,9 +2384,11 @@
   }
 
   function applyBootstrap(bootstrap) {
+    const previousOrganization = Array.isArray(state?.organization) ? state.organization : [];
     const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
     state = normalizeState({
       ...bootstrap,
+      organization: Array.isArray(bootstrap?.organization) ? bootstrap.organization : previousOrganization,
       equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment
     });
     bootstrapMeta = {
@@ -2381,6 +2479,7 @@
     const feeRows = canReadFeesOnline
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
+    const organizationRows = await selectMaybe("organization", "*", true);
     const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
     const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
     const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
@@ -2529,6 +2628,7 @@
       opens: 0,
       confirmations: 0
     }));
+    const organization = sortOrganizationRows(organizationRows || []);
 
     const currentUserRoles = (memberRoleRows || [])
       .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
@@ -2550,6 +2650,7 @@
       permissionsModel: demoData.permissionsModel,
       members,
       fees,
+      organization: organization.length ? organization : state.organization,
       events,
       invites
     });
@@ -4494,13 +4595,168 @@
     `;
   }
 
+  function organizationTaskList(value) {
+    return String(value || "")
+      .split(/\s*,\s*/)
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean);
+  }
+
+  function renderOrganization() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
+    const rows = sortOrganizationRows(state.organization || []);
+    const canEdit = currentAccessRole === "admin";
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Club Structure</p>
+          <h3>Organization</h3>
+          <p class="meta">Visible for everyone. Only admins can change responsibilities.</p>
+        </div>
+        <div class="button-row">
+          ${canEdit ? `<button type="button" class="primary-button" id="organization-add-entry">Add section</button>` : ""}
+        </div>
+      </div>
+      <article class="card" style="margin-bottom: 16px; overflow: visible;">
+        <div style="display:grid; justify-items:center; gap:18px;">
+          <div style="padding:16px 22px; border-radius:20px; background:linear-gradient(135deg, rgba(245,184,55,0.18), rgba(106,196,233,0.16)); border:1px solid rgba(245,184,55,0.34); text-align:center; min-width:min(100%, 320px);">
+            <p class="eyebrow" style="margin-bottom:6px;">Top Level</p>
+            <h3 style="margin:0;">Head of Emperors</h3>
+          </div>
+          <div style="width:2px; height:28px; background:linear-gradient(180deg, rgba(245,184,55,0.7), rgba(106,196,233,0.55));"></div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; width:100%;">
+            ${rows.map((entry) => {
+              const tasks = organizationTaskList(entry.aufgaben);
+              return `
+                <article class="card" style="position:relative; padding-top:20px;">
+                  <div style="position:absolute; top:-14px; left:24px; width:2px; height:18px; background:rgba(106,196,233,0.55);"></div>
+                  <div class="pill-row" style="margin-bottom:10px;">
+                    ${plainPill(entry.headOf || "Section")}
+                  </div>
+                  <div style="display:grid; gap:10px;">
+                    <div>
+                      <p class="muted" style="margin:0 0 4px;">Verantwortlicher</p>
+                      <strong>${entry.verantwortung || "Not assigned"}</strong>
+                    </div>
+                    <div>
+                      <p class="muted" style="margin:0 0 4px;">Co-Verantwortlicher</p>
+                      <strong>${entry.coVerantwortung || "Not assigned"}</strong>
+                    </div>
+                    <div>
+                      <p class="muted" style="margin:0 0 6px;">Aufgaben</p>
+                      ${tasks.length
+                        ? `<div style="display:grid; gap:6px;">${tasks.map((task) => `<div class="meta" style="padding:7px 10px; border-radius:12px; background:rgba(255,255,255,0.7); border:1px solid rgba(15,23,42,0.08);">${task}</div>`).join("")}</div>`
+                        : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`}
+                    </div>
+                    ${canEdit ? `<div class="action-row" style="margin-top:8px;"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${entry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${entry.id}" data-no-toast="true">Delete</button></div>` : ""}
+                  </div>
+                </article>
+              `;
+            }).join("") || `<article class="card"><p class="meta">No organization branches yet. Add your first section once the Appwrite table is ready.</p></article>`}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  async function saveOrganizationEntry(entry) {
+    if (currentAccessRole !== "admin") {
+      throw new Error("Only admins can update organization entries.");
+    }
+    const normalized = normalizeOrganizationEntry({
+      id: entry?.id || generateOrganizationId(),
+      headOf: entry?.headOf,
+      verantwortung: entry?.verantwortung,
+      "co-verantwortung": entry?.coVerantwortung,
+      aufgaben: entry?.aufgaben
+    }, 0);
+    const remotePayload = {
+      id: normalized.id,
+      head_of: normalized.headOf || null,
+      verantwortung: normalized.verantwortung || null,
+      co_verantwortung: normalized.coVerantwortung || null,
+      aufgaben: normalized.aufgaben || null
+    };
+    if (backendClient && authState.user) {
+      let response = await backendClient.from("organization").upsert(remotePayload, { onConflict: "id" });
+      if (response.error && /head_of/i.test(String(response.error?.message || ""))) {
+        const fallbackPayload = {
+          id: normalized.id,
+          "Head-of": normalized.headOf || null,
+          verantwortung: normalized.verantwortung || null,
+          "co-verantwortung": normalized.coVerantwortung || null,
+          aufgaben: normalized.aufgaben || null
+        };
+        response = await backendClient.from("organization").upsert(fallbackPayload, { onConflict: "id" });
+      }
+      if (response.error) throw response.error;
+    }
+    const existingIndex = (state.organization || []).findIndex((row) => String(row.id) === String(normalized.id));
+    const nextRows = existingIndex >= 0
+      ? state.organization.map((row, index) => (index === existingIndex ? normalized : row))
+      : [...(state.organization || []), normalized];
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: nextRows,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment
+    });
+  }
+
+  async function deleteOrganizationEntry(organizationId) {
+    if (currentAccessRole !== "admin") {
+      throw new Error("Only admins can update organization entries.");
+    }
+    const normalizedId = String(organizationId || "").trim();
+    if (!normalizedId) return;
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("organization").delete().eq("id", normalizedId);
+      if (response.error) throw response.error;
+    }
+    const nextRows = (state.organization || []).filter((row) => String(row.id) !== normalizedId);
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: nextRows,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment
+    });
+  }
+
+  function promptOrganizationEntry(initial = {}) {
+    const headOf = window.prompt("Section / Head-of", String(initial.headOf || ""));
+    if (headOf === null) return null;
+    const verantwortung = window.prompt("Verantwortlicher", String(initial.verantwortung || ""));
+    if (verantwortung === null) return null;
+    const coVerantwortung = window.prompt("Co-Verantwortlicher", String(initial.coVerantwortung || ""));
+    if (coVerantwortung === null) return null;
+    const aufgaben = window.prompt("Aufgaben (comma separated)", String(initial.aufgaben || ""));
+    if (aufgaben === null) return null;
+    return normalizeOrganizationEntry({
+      id: initial.id || generateOrganizationId(),
+      headOf,
+      verantwortung,
+      "co-verantwortung": coVerantwortung,
+      aufgaben
+    }, 0);
+  }
+
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
-    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "equipment", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "equipment", "events", "invites", "recovery"];
-    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "equipment", "events", "invites", "recovery"];
-    return ["dashboard", "members", "user", "equipment", "events", "recovery"];
+    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    return ["dashboard", "members", "user", "organization", "equipment", "events", "recovery"];
   }
 
   function canAccessView(viewId) {
@@ -6632,6 +6888,62 @@
     }
   }
 
+  function bindOrganizationActions() {
+    const addButton = document.getElementById("organization-add-entry");
+    if (addButton) {
+      addButton.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const draft = promptOrganizationEntry();
+        if (!draft) return;
+        try {
+          await saveOrganizationEntry(draft);
+          showToast("Organization section added.", "success");
+          mount();
+          switchView("organization");
+        } catch (error) {
+          showToast(error?.message || "Could not add organization section.", "error");
+        }
+      };
+    }
+
+    document.querySelectorAll(".organization-edit-button").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const organizationId = String(button.dataset.organizationId || "").trim();
+        const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
+        if (!currentRow) return;
+        const draft = promptOrganizationEntry(currentRow);
+        if (!draft) return;
+        try {
+          await saveOrganizationEntry({ ...draft, id: currentRow.id });
+          showToast("Organization section updated.", "success");
+          mount();
+          switchView("organization");
+        } catch (error) {
+          showToast(error?.message || "Could not update organization section.", "error");
+        }
+      };
+    });
+
+    document.querySelectorAll(".organization-delete-button").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const organizationId = String(button.dataset.organizationId || "").trim();
+        const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
+        if (!currentRow) return;
+        if (!window.confirm(`Delete organization section '${currentRow.headOf || currentRow.id}'?`)) return;
+        try {
+          await deleteOrganizationEntry(organizationId);
+          showToast("Organization section deleted.", "success");
+          mount();
+          switchView("organization");
+        } catch (error) {
+          showToast(error?.message || "Could not delete organization section.", "error");
+        }
+      };
+    });
+  }
+
   function mount() {
     try {
       ensureValidFeeFilter();
@@ -6652,6 +6964,7 @@
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
       document.getElementById("passes").innerHTML = renderPasses();
+      document.getElementById("organization").innerHTML = renderOrganization();
       document.getElementById("equipment").innerHTML = renderEquipment();
       document.getElementById("pass-sync").innerHTML = renderPassSyncReview();
       document.getElementById("events").innerHTML = renderEvents();
@@ -6660,6 +6973,7 @@
       document.getElementById("recovery").innerHTML = renderRecoveryGate();
       bindMemberActions();
       bindUserPageActions();
+      bindOrganizationActions();
       bindEquipmentActions();
       bindMemberFilters();
       bindFeeFilters();
