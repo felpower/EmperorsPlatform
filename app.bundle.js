@@ -31,6 +31,7 @@
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
   const EQUIPMENT_SHEETS_STORAGE_KEY = "emperors-equipment-sheets-v1";
+  const EQUIPMENT_EXPANDED_CONTAINERS_KEY = "emperors-equipment-expanded-containers-v1";
   const DEFAULT_EQUIPMENT_SHEETS = [
     { key: "training", label: "Training" },
     { key: "gameday", label: "Gameday" },
@@ -86,6 +87,7 @@
   let passFilters = loadPassFilters();
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
+  let expandedEquipmentContainerIds = loadStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY);
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
   let equipmentCreateDraft = null;
@@ -190,6 +192,21 @@
 
   function saveStoredValue(key, value) {
     localStorage.setItem(key, value);
+  }
+
+  function loadStoredArray(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map((entry) => String(entry || "").trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveStoredArray(key, value) {
+    localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
   }
 
   function profileAvatarVersionKey(memberId) {
@@ -1396,6 +1413,20 @@
       .filter((item) => item.itemKind === "container")
       .filter((item) => String(item.id) !== String(currentItemId || ""))
       .filter((item) => !groupHint || String(item.group || "").trim().toLowerCase() === String(groupHint || "").trim().toLowerCase());
+  }
+
+  function isEquipmentContainerExpanded(containerId) {
+    return expandedEquipmentContainerIds.includes(String(containerId || "").trim());
+  }
+
+  function setEquipmentContainerExpanded(containerId, expanded) {
+    const normalizedId = String(containerId || "").trim();
+    if (!normalizedId) return;
+    const next = new Set(expandedEquipmentContainerIds);
+    if (expanded) next.add(normalizedId);
+    else next.delete(normalizedId);
+    expandedEquipmentContainerIds = Array.from(next);
+    saveStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY, expandedEquipmentContainerIds);
   }
 
   function loadEquipmentFromStorage() {
@@ -4179,10 +4210,11 @@
       return String(item.article || "");
     });
     const showGroupColumn = activeSheet === "all";
+    const canEdit = currentAccessRole === "admin";
+    const visibleColumnCount = canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6);
     const sheetTabs = equipmentSheetCounts(rows)
       .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
       .join("");
-    const canEdit = currentAccessRole === "admin";
     const canRemoveActiveSheet = canEdit && activeSheet !== "all" && !isBuiltinEquipmentSheetKey(activeSheet);
     const groupOptions = equipmentGroupOptions();
     const createDraft = equipmentCreateDraft
@@ -4219,16 +4251,46 @@
       const parent = String(item.parentItemId || "").trim()
         ? rows.find((candidate) => String(candidate.id || "") === String(item.parentItemId || ""))
         : null;
-      const childCount = rows.filter((candidate) => String(candidate.parentItemId || "") === String(item.id || "")).length;
+      const children = rows.filter((candidate) => String(candidate.parentItemId || "") === String(item.id || ""));
+      const childCount = children.length;
+      const isExpanded = item.itemKind === "container" && isEquipmentContainerExpanded(item.id);
       const articlePrefix = item.parentItemId ? `<span class="meta" style="margin-right:6px;">↳</span>` : "";
       const typeMeta = item.itemKind === "container"
         ? `<span class="meta">Container${childCount ? ` · ${childCount} item${childCount === 1 ? "" : "s"}` : ""}</span>`
         : (parent ? `<span class="meta">In ${parent.article || "container"}</span>` : `<span class="meta">Item</span>`);
+      const toggleContentsButton = item.itemKind === "container"
+        ? `<button type="button" class="ghost-button small-button equipment-toggle-contents-button" data-container-id="${item.id}" data-no-toast="true">${isExpanded ? "Hide contents" : "Show contents"}</button>`
+        : "";
+      const contentsRow = item.itemKind === "container" && isExpanded
+        ? `
+          <tr class="equipment-container-contents-row">
+            <td colspan="${visibleColumnCount}">
+              <div class="card" style="margin: 6px 0 0; padding: 14px 16px;">
+                <div class="button-row" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <strong>Contents of ${item.article || "container"}</strong>
+                  <span class="meta">${childCount} item${childCount === 1 ? "" : "s"}</span>
+                </div>
+                ${children.length
+                  ? `<div style="display:grid; gap:8px;">${children.map((child) => `
+                      <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:8px 0; border-top:1px solid rgba(15,23,42,0.08);">
+                        <div>
+                          <strong>${child.article || "Unnamed item"}</strong>
+                          <div class="meta">${child.category || "No category"}${child.quantity ? ` · Qty ${child.quantity}` : ""}${child.location ? ` · ${child.location}` : ""}</div>
+                        </div>
+                        <div class="meta">${child.condition || "No condition"}</div>
+                      </div>
+                    `).join("")}</div>`
+                  : `<p class="meta" style="margin:0;">This container does not contain any items yet.</p>`}
+              </div>
+            </td>
+          </tr>
+        `
+        : "";
       if (!isEditing) {
         return `
           <tr>
             ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div></td>
+            <td><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</td>
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
@@ -4238,6 +4300,7 @@
               ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button>${item.itemKind === "container" ? `<button type="button" class="ghost-button small-button equipment-add-child-button" data-parent-id="${item.id}" data-no-toast="true">Add content</button>` : ""}<button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
               : ""}
           </tr>
+          ${contentsRow}
         `;
       }
 
@@ -4314,7 +4377,7 @@
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || `<tr><td colspan="${canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6)}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -5465,6 +5528,16 @@
           itemKind: "item",
           location: parentRow.location || ""
         }, parentRow.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+        mount();
+        switchView("equipment");
+      };
+    });
+
+    document.querySelectorAll(".equipment-toggle-contents-button").forEach((button) => {
+      button.onclick = function () {
+        const containerId = String(button.dataset.containerId || "").trim();
+        if (!containerId) return;
+        setEquipmentContainerExpanded(containerId, !isEquipmentContainerExpanded(containerId));
         mount();
         switchView("equipment");
       };
