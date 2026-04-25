@@ -359,6 +359,15 @@
     localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function profileAvatarVersionKey(memberId) {
     return `clubhub-profile-avatar-version-${String(memberId || "").trim()}`;
   }
