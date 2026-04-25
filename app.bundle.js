@@ -134,6 +134,35 @@
       awayScore: null
     }
   ];
+  const GAMES_FILTER_STORAGE_KEY = "emperors-games-team-filter-v1";
+  const TEAM_BUCKET_FILE_MAP = {
+    "BOKU Beez": "Beez",
+    "UNI-Wien Emperors": "Emperors",
+    "WU Tigers": "Tigers",
+    "TU Robots": "Robots",
+    "JKU Astros": "Astros",
+    "Med Uni Wien Serpents": "Serpents"
+  };
+  const LEAGUE_GAMES_SNAPSHOT = [
+    { id: "g-2025-10-11-emperors-beez", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T16:15:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "BOKU Beez" }, homeScore: 37, awayScore: 14 },
+    { id: "g-2025-10-11-tigers-robots", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T17:30:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "WU Tigers" }, awayTeam: { name: "TU Robots" }, homeScore: 23, awayScore: 14 },
+    { id: "g-2025-10-18-astros-beez", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-18T14:15:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "JKU Astros" }, awayTeam: { name: "BOKU Beez" }, homeScore: 7, awayScore: 37 },
+    { id: "g-2025-10-18-tigers-emperors", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-18T17:30:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "WU Tigers" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 7, awayScore: 23 },
+    { id: "g-2025-10-31-astros-robots", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-31T19:00:00+01:00", venueName: "", venueCity: "", homeTeam: { name: "JKU Astros" }, awayTeam: { name: "TU Robots" }, homeScore: 14, awayScore: 19 },
+    { id: "g-2026-04-12-serpents-tigers", stage: "Spieltag 2", subtitle: "", startsAt: "2026-04-12T14:15:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "WU Tigers" }, homeScore: 3, awayScore: 40 },
+    { id: "g-2026-04-18-beez-serpents", stage: "Spieltag 2", subtitle: "", startsAt: "2026-04-18T14:15:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 3, awayScore: 6 },
+    { id: "g-2026-04-18-robots-emperors", stage: "Spieltag 2", subtitle: "", startsAt: "2026-04-18T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4", isReplay: true, homeTeam: { name: "TU Robots" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 13, awayScore: 20 },
+    { id: "g-2026-04-24-astros-serpents", stage: "Spieltag 2", subtitle: "", startsAt: "2026-04-24T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", streamLink: "https://www.youtube.com/live/WfA_Se67oFo?si=XTe5rlfKrkbKNjoh", isReplay: true, homeTeam: { name: "JKU Astros" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 36, awayScore: 9 },
+    { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 2", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 2", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-15-astros-emperors", stage: "Spieltag 2", subtitle: "", startsAt: "2026-05-15T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", homeTeam: { name: "JKU Astros" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-23-wildcard-1", stage: "Playoffs", subtitle: "Wildcard ACSL 3. vs. 6.", startsAt: "2026-05-23T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
+    { id: "g-2026-06-06-semi-1", stage: "Semifinals", subtitle: "Semi Finals ACSL 1. vs Lowest Seed", startsAt: "2026-06-06T14:15:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien", homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
+    { id: "g-2026-06-06-semi-2", stage: "Semifinals", subtitle: "Semi Finals ACSL 2. vs Higest Seed", startsAt: "2026-06-06T17:30:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien", homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
+    { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
+    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null }
+  ];
 
   const STORAGE_KEY = "emperors-local-state-v3";
   const ACCESS_KEY = "emperors-local-access-role";
@@ -206,6 +235,7 @@
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
   let selectedEquipmentKindFilter = loadStoredValue(EQUIPMENT_KIND_FILTER_KEY, "all");
+  let selectedGameTeams = loadStoredArray(GAMES_FILTER_STORAGE_KEY);
   let expandedEquipmentContainerIds = loadStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY);
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
@@ -405,6 +435,24 @@
     const query = new URLSearchParams({ project: projectId });
     if (version) query.set("v", version);
     return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
+  function storageTeamLogoUrl(fileId) {
+    const bucketId = String(APPWRITE_CONFIG?.teamsBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedFileId = String(fileId || "").trim();
+    if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const query = new URLSearchParams({ project: projectId });
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
+  function teamLogoUrl(teamName) {
+    const normalizedTeamName = String(teamName || "").trim();
+    if (!normalizedTeamName || normalizedTeamName.toUpperCase() === "TBA") return "";
+    const fileId = TEAM_BUCKET_FILE_MAP[normalizedTeamName];
+    return fileId ? storageTeamLogoUrl(fileId) : "";
   }
 
   function avatarFallbackOnErrorAttr() {
@@ -4939,6 +4987,177 @@
     `;
   }
 
+  function normalizeGameTeamFilter(values) {
+    const allowed = new Set(Object.keys(TEAM_BUCKET_FILE_MAP));
+    return (Array.isArray(values) ? values : [])
+      .map((entry) => String(entry || "").trim())
+      .filter((entry) => allowed.has(entry));
+  }
+
+  function saveSelectedGameTeams() {
+    saveStoredArray(GAMES_FILTER_STORAGE_KEY, selectedGameTeams);
+  }
+
+  function gameFilterTeamOptions() {
+    return Object.keys(TEAM_BUCKET_FILE_MAP);
+  }
+
+  function buildLeagueGamesViewModel() {
+    const activeFilters = new Set(normalizeGameTeamFilter(selectedGameTeams));
+    return LEAGUE_GAMES_SNAPSHOT
+      .filter((game) => {
+        if (!activeFilters.size) return true;
+        const homeName = String(game?.homeTeam?.name || "").trim();
+        const awayName = String(game?.awayTeam?.name || "").trim();
+        if (homeName === "TBA" || awayName === "TBA") return false;
+        return activeFilters.has(homeName) || activeFilters.has(awayName);
+      })
+      .map((game) => {
+        const homeTeamName = String(game?.homeTeam?.name || "TBA").trim();
+        const awayTeamName = String(game?.awayTeam?.name || "TBA").trim();
+        const hasScore = Number.isFinite(game.homeScore) && Number.isFinite(game.awayScore);
+        const venueParts = [game.venueName, game.venueCity].map((value) => String(value || "").trim()).filter(Boolean);
+        return {
+          id: String(game.id || ""),
+          stage: String(game.stage || "Games").trim(),
+          subtitle: String(game.subtitle || "").trim(),
+          startsAt: String(game.startsAt || ""),
+          displayDateTime: formatDateTime(game.startsAt),
+          homeTeamName,
+          awayTeamName,
+          homeTeamLogo: teamLogoUrl(homeTeamName),
+          awayTeamLogo: teamLogoUrl(awayTeamName),
+          homeScore: Number.isFinite(game.homeScore) ? game.homeScore : null,
+          awayScore: Number.isFinite(game.awayScore) ? game.awayScore : null,
+          hasScore,
+          statusTone: hasScore ? "paid" : "pending",
+          statusLabel: hasScore ? "Result" : "Scheduled",
+          venue: venueParts.join(" · "),
+          streamLink: String(game.streamLink || "").trim(),
+          isReplay: Boolean(game.isReplay)
+        };
+      })
+      .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+  }
+
+  function renderGamesBoard() {
+    if (shouldRequireAuth() && !authState.user) {
+      return renderAuthGate();
+    }
+    const games = buildLeagueGamesViewModel();
+    const filterOptions = gameFilterTeamOptions();
+    if (!games.length) {
+      return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
+    }
+    const completedGames = games.filter((game) => game.hasScore);
+    const upcomingGames = games.filter((game) => !game.hasScore);
+    const stageOrder = [];
+    const gamesByStage = new Map();
+    games.forEach((game) => {
+      if (!gamesByStage.has(game.stage)) {
+        stageOrder.push(game.stage);
+        gamesByStage.set(game.stage, []);
+      }
+      gamesByStage.get(game.stage).push(game);
+    });
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Austrian College Sports League</p>
+          <h3>Games & results</h3>
+          <p class="meta">Full season board with team logos from your Appwrite bucket.</p>
+        </div>
+        <div class="pill-row" style="margin-top:0;">
+          ${plainPill(`${games.length} games shown`)}
+          ${plainPill(`${completedGames.length} finished`)}
+          ${plainPill(`${upcomingGames.length} upcoming`)}
+        </div>
+      </div>
+      <article class="setup-card" style="margin-bottom: 14px;">
+        <div class="game-filter-bar">
+          <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
+          ${filterOptions.map((teamName) => `
+            <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>
+          `).join("")}
+        </div>
+        <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+      </article>
+      <div class="games-stage-stack">
+        ${stageOrder.map((stage) => `
+          <section class="setup-card games-stage">
+            <div class="games-stage-head">
+              <div>
+                <p class="eyebrow">${escapeHtml(stage)}</p>
+                <h3>${escapeHtml(stage)}</h3>
+              </div>
+              <div>${plainPill(`${gamesByStage.get(stage).length} fixtures`)}</div>
+            </div>
+            <div class="games-stage-list">
+              ${gamesByStage.get(stage).map((game) => `
+                <article class="game-match">
+                  <div class="game-match-meta">
+                    <div>
+                      <strong>${escapeHtml(game.subtitle || game.displayDateTime)}</strong>
+                      <p class="meta">${escapeHtml(game.subtitle ? game.displayDateTime : (game.venue || "Venue TBA"))}</p>
+                    </div>
+                    <div class="game-match-status-row">
+                      ${statusPill(game.statusTone, game.statusLabel)}
+                      ${game.isReplay ? plainPill("Replay") : ""}
+                    </div>
+                  </div>
+                  <div class="game-match-body">
+                    <div class="game-match-team game-match-team-home">
+                      ${game.homeTeamLogo ? `<img src="${game.homeTeamLogo}" alt="${escapeHtml(game.homeTeamName)}" class="game-match-logo" />` : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.homeTeamName.slice(0, 1) || "?")}</div>`}
+                      <div>
+                        <strong>${escapeHtml(game.homeTeamName)}</strong>
+                        <p class="meta">${game.homeTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
+                      </div>
+                    </div>
+                    <div class="game-match-center">
+                      ${game.hasScore
+                        ? `<div class="game-match-score"><span>${game.homeScore}</span><span class="game-match-score-separator">:</span><span>${game.awayScore}</span></div>`
+                        : `<div class="game-match-kickoff">${escapeHtml(game.displayDateTime)}</div>`}
+                      <p class="meta">${escapeHtml(game.venue || "Venue TBA")}</p>
+                      ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button">Watch replay</a>` : ""}
+                    </div>
+                    <div class="game-match-team game-match-team-away">
+                      <div>
+                        <strong>${escapeHtml(game.awayTeamName)}</strong>
+                        <p class="meta">${game.awayTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
+                      </div>
+                      ${game.awayTeamLogo ? `<img src="${game.awayTeamLogo}" alt="${escapeHtml(game.awayTeamName)}" class="game-match-logo" />` : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.awayTeamName.slice(0, 1) || "?")}</div>`}
+                    </div>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </section>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function bindGamesActions() {
+    document.querySelectorAll("[data-game-team]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const value = String(button.dataset.gameTeam || "").trim();
+        if (value === "__all__") {
+          selectedGameTeams = [];
+        } else if (value) {
+          const next = new Set(normalizeGameTeamFilter(selectedGameTeams));
+          if (next.has(value)) {
+            next.delete(value);
+          } else {
+            next.add(value);
+          }
+          selectedGameTeams = Array.from(next);
+        }
+        saveSelectedGameTeams();
+        mount();
+      });
+    });
+  }
+
   function renderInvites() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
@@ -7562,7 +7781,7 @@
       document.getElementById("organization").innerHTML = renderOrganization();
       document.getElementById("equipment").innerHTML = renderEquipment();
       document.getElementById("pass-sync").innerHTML = renderPassSyncReview();
-      document.getElementById("events").innerHTML = renderEvents();
+      document.getElementById("events").innerHTML = renderGamesBoard();
       document.getElementById("invites").innerHTML = renderInvites();
       document.getElementById("settings").innerHTML = renderSettings();
       document.getElementById("recovery").innerHTML = renderRecoveryGate();
@@ -7570,6 +7789,7 @@
       bindUserPageActions();
       bindOrganizationActions();
       bindEquipmentActions();
+      bindGamesActions();
       bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();

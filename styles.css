@@ -527,6 +527,137 @@ button {
   color: var(--ink);
 }
 
+.game-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.game-filter-chip {
+  border-radius: 999px;
+}
+
+.game-filter-chip.is-active {
+  background: var(--accent);
+  color: #0f1720;
+  border-color: transparent;
+}
+
+.games-stage-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.games-stage {
+  display: grid;
+  gap: 14px;
+}
+
+.games-stage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.games-stage-list {
+  display: grid;
+  gap: 12px;
+}
+
+.game-match {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94)),
+    linear-gradient(135deg, rgba(84, 184, 229, 0.06), rgba(246, 186, 66, 0.08));
+  padding: 16px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.game-match-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.game-match-status-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.game-match-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.game-match-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-match-team strong {
+  display: block;
+  font-size: 1.02rem;
+}
+
+.game-match-team-away {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.game-match-center {
+  min-width: 200px;
+  display: grid;
+  gap: 8px;
+  text-align: center;
+  justify-items: center;
+}
+
+.game-match-logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  object-fit: contain;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line);
+  padding: 6px;
+  flex: 0 0 auto;
+}
+
+.game-match-logo-fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.game-match-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: clamp(1.8rem, 2vw, 2.4rem);
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.game-match-score-separator {
+  opacity: 0.45;
+}
+
+.game-match-kickoff {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
 .pill,
 .status {
   display: inline-flex;
