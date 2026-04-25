@@ -88,13 +88,14 @@
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
+  const EQUIPMENT_KIND_FILTER_KEY = "emperors-equipment-kind-filter-v1";
   const EQUIPMENT_SHEETS_STORAGE_KEY = "emperors-equipment-sheets-v1";
   const EQUIPMENT_EXPANDED_CONTAINERS_KEY = "emperors-equipment-expanded-containers-v1";
   const DEFAULT_EQUIPMENT_SHEETS = [
+    { key: "all", label: "All sheets" },
     { key: "training", label: "Training" },
     { key: "gameday", label: "Gameday" },
-    { key: "technik", label: "Technik" },
-    { key: "all", label: "All sheets" }
+    { key: "technik", label: "Technik" }
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
   const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"];
@@ -146,6 +147,7 @@
   let passFilters = loadPassFilters();
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
+  let selectedEquipmentKindFilter = loadStoredValue(EQUIPMENT_KIND_FILTER_KEY, "all");
   let expandedEquipmentContainerIds = loadStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY);
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
@@ -1275,7 +1277,6 @@
 
     const allEntry = byKey.get("all") || { key: "all", label: "All sheets" };
     byKey.delete("all");
-
     const base = DEFAULT_EQUIPMENT_SHEETS
       .filter((sheet) => sheet.key !== "all")
       .map((sheet) => byKey.get(sheet.key) || { key: sheet.key, label: sheet.label });
@@ -1284,7 +1285,7 @@
       .filter((sheet) => !isBuiltinEquipmentSheetKey(sheet.key))
       .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), undefined, { sensitivity: "base" }));
 
-    return [...base, ...custom, allEntry];
+    return [allEntry, ...base, ...custom];
   }
 
   function addEquipmentSheet(sheetLabel) {
@@ -1302,7 +1303,7 @@
 
     const allEntry = equipmentSheetEntries().find((sheet) => sheet.key === "all") || { key: "all", label: "All sheets" };
     const withoutAll = equipmentSheetEntries().filter((sheet) => sheet.key !== "all");
-    equipmentSheets = [...withoutAll, { key, label }, allEntry];
+    equipmentSheets = [allEntry, ...withoutAll, { key, label }];
     saveEquipmentSheets();
     saveEquipmentSheetKey(key);
     return key;
@@ -1399,6 +1400,30 @@
         ? normalizedRows.length
         : normalizedRows.filter((row) => normalizeEquipmentSheetKey(row.group) === sheet.key).length
     }));
+  }
+
+  function normalizeEquipmentKindFilter(value) {
+    const normalized = String(value || "all").trim().toLowerCase();
+    if (normalized === "containers") return "containers";
+    if (normalized === "items") return "items";
+    return "all";
+  }
+
+  function saveEquipmentKindFilter(value) {
+    const normalized = normalizeEquipmentKindFilter(value);
+    selectedEquipmentKindFilter = normalized;
+    saveStoredValue(EQUIPMENT_KIND_FILTER_KEY, normalized);
+  }
+
+  function filterEquipmentRowsByKind(rows, kindFilter) {
+    const normalized = normalizeEquipmentKindFilter(kindFilter);
+    if (normalized === "containers") {
+      return rows.filter((row) => String(row.itemKind || "").toLowerCase() === "container");
+    }
+    if (normalized === "items") {
+      return rows.filter((row) => String(row.itemKind || "").toLowerCase() !== "container");
+    }
+    return rows;
   }
 
   function normalizeEquipmentItem(item, index) {
@@ -4294,11 +4319,13 @@
 
     const rows = sortEquipmentRows(state.equipment || []);
     const activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
+    const activeKindFilter = normalizeEquipmentKindFilter(selectedEquipmentKindFilter);
     if (selectedEquipmentSheet !== activeSheet) {
       saveEquipmentSheetKey(activeSheet);
     }
     const visibleRows = equipmentSheetRows(rows, activeSheet);
-    const sortedRows = sortRows(visibleRows, "equipment", (item, key) => {
+    const filteredRows = filterEquipmentRowsByKind(visibleRows, activeKindFilter);
+    const sortedRows = sortRows(filteredRows, "equipment", (item, key) => {
       if (key === "group") return String(item.group || "");
       if (key === "article") return String(item.article || "");
       if (key === "condition") return String(item.condition || "");
@@ -4317,6 +4344,11 @@
     const sheetTabs = equipmentSheetCounts(rows)
       .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
       .join("");
+    const kindFilterButtons = [
+      { key: "all", label: "All" },
+      { key: "containers", label: "Containers" },
+      { key: "items", label: "Items" }
+    ].map((filter) => `<button type="button" class="sort-button equipment-sheet-tab ${filter.key === activeKindFilter ? "is-active" : ""}" data-no-toast="true" data-equipment-kind-filter="${filter.key}">${filter.label}</button>`).join("");
     const canRemoveActiveSheet = canEdit && activeSheet !== "all" && !isBuiltinEquipmentSheetKey(activeSheet);
     const groupOptions = equipmentGroupOptions();
     const createDraft = equipmentCreateDraft
@@ -4460,8 +4492,11 @@
         </article>
       ` : ""}
       <div class="card" style="margin-bottom: 12px;">
-        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 0;">
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 10px;">
           ${sheetTabs}
+        </div>
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 0;">
+          ${kindFilterButtons}
         </div>
       </div>
       <div class="table-wrap">
@@ -4479,7 +4514,7 @@
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No ${activeKindFilter === "containers" ? "containers" : activeKindFilter === "items" ? "items" : "equipment rows"} found for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -5657,16 +5692,27 @@
 
   function handleEquipmentSheetTabClick(event) {
     const equipmentSection = document.getElementById("equipment");
-    const button = event.target.closest("[data-equipment-sheet]");
-    if (!equipmentSection || !button || !equipmentSection.contains(button)) return;
+    if (!equipmentSection || !equipmentSection.contains(event.target)) return;
 
-    const sheetKey = String(button.dataset.equipmentSheet || "").trim();
-    if (!sheetKey) return;
+    const sheetButton = event.target.closest("[data-equipment-sheet]");
+    if (sheetButton && equipmentSection.contains(sheetButton)) {
+      const sheetKey = String(sheetButton.dataset.equipmentSheet || "").trim();
+      if (!sheetKey) return;
+      equipmentInlineEditId = "";
+      saveEquipmentSheetKey(sheetKey);
+      mount();
+      switchView("equipment");
+      return;
+    }
 
-    equipmentInlineEditId = "";
-    saveEquipmentSheetKey(sheetKey);
-    mount();
-    switchView("equipment");
+    const filterButton = event.target.closest("[data-equipment-kind-filter]");
+    if (filterButton && equipmentSection.contains(filterButton)) {
+      const kindFilter = String(filterButton.dataset.equipmentKindFilter || "").trim();
+      equipmentInlineEditId = "";
+      saveEquipmentKindFilter(kindFilter);
+      mount();
+      switchView("equipment");
+    }
   }
 
   function bindEquipmentActions() {
