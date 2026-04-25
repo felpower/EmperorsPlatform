@@ -4530,7 +4530,7 @@
       return `
         <div style="display:grid; gap:8px;">
           ${photoSrc
-            ? `<img src="${photoSrc}" alt="Equipment photo" style="width:88px; height:88px; object-fit:cover; border-radius:14px; border:1px solid var(--line);" />`
+            ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item?.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true"><img src="${photoSrc}" alt="Equipment photo" style="width:88px; height:88px; object-fit:cover; border-radius:14px; border:1px solid var(--line);" /></button>`
             : `<div class="meta" style="display:flex; align-items:center; justify-content:center; width:88px; height:88px; border-radius:14px; border:1px dashed var(--line); background:rgba(15,23,42,0.03);">No photo</div>`}
           <div class="button-row" style="gap:8px;">
             <button type="button" class="ghost-button small-button equipment-photo-trigger" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} data-input-id="${inputId}" data-no-toast="true">Upload photo</button>
@@ -4587,7 +4587,7 @@
         return `
           <tr>
             ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<img src="${photoSrc}" alt="Equipment photo" style="width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;" />` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
+            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true"><img src="${photoSrc}" alt="Equipment photo" style="width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;" /></button>` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
@@ -7219,6 +7219,19 @@
     }
   }
 
+  function openEquipmentPhotoDialog(photoSrc, title) {
+    const dialog = document.getElementById("equipment-photo-dialog");
+    const image = document.getElementById("equipment-photo-dialog-image");
+    const heading = document.getElementById("equipment-photo-dialog-title");
+    if (!dialog || !image) return;
+    image.src = String(photoSrc || "").trim();
+    image.alt = String(title || "Equipment preview").trim() || "Equipment preview";
+    if (heading) {
+      heading.textContent = String(title || "Equipment preview").trim() || "Equipment preview";
+    }
+    dialog.showModal();
+  }
+
   function bindOrganizationActions() {
     const addButton = document.getElementById("organization-add-entry");
     const dialog = document.getElementById("organization-dialog");
@@ -7316,6 +7329,33 @@
     });
   }
 
+  function bindEquipmentPhotoDialog() {
+    const dialog = document.getElementById("equipment-photo-dialog");
+    const closeButton = document.getElementById("equipment-photo-dialog-close");
+    const cancelButton = document.getElementById("equipment-photo-dialog-cancel");
+
+    document.querySelectorAll(".equipment-photo-thumb-button").forEach((button) => {
+      button.onclick = function () {
+        const photoSrc = String(button.dataset.equipmentPhotoSrc || "").trim();
+        if (!photoSrc) return;
+        const title = String(button.dataset.equipmentPhotoTitle || "Equipment photo").trim();
+        openEquipmentPhotoDialog(photoSrc, title);
+      };
+    });
+
+    if (closeButton && dialog) {
+      closeButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (cancelButton && dialog) {
+      cancelButton.onclick = function () {
+        dialog.close();
+      };
+    }
+  }
+
   function mount() {
     try {
       ensureValidFeeFilter();
@@ -7347,6 +7387,7 @@
       bindUserPageActions();
       bindOrganizationActions();
       bindEquipmentActions();
+      bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();
       bindPassFilters();

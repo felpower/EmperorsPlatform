@@ -245,6 +245,24 @@
       </form>
     </dialog>
 
+    <dialog id="equipment-photo-dialog" class="dialog equipment-photo-dialog">
+      <div class="dialog-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Equipment Photo</p>
+            <h3 id="equipment-photo-dialog-title">Preview</h3>
+          </div>
+          <button class="ghost-icon" id="equipment-photo-dialog-close" type="button" value="cancel" aria-label="Close">&times;</button>
+        </div>
+        <div class="equipment-photo-dialog-body">
+          <img id="equipment-photo-dialog-image" src="" alt="Equipment preview" />
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" id="equipment-photo-dialog-cancel" type="button" class="ghost-button">Close</button>
+        </div>
+      </div>
+    </dialog>
+
     <script defer src="./app.bundle.js?v=20260424c"></script>
   </body>
 </html>

@@ -743,6 +743,33 @@ tbody tr:hover {
   gap: 14px;
 }
 
+.equipment-photo-thumb-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.equipment-photo-dialog {
+  width: min(980px, calc(100vw - 24px));
+}
+
+.equipment-photo-dialog-body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 240px;
+}
+
+.equipment-photo-dialog-body img {
+  max-width: 100%;
+  max-height: min(72vh, 820px);
+  object-fit: contain;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
 .dialog-header,
 .dialog-actions,
 .form-grid {
