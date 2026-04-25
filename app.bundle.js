@@ -1286,6 +1286,8 @@
       {
         id: initial.id || generateEquipmentId(),
         group: initial.group || fallbackGroup,
+        itemKind: initial.itemKind || initial.item_kind || "item",
+        parentItemId: initial.parentItemId || initial.parent_item_id || "",
         category: initial.category || "",
         article: initial.article || "",
         quantity: initial.quantity || "",
@@ -1324,9 +1326,16 @@
   }
 
   function normalizeEquipmentItem(item, index) {
+    const itemKindRaw = String(item?.itemKind ?? item?.item_kind ?? "item").trim().toLowerCase();
+    const itemKind = itemKindRaw === "container" ? "container" : "item";
+    const id = String(item?.id || `equipment-${index + 1}`).trim();
+    const parentItemIdRaw = String(item?.parentItemId ?? item?.parent_item_id ?? "").trim();
+    const parentItemId = itemKind === "container" || parentItemIdRaw === id ? "" : parentItemIdRaw;
     return {
-      id: String(item?.id || `equipment-${index + 1}`).trim(),
+      id,
       group: String(item?.group || "General").trim() || "General",
+      itemKind,
+      parentItemId,
       category: String(item?.category || "").trim(),
       article: String(item?.article || "").trim(),
       quantity: String(item?.quantity || "").trim(),
@@ -1340,17 +1349,53 @@
   function normalizeEquipmentRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((item, index) => normalizeEquipmentItem(item, index))
-      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes);
+      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId);
   }
 
   function sortEquipmentRows(rows) {
-    return [...normalizeEquipmentRows(rows)].sort((left, right) => {
+    const sorted = [...normalizeEquipmentRows(rows)].sort((left, right) => {
       const groupCompare = String(left.group || "").localeCompare(String(right.group || ""), undefined, { sensitivity: "base" });
       if (groupCompare !== 0) return groupCompare;
       const categoryCompare = String(left.category || "").localeCompare(String(right.category || ""), undefined, { sensitivity: "base" });
       if (categoryCompare !== 0) return categoryCompare;
       return String(left.article || "").localeCompare(String(right.article || ""), undefined, { sensitivity: "base" });
     });
+    const byParent = new Map();
+    sorted.forEach((item) => {
+      const parentId = String(item.parentItemId || "").trim();
+      if (!parentId) return;
+      const list = byParent.get(parentId) || [];
+      list.push(item);
+      byParent.set(parentId, list);
+    });
+    const roots = [];
+    const seen = new Set();
+    sorted.forEach((item) => {
+      const parentId = String(item.parentItemId || "").trim();
+      const parentExists = parentId && sorted.some((candidate) => String(candidate.id) === parentId);
+      if (!parentId || !parentExists) {
+        roots.push(item);
+      }
+    });
+    const flattened = [];
+    const appendItem = (item) => {
+      const itemId = String(item.id || "");
+      if (!itemId || seen.has(itemId)) return;
+      seen.add(itemId);
+      flattened.push(item);
+      const children = byParent.get(itemId) || [];
+      children.forEach(appendItem);
+    };
+    roots.forEach(appendItem);
+    sorted.forEach(appendItem);
+    return flattened;
+  }
+
+  function equipmentContainerOptions(rows, currentItemId = "", groupHint = "") {
+    return sortEquipmentRows(rows)
+      .filter((item) => item.itemKind === "container")
+      .filter((item) => String(item.id) !== String(currentItemId || ""))
+      .filter((item) => !groupHint || String(item.group || "").trim().toLowerCase() === String(groupHint || "").trim().toLowerCase());
   }
 
   function loadEquipmentFromStorage() {
@@ -2577,6 +2622,8 @@
       {
         id: row?.id,
         group: row?.group_name,
+        itemKind: row?.item_kind,
+        parentItemId: row?.parent_item_id,
         category: row?.category,
         article: row?.article,
         quantity: row?.quantity,
@@ -2593,6 +2640,8 @@
     return {
       id: String(row?.id || generateEquipmentId()).trim(),
       group_name: String(row?.group || "General").trim() || "General",
+      item_kind: String(row?.itemKind || "item").trim() || "item",
+      parent_item_id: String(row?.parentItemId || "").trim() || null,
       category: String(row?.category || "").trim() || null,
       article: String(row?.article || "").trim() || null,
       quantity: String(row?.quantity || "").trim() || null,
@@ -2610,17 +2659,26 @@
       try {
         const remoteResponse = await backendClient
           .from("equipment_inventory")
-          .select("id, group_name, category, article, quantity, condition, location, checked_at, notes");
+          .select("id, group_name, item_kind, parent_item_id, category, article, quantity, condition, location, checked_at, notes");
 
-        if (remoteResponse.error) {
+        let remoteData = remoteResponse.data || [];
+        if (remoteResponse.error && /(item_kind|parent_item_id)/i.test(String(remoteResponse.error?.message || ""))) {
+          const legacyResponse = await backendClient
+            .from("equipment_inventory")
+            .select("id, group_name, category, article, quantity, condition, location, checked_at, notes");
+          if (legacyResponse.error) {
+            throw legacyResponse.error;
+          }
+          remoteData = legacyResponse.data || [];
+          equipmentStatus = "Equipment subgroup fields are not on the remote table yet. Using flat remote mode until the new attributes are added.";
+        } else if (remoteResponse.error) {
           throw remoteResponse.error;
         }
-
-        const remoteRows = sortEquipmentRows((remoteResponse.data || []).map(mapEquipmentRowFromRemote));
+        const remoteRows = sortEquipmentRows(remoteData.map(mapEquipmentRowFromRemote));
         equipmentStorageMode = "remote";
-        equipmentStatus = remoteRows.length
+        equipmentStatus = equipmentStatus || (remoteRows.length
           ? ""
-          : "No equipment entries found in database yet. Admins can add items now.";
+          : "No equipment entries found in database yet. Admins can add items now.");
         saveEquipmentToStorage(remoteRows);
         return;
       } catch (error) {
@@ -2649,12 +2707,21 @@
 
     if (backendClient && authState.user) {
       const remotePayload = mapEquipmentRowToRemote(normalizedRow);
-      const response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
+      let response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
+      if (response.error && /(item_kind|parent_item_id)/i.test(String(response.error?.message || ""))) {
+        const fallbackPayload = Object.assign({}, remotePayload);
+        delete fallbackPayload.item_kind;
+        delete fallbackPayload.parent_item_id;
+        response = await backendClient.from("equipment_inventory").upsert(fallbackPayload, { onConflict: "id" });
+        if (!response.error) {
+          equipmentStatus = "Equipment subgroup fields are not on the remote table yet. Parent-child links are only stored locally until the table is updated.";
+        }
+      }
       if (response.error) {
         throw response.error;
       }
       equipmentStorageMode = "remote";
-      equipmentStatus = "";
+      equipmentStatus = equipmentStatus || "";
     }
 
     const currentRows = Array.isArray(state.equipment) ? state.equipment : [];
@@ -2672,6 +2739,10 @@
 
     const normalizedId = String(equipmentId || "").trim();
     if (!normalizedId) return;
+    const children = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.parentItemId || "") === normalizedId);
+    if (children.length) {
+      throw new Error("Delete or move the contained items first.");
+    }
 
     if (backendClient && authState.user) {
       const response = await backendClient.from("equipment_inventory").delete().eq("id", normalizedId);
@@ -4126,22 +4197,45 @@
 
     const renderEditCell = (itemId, field, value, type = "text", placeholder = "") => `<input class="equipment-inline-input" data-mode="edit" data-equipment-id="${itemId}" data-field="${field}" type="${type}" value="${String(value || "").replaceAll('"', '&quot;')}" placeholder="${placeholder}" />`;
     const renderCreateCell = (field, value, type = "text", placeholder = "") => `<input class="equipment-inline-input" data-mode="create" data-field="${field}" type="${type}" value="${String(value || "").replaceAll('"', '&quot;')}" placeholder="${placeholder}" />`;
+    const renderKindSelect = (selectedKind, mode, itemId = "") => `
+      <select class="equipment-inline-input" data-mode="${mode}" data-field="itemKind" ${itemId ? `data-equipment-id="${itemId}"` : ""}>
+        <option value="item" ${String(selectedKind || "item").toLowerCase() !== "container" ? "selected" : ""}>Item</option>
+        <option value="container" ${String(selectedKind || "").toLowerCase() === "container" ? "selected" : ""}>Container</option>
+      </select>
+    `;
+    const renderParentSelect = (selectedParentId, selectedGroup, mode, itemId = "") => {
+      const options = equipmentContainerOptions(rows, itemId, selectedGroup);
+      return `
+        <select class="equipment-inline-input" data-mode="${mode}" data-field="parentItemId" ${itemId ? `data-equipment-id="${itemId}"` : ""}>
+          <option value="">No parent</option>
+          ${options.map((container) => `<option value="${String(container.id || "").replaceAll('"', '&quot;')}" ${String(selectedParentId || "") === String(container.id || "") ? "selected" : ""}>${String(container.article || "Unnamed container").replaceAll('"', "&quot;")}</option>`).join("")}
+        </select>
+      `;
+    };
 
     const rowsHtml = sortedRows.map((item) => {
       const isEditing = canEdit && String(equipmentInlineEditId || "") === String(item.id || "");
       const draft = isEditing ? createEquipmentDraft(equipmentInlineDraftById[item.id] || item, item.group || equipmentSheetPromptDefaultGroup(activeSheet)) : item;
+      const parent = String(item.parentItemId || "").trim()
+        ? rows.find((candidate) => String(candidate.id || "") === String(item.parentItemId || ""))
+        : null;
+      const childCount = rows.filter((candidate) => String(candidate.parentItemId || "") === String(item.id || "")).length;
+      const articlePrefix = item.parentItemId ? `<span class="meta" style="margin-right:6px;">↳</span>` : "";
+      const typeMeta = item.itemKind === "container"
+        ? `<span class="meta">Container${childCount ? ` · ${childCount} item${childCount === 1 ? "" : "s"}` : ""}</span>`
+        : (parent ? `<span class="meta">In ${parent.article || "container"}</span>` : `<span class="meta">Item</span>`);
       if (!isEditing) {
         return `
           <tr>
             ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><strong>${item.article || "-"}</strong></td>
+            <td><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div></td>
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
             <td>${formatDate(item.checkedAt)}</td>
             <td>${item.notes || "-"}</td>
             ${canEdit
-              ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
+              ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button>${item.itemKind === "container" ? `<button type="button" class="ghost-button small-button equipment-add-child-button" data-parent-id="${item.id}" data-no-toast="true">Add content</button>` : ""}<button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
               : ""}
           </tr>
         `;
@@ -4150,7 +4244,7 @@
       return `
         <tr class="equipment-inline-edit-row">
           ${showGroupColumn ? `<td>${renderGroupSelect(draft.group, "edit", item.id)}</td>` : ""}
-          <td>${renderEditCell(item.id, "article", draft.article, "text", "Required")}</td>
+          <td><div style="display:grid; gap:8px;">${renderEditCell(item.id, "article", draft.article, "text", "Required")}${renderKindSelect(draft.itemKind, "edit", item.id)}${renderParentSelect(draft.parentItemId, draft.group, "edit", item.id)}</div></td>
           <td>${renderEditCell(item.id, "quantity", draft.quantity)}</td>
           <td>${renderEditCell(item.id, "condition", draft.condition)}</td>
           <td>${renderEditCell(item.id, "location", draft.location)}</td>
@@ -4186,6 +4280,8 @@
           <div class="form-grid" style="margin-bottom: 10px;">
             <label>Group ${renderGroupSelect(createDraft.group, "create")}</label>
             <label>Article ${renderCreateCell("article", createDraft.article, "text", "Required")}</label>
+            <label>Type ${renderKindSelect(createDraft.itemKind, "create")}</label>
+            <label>Parent container ${renderParentSelect(createDraft.parentItemId, createDraft.group, "create")}</label>
             <label>Quantity ${renderCreateCell("quantity", createDraft.quantity)}</label>
             <label>Condition ${renderCreateCell("condition", createDraft.condition)}</label>
             <label>Location ${renderCreateCell("location", createDraft.location)}</label>
@@ -5351,6 +5447,24 @@
           ...equipmentInlineDraftById,
           [rowId]: createEquipmentDraft(currentRow, currentRow.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet))
         };
+        mount();
+        switchView("equipment");
+      };
+    });
+
+    document.querySelectorAll(".equipment-add-child-button").forEach((button) => {
+      button.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const parentId = String(button.dataset.parentId || "").trim();
+        const parentRow = (state.equipment || []).find((item) => String(item.id) === parentId);
+        if (!parentRow) return;
+        equipmentInlineEditId = "";
+        equipmentCreateDraft = createEquipmentDraft({
+          group: parentRow.group,
+          parentItemId: parentId,
+          itemKind: "item",
+          location: parentRow.location || ""
+        }, parentRow.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
         mount();
         switchView("equipment");
       };
