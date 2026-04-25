@@ -479,6 +479,54 @@ button {
   margin-top: 12px;
 }
 
+.game-card {
+  display: grid;
+  gap: 18px;
+}
+
+.game-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.game-scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.game-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-team.is-emperors strong {
+  color: var(--accent);
+}
+
+.game-team-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.88);
+  border: 1px solid var(--line);
+  padding: 4px;
+}
+
+.game-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
 .pill,
 .status {
   display: inline-flex;

@@ -78,6 +78,62 @@
     ],
     equipment: []
   };
+  const CLUBEE_GAMES_SOURCE_URL = "https://clubee.com/afbo/spiele-568998v4/leagues/16957/seasons/218";
+  const EMPERORS_TEAM_NAME = "UNI-Wien Emperors";
+  const CLUBEE_GAMES_SNAPSHOT = [
+    {
+      id: "2805871",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2025-10-11T16:15:00+00:00",
+      venueName: "",
+      venueCity: "",
+      info: "2",
+      streamLink: "",
+      homeTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      awayTeam: { name: "BOKU Beez", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/boku-beez-4768_1773399154_small.png" },
+      homeScore: 37,
+      awayScore: 14
+    },
+    {
+      id: "2805869",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2025-10-18T17:30:00+00:00",
+      venueName: "",
+      venueCity: "",
+      info: "0",
+      streamLink: "",
+      homeTeam: { name: "WU Tigers", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/wu-tigers-431431_1773399181_small.png" },
+      awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      homeScore: 7,
+      awayScore: 23
+    },
+    {
+      id: "2805889",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2026-04-18T17:30:00+00:00",
+      venueName: "Footballzentrum Ravelin",
+      venueCity: "Wien",
+      info: "5",
+      streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4",
+      homeTeam: { name: "TU Robots", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/tu-robots-2198_1773399105_small.png" },
+      awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      homeScore: 13,
+      awayScore: 20
+    },
+    {
+      id: "2805893",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2026-05-15T19:00:00+00:00",
+      venueName: "ABC ASKÖ Bewegungscenter",
+      venueCity: "Linz",
+      info: "10",
+      streamLink: "",
+      homeTeam: { name: "JKU Astros", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/jku-astros-6632_1773399167_small.png" },
+      awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      homeScore: null,
+      awayScore: null
+    }
+  ];
 
   const STORAGE_KEY = "emperors-local-state-v3";
   const ACCESS_KEY = "emperors-local-access-role";
@@ -4758,12 +4814,129 @@
     `;
   }
 
+  function formatDateTime(dateText) {
+    if (!dateText) return "-";
+    const date = new Date(String(dateText || "").trim());
+    if (Number.isNaN(date.getTime())) return String(dateText || "-");
+    return new Intl.DateTimeFormat("de-AT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  function clubeeGamesViewModel() {
+    return CLUBEE_GAMES_SNAPSHOT.map((game) => {
+      const homeTeam = game.homeTeam || {};
+      const awayTeam = game.awayTeam || {};
+      const emperorsHome = String(homeTeam.name || "").trim().toLowerCase() === EMPERORS_TEAM_NAME.toLowerCase();
+      const opponent = emperorsHome ? awayTeam : homeTeam;
+      const emperorsScore = emperorsHome ? game.homeScore : game.awayScore;
+      const opponentScore = emperorsHome ? game.awayScore : game.homeScore;
+      const hasScore = Number.isFinite(emperorsScore) && Number.isFinite(opponentScore);
+      const venueParts = [game.venueName, game.venueCity].map((value) => String(value || "").trim()).filter(Boolean);
+      let resultTone = "pending";
+      let resultLabel = "Scheduled";
+      if (hasScore) {
+        if (emperorsScore > opponentScore) {
+          resultTone = "paid";
+          resultLabel = "Win";
+        } else if (emperorsScore < opponentScore) {
+          resultTone = "expired";
+          resultLabel = "Loss";
+        } else {
+          resultTone = "pending";
+          resultLabel = "Draw";
+        }
+      }
+      return {
+        id: String(game.id || ""),
+        startsAt: String(game.startsAt || ""),
+        displayDateTime: formatDateTime(game.startsAt),
+        phase: String(game.phase || "").trim() || "Game",
+        opponentName: String(opponent?.name || "Opponent").trim(),
+        opponentLogo: String(opponent?.logo || "").trim(),
+        emperorsHome,
+        homeTeamName: String(homeTeam.name || "").trim(),
+        awayTeamName: String(awayTeam.name || "").trim(),
+        homeTeamLogo: String(homeTeam.logo || "").trim(),
+        awayTeamLogo: String(awayTeam.logo || "").trim(),
+        emperorsScore,
+        opponentScore,
+        hasScore,
+        resultTone,
+        resultLabel,
+        venue: venueParts.join(" · "),
+        info: String(game.info || "").trim(),
+        streamLink: String(game.streamLink || "").trim()
+      };
+    }).sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+  }
+
   function renderEvents() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
-    if (!state.events.length) return emptyState("No practices or games yet", "Practices will be added here in the future");
-    return `...`;
+    const games = clubeeGamesViewModel();
+    if (!games.length) {
+      return emptyState("No games found", "Once we have game data connected, the season schedule and scores will show up here.");
+    }
+    const completedGames = games.filter((game) => game.hasScore);
+    const upcomingGames = games.filter((game) => !game.hasScore);
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Season Games</p>
+          <h3>Uni Wien Emperors</h3>
+          <p class="meta">Games snapshot from the Austrian College Sports League season page.</p>
+        </div>
+        <div class="pill-row" style="margin-top:0;">
+          ${plainPill(`${games.length} games shown`)}
+          ${plainPill(`${completedGames.length} with score`)}
+          ${plainPill(`${upcomingGames.length} upcoming`)}
+        </div>
+      </div>
+      <article class="setup-card" style="margin-bottom: 14px;">
+        <p class="meta" style="margin:0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+      </article>
+      <div class="grid">
+        ${games.map((game) => `
+          <article class="setup-card game-card">
+            <div class="game-card-top">
+              <div>
+                <p class="eyebrow">${game.phase}</p>
+                <h3 style="margin-bottom: 4px;">${game.emperorsHome ? "vs" : "at"} ${game.opponentName}</h3>
+                <p class="meta" style="margin:0;">${game.displayDateTime}</p>
+              </div>
+              <div>${statusPill(game.resultTone, game.resultLabel)}</div>
+            </div>
+            <div class="game-scoreboard">
+              <div class="game-team ${game.emperorsHome ? "is-emperors" : ""}">
+                ${game.homeTeamLogo ? `<img src="${game.homeTeamLogo}" alt="${game.homeTeamName}" class="game-team-logo" />` : ""}
+                <strong>${game.homeTeamName}</strong>
+              </div>
+              <div class="game-score">
+                ${game.hasScore
+                  ? `<span>${game.emperorsHome ? game.homeScore : game.opponentScore}</span><span class="meta">:</span><span>${game.emperorsHome ? game.awayScore : game.emperorsScore}</span>`
+                  : `<span class="meta">Kickoff</span>`}
+              </div>
+              <div class="game-team ${!game.emperorsHome ? "is-emperors" : ""}">
+                ${game.awayTeamLogo ? `<img src="${game.awayTeamLogo}" alt="${game.awayTeamName}" class="game-team-logo" />` : ""}
+                <strong>${game.awayTeamName}</strong>
+              </div>
+            </div>
+            <div class="pill-row">
+              ${game.venue ? plainPill(game.venue) : ""}
+              ${game.info ? plainPill(`Game day ${game.info}`) : ""}
+              ${game.emperorsHome ? plainPill("Home") : plainPill("Away")}
+            </div>
+            ${game.streamLink ? `<div style="margin-top: 12px;"><a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button">Open stream</a></div>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    `;
   }
 
   function renderInvites() {
