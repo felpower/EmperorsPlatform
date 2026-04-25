@@ -136,12 +136,12 @@
   ];
   const GAMES_FILTER_STORAGE_KEY = "emperors-games-team-filter-v1";
   const TEAM_BUCKET_FILE_MAP = {
-    "BOKU Beez": "Beez",
-    "UNI-Wien Emperors": "Emperors",
-    "WU Tigers": "Tigers",
-    "TU Robots": "Robots",
-    "JKU Astros": "Astros",
-    "Med Uni Wien Serpents": "Serpents"
+    "BOKU Beez": "",
+    "UNI-Wien Emperors": "",
+    "WU Tigers": "",
+    "TU Robots": "",
+    "JKU Astros": "69ec923f001233031abb",
+    "Med Uni Wien Serpents": ""
   };
   const LEAGUE_GAMES_SNAPSHOT = [
     { id: "g-2025-10-11-emperors-beez", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T16:15:00+02:00", venueName: "", venueCity: "", homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "BOKU Beez" }, homeScore: 37, awayScore: 14 },
@@ -447,10 +447,15 @@
   }
 
   function storageTeamLogoUrl(fileId) {
+    const normalizedReference = String(fileId || "").trim();
+    if (!normalizedReference) return "";
+    if (/^https?:\/\//i.test(normalizedReference)) {
+      return normalizedReference.replace(/[?&]mode=admin\b/g, "").replace(/\?$/, "");
+    }
     const bucketId = String(APPWRITE_CONFIG?.teamsBucketId || "").trim();
     const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
     const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
-    const normalizedFileId = String(fileId || "").trim();
+    const normalizedFileId = normalizedReference;
     if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
     const base = endpoint.replace(/\/$/, "");
     const query = new URLSearchParams({ project: projectId });
@@ -460,7 +465,10 @@
   function teamLogoUrl(teamName) {
     const normalizedTeamName = String(teamName || "").trim();
     if (!normalizedTeamName || normalizedTeamName.toUpperCase() === "TBA") return "";
-    const fileId = TEAM_BUCKET_FILE_MAP[normalizedTeamName];
+    const configuredMap = APPWRITE_CONFIG && typeof APPWRITE_CONFIG.teamLogoFiles === "object" && APPWRITE_CONFIG.teamLogoFiles
+      ? APPWRITE_CONFIG.teamLogoFiles
+      : {};
+    const fileId = String(configuredMap[normalizedTeamName] || TEAM_BUCKET_FILE_MAP[normalizedTeamName] || "").trim();
     return fileId ? storageTeamLogoUrl(fileId) : "";
   }
 
