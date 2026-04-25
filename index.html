@@ -221,14 +221,14 @@
 
           <label>
             Verantwortlicher
-            <input name="verantwortung" placeholder="Name" />
+            <input name="verantwortung" list="organization-member-options" placeholder="Name" />
           </label>
         </div>
 
         <div class="form-grid">
           <label>
             Co-Verantwortlicher
-            <input name="coVerantwortung" placeholder="Optional" />
+            <input name="coVerantwortung" list="organization-member-options" placeholder="Optional" />
           </label>
         </div>
 
@@ -241,6 +241,7 @@
           <button value="cancel" id="organization-dialog-cancel" type="button" class="ghost-button">Cancel</button>
           <button value="default" type="button" class="primary-button" id="organization-submit-button">Save section</button>
         </div>
+        <datalist id="organization-member-options"></datalist>
       </form>
     </dialog>
 

@@ -4603,6 +4603,30 @@
       .filter(Boolean);
   }
 
+  function organizationMemberMatch(name) {
+    const needle = String(name || "").trim().toLowerCase();
+    if (!needle) return null;
+    return state.members.find((member) => {
+      const fullName = String(member.name || `${member.firstName || ""} ${member.lastName || ""}`).trim().toLowerCase();
+      return fullName === needle;
+    }) || null;
+  }
+
+  function renderOrganizationPerson(label, name) {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) return "";
+    const matchedMember = organizationMemberMatch(normalizedName);
+    const personMarkup = matchedMember
+      ? `<button type="button" class="organization-person-link open-user-page-button" data-member-id="${matchedMember.id}">${normalizedName}</button>`
+      : `<strong>${normalizedName}</strong>`;
+    return `
+      <div class="organization-person-block">
+        <p class="muted" style="margin:0 0 4px;">${label}</p>
+        ${personMarkup}
+      </div>
+    `;
+  }
+
   function renderOrganization() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
@@ -4614,6 +4638,9 @@
     const renderTaskItems = (tasks) => tasks.length
       ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${task}</div>`).join("")}</div>`
       : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`;
+    const renderTaskDetails = (tasks) => tasks.length
+      ? `<details class="organization-task-details"><summary class="organization-task-summary">Aufgaben (${tasks.length})</summary>${renderTaskItems(tasks)}</details>`
+      : "";
     return `
       <div class="section-head">
         <div>
@@ -4632,19 +4659,10 @@
               <div class="organization-root-header">Head of Emperors</div>
               <div class="organization-root-body">
                 <div class="organization-people">
-                  <div class="organization-person-block">
-                    <p class="muted" style="margin:0 0 4px;">Verantwortlicher</p>
-                    <strong>${rootEntry.verantwortung || "Not assigned"}</strong>
-                  </div>
-                  <div class="organization-person-block">
-                    <p class="muted" style="margin:0 0 4px;">Co-Verantwortlicher</p>
-                    <strong>${rootEntry.coVerantwortung || "Not assigned"}</strong>
-                  </div>
+                  ${renderOrganizationPerson("Verantwortlicher", rootEntry.verantwortung)}
+                  ${renderOrganizationPerson("Co-Verantwortlicher", rootEntry.coVerantwortung)}
                 </div>
-                <div>
-                  <p class="muted" style="margin:0 0 6px;">Aufgaben</p>
-                  ${renderTaskItems(organizationTaskList(rootEntry.aufgaben))}
-                </div>
+                ${renderTaskDetails(organizationTaskList(rootEntry.aufgaben))}
                 ${canEdit ? `<div class="action-row"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${rootEntry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${rootEntry.id}" data-no-toast="true">Delete</button></div>` : ""}
               </div>
             </article>
@@ -4658,19 +4676,10 @@
                   <div class="organization-branch-header">${entry.headOf || "Section"}</div>
                   <div class="organization-branch-body">
                     <div class="organization-people">
-                      <div class="organization-person-block">
-                        <p class="muted" style="margin:0 0 4px;">Verantwortlicher</p>
-                        <strong>${entry.verantwortung || "Not assigned"}</strong>
-                      </div>
-                      <div class="organization-person-block">
-                        <p class="muted" style="margin:0 0 4px;">Co-Verantwortlicher</p>
-                        <strong>${entry.coVerantwortung || "Not assigned"}</strong>
-                      </div>
+                      ${renderOrganizationPerson("Verantwortlicher", entry.verantwortung)}
+                      ${renderOrganizationPerson("Co-Verantwortlicher", entry.coVerantwortung)}
                     </div>
-                    <div>
-                      <p class="muted" style="margin:0 0 6px;">Aufgaben</p>
-                      ${renderTaskItems(tasks)}
-                    </div>
+                    ${renderTaskDetails(tasks)}
                     ${canEdit ? `<div class="action-row" style="margin-top:8px;"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${entry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${entry.id}" data-no-toast="true">Delete</button></div>` : ""}
                   </div>
                 </article>
@@ -6918,6 +6927,15 @@
     const submitButton = document.getElementById("organization-submit-button");
     const closeButton = document.getElementById("organization-dialog-close");
     const cancelButton = document.getElementById("organization-dialog-cancel");
+    const memberOptions = document.getElementById("organization-member-options");
+    if (memberOptions) {
+      memberOptions.innerHTML = state.members
+        .map((member) => String(member.name || `${member.firstName || ""} ${member.lastName || ""}`).trim())
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+        .map((name) => `<option value="${name.replaceAll('"', "&quot;")}"></option>`)
+        .join("");
+    }
     if (addButton) {
       addButton.onclick = function () {
         if (currentAccessRole !== "admin") return;

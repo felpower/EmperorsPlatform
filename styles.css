@@ -777,15 +777,15 @@ textarea {
 
 .organization-chart {
   display: grid;
-  gap: 22px;
+  gap: 16px;
   justify-items: center;
 }
 
 .organization-root {
   display: grid;
   gap: 0;
-  width: min(420px, 100%);
-  border-radius: 24px;
+  width: min(380px, 100%);
+  border-radius: 20px;
   overflow: hidden;
   background: var(--paper-strong);
   border: 1px solid rgba(21, 27, 28, 0.12);
@@ -794,10 +794,10 @@ textarea {
 
 .organization-root-header,
 .organization-branch-header {
-  padding: 14px 18px;
+  padding: 12px 16px;
   color: white;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .organization-root-header {
@@ -806,15 +806,15 @@ textarea {
 
 .organization-root-body,
 .organization-branch-body {
-  padding: 18px;
+  padding: 14px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   background: rgba(255, 255, 255, 0.96);
 }
 
 .organization-root-connector {
   width: 2px;
-  height: 34px;
+  height: 24px;
   background: linear-gradient(180deg, rgba(19, 37, 61, 0.72), rgba(84, 184, 229, 0.55));
 }
 
@@ -822,9 +822,9 @@ textarea {
   position: relative;
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 22px;
-  padding-top: 34px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  padding-top: 24px;
 }
 
 .organization-branches::before {
@@ -839,7 +839,7 @@ textarea {
 
 .organization-branch {
   position: relative;
-  border-radius: 22px;
+  border-radius: 18px;
   overflow: hidden;
   background: var(--paper-strong);
   border: 1px solid rgba(21, 27, 28, 0.12);
@@ -849,11 +849,11 @@ textarea {
 .organization-branch::before {
   content: "";
   position: absolute;
-  top: -34px;
+  top: -24px;
   left: 50%;
   transform: translateX(-50%);
   width: 2px;
-  height: 34px;
+  height: 24px;
   background: rgba(21, 27, 28, 0.12);
 }
 
@@ -867,15 +867,30 @@ textarea {
 }
 
 .organization-person-block {
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 8px 10px;
+  border-radius: 12px;
   background: rgba(21, 27, 28, 0.04);
   border: 1px solid rgba(21, 27, 28, 0.06);
+}
+
+.organization-person-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+
+.organization-person-link:hover {
+  color: #166d94;
 }
 
 .organization-task-list {
   display: grid;
   gap: 6px;
+  margin-top: 8px;
 }
 
 .organization-task-item {
@@ -884,6 +899,22 @@ textarea {
   background: rgba(246, 195, 22, 0.1);
   border: 1px solid rgba(246, 195, 22, 0.22);
   color: var(--ink);
+}
+
+.organization-task-details {
+  border-top: 1px solid rgba(21, 27, 28, 0.08);
+  padding-top: 8px;
+}
+
+.organization-task-summary {
+  cursor: pointer;
+  color: #166d94;
+  font-weight: 700;
+  list-style: none;
+}
+
+.organization-task-summary::-webkit-details-marker {
+  display: none;
 }
 
 .setup-list {
