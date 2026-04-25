@@ -154,6 +154,7 @@
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
   let equipmentCreateDraft = null;
+  let equipmentPhotoDraftsById = {};
   let passSyncPreview = null;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
@@ -459,6 +460,9 @@
     if (photoUrl) return photoUrl;
     const photoFileId = String(item?.photoFileId || item?.photo_file_id || "").trim();
     const equipmentId = String(item?.id || "").trim();
+    const draftPhoto = equipmentId ? equipmentPhotoDraftsById[equipmentId] : null;
+    if (draftPhoto?.photoUrl) return String(draftPhoto.photoUrl || "").trim();
+    if (draftPhoto?.photoFileId) return storageEquipmentPhotoUrl(draftPhoto.photoFileId, equipmentId);
     if (photoFileId) return storageEquipmentPhotoUrl(photoFileId, equipmentId);
     return "";
   }
@@ -2980,7 +2984,14 @@
       throw new Error("Only admins can edit equipment.");
     }
 
-    const normalizedRow = normalizeEquipmentItem({ ...row, id: row?.id || generateEquipmentId() }, 0);
+    const normalizedId = String(row?.id || generateEquipmentId()).trim();
+    const draftPhoto = equipmentPhotoDraftsById[normalizedId] || null;
+    const normalizedRow = normalizeEquipmentItem({
+      ...row,
+      id: normalizedId,
+      photoFileId: row?.photoFileId || draftPhoto?.photoFileId || "",
+      photoUrl: row?.photoUrl || draftPhoto?.photoUrl || ""
+    }, 0);
 
     if (backendClient && authState.user) {
       const remotePayload = mapEquipmentRowToRemote(normalizedRow);
@@ -3009,6 +3020,14 @@
       ? currentRows.map((item, index) => (index === existingIndex ? normalizedRow : item))
       : [...currentRows, normalizedRow];
     saveEquipmentToStorage(nextRows);
+    if (normalizedRow.photoFileId || normalizedRow.photoUrl) {
+      equipmentPhotoDraftsById[normalizedId] = {
+        photoFileId: normalizedRow.photoFileId || "",
+        photoUrl: normalizedRow.photoUrl || ""
+      };
+    } else {
+      delete equipmentPhotoDraftsById[normalizedId];
+    }
   }
 
   async function deleteEquipmentRow(equipmentId) {
@@ -3036,6 +3055,7 @@
     if (currentRow?.photoFileId || currentRow?.photoUrl) {
       await deleteEquipmentPhotoFromStorage(normalizedId, currentRow.photoFileId);
     }
+    delete equipmentPhotoDraftsById[normalizedId];
 
     const nextRows = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.id) !== normalizedId);
     saveEquipmentToStorage(nextRows);
@@ -6116,6 +6136,10 @@
           }
 
           const uploaded = await uploadEquipmentPhotoToStorage(uploadFile, baseDraft.id);
+          equipmentPhotoDraftsById[baseDraft.id] = {
+            photoFileId: uploaded.photoFileId || equipmentPhotoFileId(baseDraft.id),
+            photoUrl: uploaded.photoUrl || storageEquipmentPhotoUrl(uploaded.photoFileId || equipmentPhotoFileId(baseDraft.id), baseDraft.id)
+          };
           const nextDraft = createEquipmentDraft({ ...baseDraft, ...uploaded }, baseDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
           if (mode === "edit" && rowId) {
             equipmentInlineDraftById = {
@@ -6148,6 +6172,7 @@
 
         try {
           await deleteEquipmentPhotoFromStorage(baseDraft.id, baseDraft.photoFileId);
+          delete equipmentPhotoDraftsById[baseDraft.id];
           const nextDraft = createEquipmentDraft({ ...baseDraft, photoFileId: "", photoUrl: "" }, baseDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
           if (mode === "edit" && rowId) {
             equipmentInlineDraftById = {
