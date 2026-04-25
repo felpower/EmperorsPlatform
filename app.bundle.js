@@ -1488,7 +1488,9 @@
         condition: initial.condition || "",
         location: initial.location || "",
         checkedAt: initial.checkedAt ? normalizeToIsoDate(initial.checkedAt) : (initial.id ? "" : getTodayIsoDate()),
-        notes: initial.notes || ""
+        notes: initial.notes || "",
+        photoFileId: initial.photoFileId || initial.photo_file_id || "",
+        photoUrl: initial.photoUrl || initial.photo_url || ""
       },
       0
     );
@@ -7352,6 +7354,14 @@
     if (cancelButton && dialog) {
       cancelButton.onclick = function () {
         dialog.close();
+      };
+    }
+
+    if (dialog) {
+      dialog.onclick = function (event) {
+        if (event.target === dialog) {
+          dialog.close();
+        }
       };
     }
   }
