@@ -111,6 +111,8 @@
   ];
   const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
   const MAX_AVATAR_DIMENSION = 1280;
+  const MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
+  const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
   const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
 
@@ -309,6 +311,45 @@
     return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}/view?${query.toString()}`;
   }
 
+  function equipmentPhotoVersionKey(equipmentId) {
+    return `clubhub-equipment-photo-version-${String(equipmentId || "").trim()}`;
+  }
+
+  function equipmentPhotoVersion(equipmentId) {
+    const key = equipmentPhotoVersionKey(equipmentId);
+    return key ? String(localStorage.getItem(key) || "").trim() : "";
+  }
+
+  function bumpEquipmentPhotoVersion(equipmentId) {
+    const key = equipmentPhotoVersionKey(equipmentId);
+    if (!key) return;
+    localStorage.setItem(key, String(Date.now()));
+  }
+
+  function equipmentPhotoFileId(equipmentId) {
+    const normalized = String(equipmentId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const safe = normalized || "unknown";
+    return `equipment-${safe}`.slice(0, 36);
+  }
+
+  function storageEquipmentPhotoUrl(fileId, equipmentId = "") {
+    const bucketId = String(APPWRITE_CONFIG?.equipmentPicturesBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedFileId = String(fileId || "").trim();
+    if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const version = equipmentPhotoVersion(equipmentId || normalizedFileId);
+    const query = new URLSearchParams({ project: projectId });
+    if (version) query.set("v", version);
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
   function avatarFallbackOnErrorAttr() {
     const inlineFallback = INLINE_AVATAR_PLACEHOLDER.replaceAll("\"", "&quot;");
     return `this.src=&quot;${inlineFallback}&quot;;this.onerror=null;`;
@@ -348,6 +389,78 @@
     await storage.createFile(bucketId, fileId, file);
     bumpProfileAvatarVersion(memberId);
     return storageAvatarUrlForMember(memberId);
+  }
+
+  async function uploadEquipmentPhotoToStorage(file, equipmentId) {
+    const bucketId = String(APPWRITE_CONFIG?.equipmentPicturesBucketId || "").trim();
+    if (!bucketId) {
+      throw new Error("Missing equipmentPicturesBucketId in Appwrite config.");
+    }
+    const normalizedEquipmentId = String(equipmentId || "").trim();
+    if (!normalizedEquipmentId) {
+      throw new Error("Equipment item id is missing.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      throw new Error("Appwrite Storage API is unavailable in this browser runtime.");
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    const fileId = equipmentPhotoFileId(normalizedEquipmentId);
+
+    try {
+      if (typeof storage.deleteFile === "function") {
+        await storage.deleteFile(bucketId, fileId);
+      }
+    } catch {
+      // Ignore missing file errors; create below will handle fresh uploads.
+    }
+
+    await storage.createFile(bucketId, fileId, file);
+    bumpEquipmentPhotoVersion(normalizedEquipmentId);
+    return {
+      photoFileId: fileId,
+      photoUrl: storageEquipmentPhotoUrl(fileId, normalizedEquipmentId)
+    };
+  }
+
+  async function deleteEquipmentPhotoFromStorage(equipmentId, photoFileId) {
+    const bucketId = String(APPWRITE_CONFIG?.equipmentPicturesBucketId || "").trim();
+    if (!bucketId) return;
+    const normalizedEquipmentId = String(equipmentId || "").trim();
+    const normalizedFileId = String(photoFileId || equipmentPhotoFileId(normalizedEquipmentId)).trim();
+    if (!normalizedFileId) return;
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      return;
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    try {
+      await storage.deleteFile(bucketId, normalizedFileId);
+    } catch {
+      // Ignore missing file errors so photo removal stays idempotent.
+    }
+    bumpEquipmentPhotoVersion(normalizedEquipmentId);
+  }
+
+  function resolveEquipmentPhotoSrc(item) {
+    const photoUrl = String(item?.photoUrl || item?.photo_url || "").trim();
+    if (photoUrl) return photoUrl;
+    const photoFileId = String(item?.photoFileId || item?.photo_file_id || "").trim();
+    const equipmentId = String(item?.id || "").trim();
+    if (photoFileId) return storageEquipmentPhotoUrl(photoFileId, equipmentId);
+    return "";
   }
 
   function resolveAvatarSrcForMember(member) {
@@ -1443,7 +1556,9 @@
       condition: String(item?.condition || "").trim(),
       location: String(item?.location || "").trim(),
       checkedAt: normalizeToIsoDate(item?.checkedAt),
-      notes: String(item?.notes || "").trim()
+      notes: String(item?.notes || "").trim(),
+      photoFileId: String(item?.photoFileId ?? item?.photo_file_id ?? "").trim(),
+      photoUrl: String(item?.photoUrl ?? item?.photo_url ?? "").trim()
     };
   }
 
@@ -2788,7 +2903,9 @@
         condition: row?.condition,
         location: row?.location,
         checkedAt,
-        notes: row?.notes
+        notes: row?.notes,
+        photoFileId: row?.photo_file_id ?? row?.photoFileId,
+        photoUrl: row?.photo_url ?? row?.photoUrl
       },
       index
     );
@@ -2806,7 +2923,9 @@
       condition: String(row?.condition || "").trim() || null,
       location: String(row?.location || "").trim() || null,
       checked_at: String(row?.checkedAt || "").trim() || null,
-      notes: String(row?.notes || "").trim() || null
+      notes: String(row?.notes || "").trim() || null,
+      photo_file_id: String(row?.photoFileId || "").trim() || null,
+      photo_url: String(row?.photoUrl || "").trim() || null
     };
   }
 
@@ -2817,10 +2936,10 @@
       try {
         const remoteResponse = await backendClient
           .from("equipment_inventory")
-          .select("id, group_name, item_kind, parent_item_id, category, article, quantity, condition, location, checked_at, notes");
+          .select("id, group_name, item_kind, parent_item_id, category, article, quantity, condition, location, checked_at, notes, photo_file_id, photo_url");
 
         let remoteData = remoteResponse.data || [];
-        if (remoteResponse.error && /(item_kind|parent_item_id)/i.test(String(remoteResponse.error?.message || ""))) {
+        if (remoteResponse.error && /(item_kind|parent_item_id|photo_file_id|photo_url)/i.test(String(remoteResponse.error?.message || ""))) {
           const legacyResponse = await backendClient
             .from("equipment_inventory")
             .select("id, group_name, category, article, quantity, condition, location, checked_at, notes");
@@ -2828,7 +2947,7 @@
             throw legacyResponse.error;
           }
           remoteData = legacyResponse.data || [];
-          equipmentStatus = "Equipment subgroup fields are not on the remote table yet. Using flat remote mode until the new attributes are added.";
+          equipmentStatus = "Some equipment table attributes are not on the remote table yet. Photo and subgroup fields may only work locally until the table is updated.";
         } else if (remoteResponse.error) {
           throw remoteResponse.error;
         }
@@ -2866,13 +2985,15 @@
     if (backendClient && authState.user) {
       const remotePayload = mapEquipmentRowToRemote(normalizedRow);
       let response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
-      if (response.error && /(item_kind|parent_item_id)/i.test(String(response.error?.message || ""))) {
+      if (response.error && /(item_kind|parent_item_id|photo_file_id|photo_url)/i.test(String(response.error?.message || ""))) {
         const fallbackPayload = Object.assign({}, remotePayload);
         delete fallbackPayload.item_kind;
         delete fallbackPayload.parent_item_id;
+        delete fallbackPayload.photo_file_id;
+        delete fallbackPayload.photo_url;
         response = await backendClient.from("equipment_inventory").upsert(fallbackPayload, { onConflict: "id" });
         if (!response.error) {
-          equipmentStatus = "Equipment subgroup fields are not on the remote table yet. Parent-child links are only stored locally until the table is updated.";
+          equipmentStatus = "Some equipment table attributes are not on the remote table yet. Photo and subgroup fields are only stored locally until the table is updated.";
         }
       }
       if (response.error) {
@@ -2901,6 +3022,7 @@
     if (children.length) {
       throw new Error("Delete or move the contained items first.");
     }
+    const currentRow = (Array.isArray(state.equipment) ? state.equipment : []).find((item) => String(item.id) === normalizedId);
 
     if (backendClient && authState.user) {
       const response = await backendClient.from("equipment_inventory").delete().eq("id", normalizedId);
@@ -2909,6 +3031,10 @@
       }
       equipmentStorageMode = "remote";
       equipmentStatus = "";
+    }
+
+    if (currentRow?.photoFileId || currentRow?.photoUrl) {
+      await deleteEquipmentPhotoFromStorage(normalizedId, currentRow.photoFileId);
     }
 
     const nextRows = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.id) !== normalizedId);
@@ -4378,6 +4504,22 @@
         </select>
       `;
     };
+    const renderPhotoField = (item, mode, itemId = "") => {
+      const photoSrc = resolveEquipmentPhotoSrc(item);
+      const inputId = mode === "edit" ? `equipment-photo-input-${itemId}` : "equipment-photo-input-create";
+      return `
+        <div style="display:grid; gap:8px;">
+          ${photoSrc
+            ? `<img src="${photoSrc}" alt="Equipment photo" style="width:88px; height:88px; object-fit:cover; border-radius:14px; border:1px solid var(--line);" />`
+            : `<div class="meta" style="display:flex; align-items:center; justify-content:center; width:88px; height:88px; border-radius:14px; border:1px dashed var(--line); background:rgba(15,23,42,0.03);">No photo</div>`}
+          <div class="button-row" style="gap:8px;">
+            <button type="button" class="ghost-button small-button equipment-photo-trigger" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} data-input-id="${inputId}" data-no-toast="true">Upload photo</button>
+            ${photoSrc ? `<button type="button" class="ghost-button small-button danger-button equipment-photo-remove" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} data-no-toast="true">Remove</button>` : ""}
+          </div>
+          <input id="${inputId}" class="equipment-photo-input" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} type="file" accept="image/*" hidden />
+        </div>
+      `;
+    };
 
     const rowsHtml = sortedRows.map((item) => {
       const isEditing = canEdit && String(equipmentInlineEditId || "") === String(item.id || "");
@@ -4392,6 +4534,7 @@
       const typeMeta = item.itemKind === "container"
         ? `<span class="meta">Container${childCount ? ` · ${childCount} item${childCount === 1 ? "" : "s"}` : ""}</span>`
         : (parent ? `<span class="meta">In ${parent.article || "container"}</span>` : `<span class="meta">Item</span>`);
+      const photoSrc = resolveEquipmentPhotoSrc(item);
       const toggleContentsButton = item.itemKind === "container"
         ? `<button type="button" class="ghost-button small-button equipment-toggle-contents-button" data-container-id="${item.id}" data-no-toast="true">${isExpanded ? "Hide contents" : "Show contents"}</button>`
         : "";
@@ -4424,7 +4567,7 @@
         return `
           <tr>
             ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</td>
+            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<img src="${photoSrc}" alt="Equipment photo" style="width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;" />` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
@@ -4441,7 +4584,7 @@
       return `
         <tr class="equipment-inline-edit-row">
           ${showGroupColumn ? `<td>${renderGroupSelect(draft.group, "edit", item.id)}</td>` : ""}
-          <td><div style="display:grid; gap:8px;">${renderEditCell(item.id, "article", draft.article, "text", "Required")}${renderKindSelect(draft.itemKind, "edit", item.id)}${renderParentSelect(draft.parentItemId, draft.group, "edit", item.id)}</div></td>
+          <td><div style="display:grid; gap:8px;">${renderEditCell(item.id, "article", draft.article, "text", "Required")}${renderKindSelect(draft.itemKind, "edit", item.id)}${renderParentSelect(draft.parentItemId, draft.group, "edit", item.id)}${renderPhotoField(draft, "edit", item.id)}</div></td>
           <td>${renderEditCell(item.id, "quantity", draft.quantity)}</td>
           <td>${renderEditCell(item.id, "condition", draft.condition)}</td>
           <td>${renderEditCell(item.id, "location", draft.location)}</td>
@@ -4479,6 +4622,7 @@
             <label>Article ${renderCreateCell("article", createDraft.article, "text", "Required")}</label>
             <label>Type ${renderKindSelect(createDraft.itemKind, "create")}</label>
             <label>Parent container ${renderParentSelect(createDraft.parentItemId, createDraft.group, "create")}</label>
+            <label>Photo ${renderPhotoField(createDraft, "create")}</label>
             <label>Quantity ${renderCreateCell("quantity", createDraft.quantity)}</label>
             <label>Condition ${renderCreateCell("condition", createDraft.condition)}</label>
             <label>Location ${renderCreateCell("location", createDraft.location)}</label>
@@ -5934,6 +6078,90 @@
           switchView("equipment");
         } catch (error) {
           showToast(error?.message || "Could not delete equipment item.", "error");
+        }
+      };
+    });
+
+    document.querySelectorAll(".equipment-photo-trigger").forEach((button) => {
+      button.onclick = function () {
+        const inputId = String(button.dataset.inputId || "").trim();
+        if (!inputId) return;
+        const input = document.getElementById(inputId);
+        if (input) input.click();
+      };
+    });
+
+    document.querySelectorAll(".equipment-photo-input").forEach((input) => {
+      input.onchange = async function () {
+        if (currentAccessRole !== "admin") return;
+        const originalFile = input.files && input.files[0];
+        if (!originalFile) return;
+        const mode = String(input.dataset.mode || "").trim();
+        const rowId = String(input.dataset.equipmentId || "").trim();
+        const baseDraft = mode === "edit"
+          ? (equipmentInlineDraftById[rowId] || (state.equipment || []).find((item) => String(item.id || "") === rowId))
+          : equipmentCreateDraft;
+        if (!baseDraft) return;
+
+        try {
+          let uploadFile = originalFile;
+          if (Number(uploadFile.size || 0) > MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES) {
+            uploadFile = await compressImageForAvatar(uploadFile, {
+              maxBytes: MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES,
+              maxDimension: MAX_EQUIPMENT_PHOTO_DIMENSION
+            });
+          }
+          if (Number(uploadFile.size || 0) > MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES) {
+            throw new Error("Photo is still too large after compression. Please choose a smaller image.");
+          }
+
+          const uploaded = await uploadEquipmentPhotoToStorage(uploadFile, baseDraft.id);
+          const nextDraft = createEquipmentDraft({ ...baseDraft, ...uploaded }, baseDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+          if (mode === "edit" && rowId) {
+            equipmentInlineDraftById = {
+              ...equipmentInlineDraftById,
+              [rowId]: nextDraft
+            };
+          } else {
+            equipmentCreateDraft = nextDraft;
+          }
+          showToast("Equipment photo uploaded.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not upload equipment photo.", "error");
+        } finally {
+          input.value = "";
+        }
+      };
+    });
+
+    document.querySelectorAll(".equipment-photo-remove").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const mode = String(button.dataset.mode || "").trim();
+        const rowId = String(button.dataset.equipmentId || "").trim();
+        const baseDraft = mode === "edit"
+          ? (equipmentInlineDraftById[rowId] || (state.equipment || []).find((item) => String(item.id || "") === rowId))
+          : equipmentCreateDraft;
+        if (!baseDraft) return;
+
+        try {
+          await deleteEquipmentPhotoFromStorage(baseDraft.id, baseDraft.photoFileId);
+          const nextDraft = createEquipmentDraft({ ...baseDraft, photoFileId: "", photoUrl: "" }, baseDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+          if (mode === "edit" && rowId) {
+            equipmentInlineDraftById = {
+              ...equipmentInlineDraftById,
+              [rowId]: nextDraft
+            };
+          } else {
+            equipmentCreateDraft = nextDraft;
+          }
+          showToast("Equipment photo removed.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not remove equipment photo.", "error");
         }
       };
     });
