@@ -990,6 +990,21 @@
     return Boolean(authState.user) && !authState.user?.user_metadata?.password_set;
   }
 
+  function hasRecoveryContext() {
+    const hash = String(window.location.hash || "").replace(/^#/, "").trim();
+    if (/^recovery/i.test(hash)) return true;
+    const params = new URLSearchParams(window.location.search);
+    const hashRaw = String(window.location.hash || "").replace(/^#/, "");
+    const hashQueryPart = hashRaw.includes("?") ? hashRaw.split("?").slice(1).join("?") : hashRaw;
+    const hashParams = new URLSearchParams(hashQueryPart);
+    if ((params.get("type") || "").trim() === "recovery") return true;
+    if ((hashParams.get("type") || "").trim() === "recovery") return true;
+    return Boolean(
+      (params.get("userId") && params.get("secret")) ||
+      (hashParams.get("userId") && hashParams.get("secret"))
+    );
+  }
+
   function syncAuthSession(session) {
     authState.ready = true;
     authState.loading = false;
@@ -1005,7 +1020,7 @@
       authState.mode = "remote";
       if (needsPasswordSetup()) {
         authState.status = "Set your password to finish activating this account.";
-        if (!/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
+        if (hasRecoveryContext() && !/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
           window.location.hash = "#recovery";
         }
       } else {
