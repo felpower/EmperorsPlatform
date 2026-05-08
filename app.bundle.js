@@ -5104,9 +5104,6 @@
   }
 
   function renderGamesBoard() {
-    if (shouldRequireAuth() && !authState.user) {
-      return renderAuthGate();
-    }
     const games = buildLeagueGamesViewModel();
     const standings = buildLeagueStandingsViewModel();
     const filterOptions = gameFilterTeamOptions();
@@ -5333,9 +5330,6 @@
   }
 
   function renderOrganization() {
-    if (shouldRequireAuth() && !authState.user) {
-      return renderAuthGate();
-    }
     const rows = sortOrganizationRows(state.organization || []);
     const canEdit = currentAccessRole === "admin";
     const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
@@ -5496,8 +5490,15 @@
     return ["dashboard", "members", "user", "organization", "equipment", "events", "recovery"];
   }
 
+  function isPublicView(viewId) {
+    const normalizedViewId = String(viewId || "").trim();
+    return normalizedViewId === "events" || normalizedViewId === "organization";
+  }
+
   function canAccessView(viewId) {
-    return viewsAllowedForRole(currentAccessRole).includes(String(viewId || "").trim());
+    const normalizedViewId = String(viewId || "").trim();
+    if (isPublicView(normalizedViewId)) return true;
+    return viewsAllowedForRole(currentAccessRole).includes(normalizedViewId);
   }
 
   function resolveAllowedView(nextViewId) {
@@ -5512,14 +5513,14 @@
     const signedIn = Boolean(authState.user) || isLocalPreviewMode();
     document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
       const viewId = String(link.dataset.view || "").trim();
-      const visible = signedIn && canAccessView(viewId);
+      const visible = isPublicView(viewId) || (signedIn && canAccessView(viewId));
       link.style.display = visible ? "" : "none";
       if (!visible) link.classList.remove("active");
     });
 
     const navDivider = document.querySelector(".nav hr");
     if (navDivider) {
-      navDivider.style.display = signedIn ? "" : "none";
+      navDivider.style.display = signedIn || isPublicView("events") ? "" : "none";
     }
 
     const profileNavButton = document.getElementById("profile-nav-button");
