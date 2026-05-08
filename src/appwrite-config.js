@@ -6,6 +6,7 @@ window.ClubHubAppwriteConfig = {
   inviteFunctionId: "CreateAuthAccount",
   passSyncFunctionId: "PassSyncFunction",
   sepaExportFunctionId: "SepaExport",
+  diagnosticsFunctionId: "LogClientEvent",
   profilePicturesBucketId: "ProfilePictures",
   equipmentPicturesBucketId: "equipment",
   teamsBucketId: "teams",
@@ -19,5 +20,6 @@ window.ClubHubAppwriteConfig = {
   eventsTableId: "events",
   eventRecipientsTableId: "event_recipients",
   invitesTableId: "invites",
-  equipmentTableId: "equipment_inventory"
+  equipmentTableId: "equipment_inventory",
+  diagnosticsTableId: "diagnostics_logs"
 };

@@ -220,6 +220,7 @@
   const MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
   const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
   const MAX_DIAGNOSTIC_LOG_ENTRIES = 200;
+  const MAX_REMOTE_DIAGNOSTIC_ENTRIES = 150;
   const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
 
@@ -281,6 +282,12 @@
     status: "",
     loading: false
   };
+  let remoteDiagnosticsEntries = [];
+  let remoteDiagnosticsStatus = "";
+  let remoteDiagnosticsLoading = false;
+  let remoteDiagnosticsLoadedAt = 0;
+  let remoteDiagnosticsDisabledReason = "";
+  const remoteDiagnosticSyncIds = new Set();
   let buttonFeedbackBound = false;
   let equipmentStorageMode = "local";
   let equipmentStatus = "";
@@ -411,6 +418,203 @@
     }
   }
 
+  function diagnosticsFunctionId() {
+    return String(APPWRITE_CONFIG?.diagnosticsFunctionId || "").trim();
+  }
+
+  function diagnosticsTableId() {
+    return String(APPWRITE_CONFIG?.diagnosticsTableId || "").trim();
+  }
+
+  function diagnosticRouteLabel() {
+    const hash = String(window.location.hash || "").trim();
+    return hash || "#dashboard";
+  }
+
+  function clampDiagnosticText(value, maxLength) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text;
+  }
+
+  function diagnosticRecordValue(record, fallback) {
+    const normalized = record && typeof record === "object" ? record : {};
+    for (const key of Array.prototype.slice.call(arguments, 2)) {
+      if (Object.prototype.hasOwnProperty.call(normalized, key) && normalized[key] !== undefined && normalized[key] !== null) {
+        return normalized[key];
+      }
+    }
+    return fallback;
+  }
+
+  async function executeAppwriteFunction(functionId, payload, options) {
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+    const normalizedFunctionId = String(functionId || "").trim();
+    if (!normalizedFunctionId) {
+      throw new Error("Appwrite function id is missing.");
+    }
+
+    const functionClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const functionsApi = new appwriteSdk.Functions(functionClient);
+    const execution = await functionsApi.createExecution(
+      normalizedFunctionId,
+      JSON.stringify(payload || {}),
+      false
+    );
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    const maxPolls = Number(options?.maxPolls || 8);
+    const pollDelayMs = Number(options?.pollDelayMs || 300);
+    let finalExecution = execution;
+
+    for (let index = 0; index < maxPolls; index += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(pollDelayMs);
+        finalExecution = await functionsApi.getExecution(normalizedFunctionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    let parsedBody = null;
+    if (responseBodyRaw) {
+      try {
+        parsedBody = JSON.parse(responseBodyRaw);
+      } catch {
+        parsedBody = null;
+      }
+    }
+
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyError = String(parsedBody?.error || parsedBody?.message || responseBodyRaw || "").trim();
+      throw new Error(
+        `${normalizedFunctionId} failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyError || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    if (parsedBody?.error) {
+      throw new Error(String(parsedBody.error || "Appwrite function failed."));
+    }
+
+    return {
+      execution: finalExecution,
+      body: parsedBody
+    };
+  }
+
+  function buildRemoteDiagnosticPayload(entry) {
+    const member = typeof signedInMemberRecord === "function" ? signedInMemberRecord() : null;
+    return {
+      loggedAt: String(entry?.at || new Date().toISOString()).trim(),
+      level: clampDiagnosticText(entry?.level || "info", 32).toLowerCase(),
+      scope: clampDiagnosticText(entry?.scope || "app", 64),
+      message: clampDiagnosticText(entry?.message || "Diagnostic event", 512),
+      details: clampDiagnosticText(entry?.details || "", 4000),
+      route: clampDiagnosticText(diagnosticRouteLabel(), 255),
+      origin: clampDiagnosticText(window.location.origin || "", 255),
+      userId: clampDiagnosticText(authState.user?.id || "", 128),
+      memberId: clampDiagnosticText(member?.id || "", 128),
+      accessRole: clampDiagnosticText(currentAccessRole || "", 64),
+      userEmail: clampDiagnosticText(authState.user?.email || "", 255),
+      userAgent: clampDiagnosticText(window.navigator?.userAgent || "", 1024),
+      sessionLabel: clampDiagnosticText(authDisplayName(), 255)
+    };
+  }
+
+  function queueRemoteDiagnostic(entry) {
+    const functionId = diagnosticsFunctionId();
+    if (!functionId || !entry?.id || remoteDiagnosticSyncIds.has(entry.id) || remoteDiagnosticsDisabledReason) {
+      return;
+    }
+
+    remoteDiagnosticSyncIds.add(entry.id);
+    Promise.resolve().then(async function () {
+      try {
+        await executeAppwriteFunction(functionId, { event: buildRemoteDiagnosticPayload(entry) }, { maxPolls: 6, pollDelayMs: 250 });
+        if (!remoteDiagnosticsStatus) {
+          remoteDiagnosticsStatus = "Remote diagnostics connected.";
+        }
+      } catch (error) {
+        const message = summarizeDiagnosticError(error) || "Remote diagnostics failed.";
+        remoteDiagnosticsDisabledReason = message;
+        remoteDiagnosticsStatus = `Remote diagnostics unavailable: ${message}`;
+        console.warn("[Diagnostics]", message);
+      } finally {
+        remoteDiagnosticSyncIds.delete(entry.id);
+      }
+    });
+  }
+
+  function normalizeRemoteDiagnosticEntry(row) {
+    return {
+      id: String(diagnosticRecordValue(row, "", "$id", "id") || "").trim(),
+      at: String(diagnosticRecordValue(row, "", "logged_at", "loggedAt", "$createdAt") || "").trim(),
+      level: String(diagnosticRecordValue(row, "info", "level") || "info").trim().toLowerCase(),
+      scope: String(diagnosticRecordValue(row, "app", "scope") || "app").trim(),
+      message: String(diagnosticRecordValue(row, "", "message") || "").trim(),
+      details: String(diagnosticRecordValue(row, "", "details") || "").trim(),
+      route: String(diagnosticRecordValue(row, "", "route") || "").trim(),
+      origin: String(diagnosticRecordValue(row, "", "origin") || "").trim(),
+      userId: String(diagnosticRecordValue(row, "", "user_id", "userId") || "").trim(),
+      memberId: String(diagnosticRecordValue(row, "", "member_id", "memberId") || "").trim(),
+      accessRole: String(diagnosticRecordValue(row, "", "access_role", "accessRole") || "").trim(),
+      userEmail: String(diagnosticRecordValue(row, "", "user_email", "userEmail") || "").trim()
+    };
+  }
+
+  async function loadRemoteDiagnosticsLog(force) {
+    if (!backendClient || !diagnosticsTableId()) {
+      remoteDiagnosticsStatus = "Remote diagnostics table is not configured.";
+      return [];
+    }
+    if (!force && remoteDiagnosticsLoading) {
+      return remoteDiagnosticsEntries;
+    }
+    if (!force && remoteDiagnosticsLoadedAt && (Date.now() - remoteDiagnosticsLoadedAt) < 30000) {
+      return remoteDiagnosticsEntries;
+    }
+
+    remoteDiagnosticsLoading = true;
+    remoteDiagnosticsStatus = "Loading remote diagnostics...";
+    try {
+      const response = await backendClient.from("diagnostics_logs").select("*");
+      if (response?.error) {
+        throw response.error;
+      }
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      remoteDiagnosticsEntries = rows
+        .map(normalizeRemoteDiagnosticEntry)
+        .sort((left, right) => String(right.at || "").localeCompare(String(left.at || "")))
+        .slice(0, MAX_REMOTE_DIAGNOSTIC_ENTRIES);
+      remoteDiagnosticsLoadedAt = Date.now();
+      remoteDiagnosticsStatus = remoteDiagnosticsEntries.length
+        ? `Loaded ${remoteDiagnosticsEntries.length} remote log entr${remoteDiagnosticsEntries.length === 1 ? "y" : "ies"}.`
+        : "No remote diagnostics recorded yet.";
+    } catch (error) {
+      remoteDiagnosticsStatus = `Could not load remote diagnostics: ${summarizeDiagnosticError(error)}`;
+    } finally {
+      remoteDiagnosticsLoading = false;
+      if (getRouteView() === "settings") {
+        mount();
+      }
+    }
+
+    return remoteDiagnosticsEntries;
+  }
+
   function recordDiagnostic(level, scope, message, details) {
     const entry = {
       id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -422,6 +626,7 @@
     };
     const next = [entry, ...loadDiagnosticsLog()].slice(0, MAX_DIAGNOSTIC_LOG_ENTRIES);
     saveDiagnosticsLog(next);
+    queueRemoteDiagnostic(entry);
     return entry;
   }
 
@@ -5363,6 +5568,7 @@
     }
     const restrictions = bootstrapMeta.permissionsModel?.restrictedAreas || {};
     const diagnosticEntries = loadDiagnosticsLog();
+    const remoteRows = remoteDiagnosticsEntries;
     return `
       <div class="grid two-up">
         ${currentAccessRole === "admin" ? `
@@ -5381,7 +5587,40 @@
         <article class="setup-card">
           <p class="eyebrow">Diagnostics</p>
           <h3>Recent logs</h3>
-          <p class="meta">Important auth events, load failures, and app errors are stored locally in this browser for debugging.</p>
+          <p class="meta">Important auth events, load failures, and app errors are stored locally in this browser and can also be forwarded to Appwrite for cross-device troubleshooting.</p>
+          <div class="stack" style="gap: 10px; margin-bottom: 14px;">
+            <div class="meta"><strong>Remote logs:</strong> ${escapeHtml(remoteDiagnosticsStatus || (diagnosticsFunctionId() ? "Not loaded yet." : "Diagnostics function not configured."))}</div>
+            <div class="button-row">
+              <button type="button" class="ghost-button" id="refresh-remote-diagnostics-log">Refresh remote logs</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="margin-bottom: 14px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Level</th>
+                  <th>Scope</th>
+                  <th>Message</th>
+                  <th>User</th>
+                  <th>Route</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${remoteRows.map((entry) => `
+                  <tr>
+                    <td>${formatDateTime(entry.at)}</td>
+                    <td>${statusPill(entry.level === "error" ? "expired" : entry.level === "warn" ? "pending" : "paid", entry.level)}</td>
+                    <td>${escapeHtml(entry.scope || "-")}</td>
+                    <td>${escapeHtml(entry.message || "-")}</td>
+                    <td class="meta">${escapeHtml(entry.userEmail || entry.accessRole || "-")}</td>
+                    <td class="meta">${escapeHtml(entry.route || "-")}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="6" class="meta">No remote diagnostics loaded yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <p class="meta">Local browser fallback</p>
           <div class="button-row" style="margin-bottom: 10px;">
             <button type="button" class="ghost-button" id="export-diagnostics-log">Export logs</button>
             <button type="button" class="ghost-button danger-button" id="clear-diagnostics-log">Clear logs</button>
@@ -7162,6 +7401,17 @@
         mount();
         switchView("settings");
       };
+    }
+
+    const refreshRemoteButton = document.getElementById("refresh-remote-diagnostics-log");
+    if (refreshRemoteButton) {
+      refreshRemoteButton.onclick = async function () {
+        await loadRemoteDiagnosticsLog(true);
+      };
+    }
+
+    if (currentAccessRole === "admin" && backendClient && diagnosticsTableId() && !remoteDiagnosticsLoading && !remoteDiagnosticsLoadedAt) {
+      void loadRemoteDiagnosticsLog(false);
     }
   }
 
