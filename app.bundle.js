@@ -630,6 +630,23 @@
     return entry;
   }
 
+  function recordActivity(scope, message, metadata) {
+    const payload = {
+      actionScope: String(scope || "app").trim(),
+      actorUserId: String(authState.user?.id || "").trim(),
+      actorEmail: String(authState.user?.email || "").trim(),
+      actorRole: String(currentAccessRole || "").trim(),
+      ...(metadata && typeof metadata === "object" ? metadata : {})
+    };
+    let details = "";
+    try {
+      details = JSON.stringify(payload);
+    } catch {
+      details = String(message || "").trim();
+    }
+    return recordDiagnostic("info", scope, message, details);
+  }
+
   function clearDiagnosticsLog() {
     localStorage.removeItem(DIAGNOSTICS_LOG_KEY);
   }
@@ -3411,6 +3428,7 @@
 
     const normalizedId = String(row?.id || generateEquipmentId()).trim();
     const draftPhoto = equipmentPhotoDraftsById[normalizedId] || null;
+    const isUpdate = (Array.isArray(state.equipment) ? state.equipment : []).some((item) => String(item.id) === normalizedId);
     const normalizedRow = normalizeEquipmentItem({
       ...row,
       id: normalizedId,
@@ -3453,6 +3471,15 @@
     } else {
       delete equipmentPhotoDraftsById[normalizedId];
     }
+    recordActivity("equipment", isUpdate ? "Equipment item updated." : "Equipment item created.", {
+      action: isUpdate ? "equipment_updated" : "equipment_created",
+      equipmentId: normalizedRow.id,
+      article: normalizedRow.article,
+      itemKind: normalizedRow.itemKind,
+      group: normalizedRow.group,
+      quantity: normalizedRow.quantity,
+      hasPhoto: Boolean(normalizedRow.photoFileId || normalizedRow.photoUrl)
+    });
   }
 
   async function deleteEquipmentRow(equipmentId) {
@@ -3484,6 +3511,13 @@
 
     const nextRows = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.id) !== normalizedId);
     saveEquipmentToStorage(nextRows);
+    recordActivity("equipment", "Equipment item deleted.", {
+      action: "equipment_deleted",
+      equipmentId: normalizedId,
+      article: currentRow?.article || "",
+      itemKind: currentRow?.itemKind || "",
+      group: currentRow?.group || ""
+    });
   }
 
   function normalizeFeeStatusValue(value) {
@@ -3640,7 +3674,19 @@
 
       invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
+      recordActivity("members", memberId ? "Member updated." : "Member created.", {
+        action: memberId ? "member_updated" : "member_created",
+        memberId: savedMemberId || memberId,
+        displayName,
+        email: String(memberPayload.email || "").trim(),
+        roles,
+        positions,
+        membershipStatus: patch.membership_status,
+        jerseyNumber: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+        passStatus: passFieldsProvided ? normalizedPassStatus : ""
+      });
     } catch (error) {
+      recordDiagnostic("error", "members", "Member save failed.", summarizeDiagnosticError(error));
       console.error("[Appwrite Save Failed]", error);
       throw error;
     }
@@ -3648,6 +3694,7 @@
 
   async function removeMemberViaRemote(memberId) {
     if (!backendClient) throw new Error("Appwrite client not available.");
+    const member = state.members.find((entry) => String(entry.id) === String(memberId || ""));
     const response = await backendClient
       .from("members")
       .update({ deleted_at: new Date().toISOString() })
@@ -3655,14 +3702,27 @@
     if (response.error) throw response.error;
     invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
+    recordActivity("members", "Member deleted.", {
+      action: "member_deleted",
+      memberId: String(memberId || "").trim(),
+      displayName: member?.name || "",
+      email: member?.email || ""
+    });
   }
 
   async function undeleteMemberViaRemote(memberId) {
     if (!backendClient) throw new Error("Appwrite client not available.");
+    const member = state.members.find((entry) => String(entry.id) === String(memberId || ""));
     const response = await backendClient.from("members").update({ deleted_at: null }).eq("id", memberId);
     if (response.error) throw response.error;
     invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
+    recordActivity("members", "Member restored.", {
+      action: "member_restored",
+      memberId: String(memberId || "").trim(),
+      displayName: member?.name || "",
+      email: member?.email || ""
+    });
   }
 
   async function mergeMembersViaRemote({ keepMemberId, removeMemberId }) {
@@ -3670,6 +3730,8 @@
 
     const keepId = String(keepMemberId || "").trim();
     const removeId = String(removeMemberId || "").trim();
+    const keepMember = state.members.find((entry) => String(entry.id) === keepId);
+    const removeMember = state.members.find((entry) => String(entry.id) === removeId);
     if (!keepId || !removeId || keepId === removeId) {
       throw new Error("Keep and remove member must be different.");
     }
@@ -3696,6 +3758,13 @@
 
     invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
+    recordActivity("members", "Members merged.", {
+      action: "member_merged",
+      keepMemberId: keepId,
+      keepDisplayName: keepMember?.name || "",
+      removeMemberId: removeId,
+      removeDisplayName: removeMember?.name || ""
+    });
   }
 
   async function updateFeeStatusesBulkViaRemote({ feePeriod, status, memberIds }) {
@@ -3730,7 +3799,15 @@
 
       invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
+      recordActivity("fees", "Fee statuses updated in bulk.", {
+        action: "fee_bulk_status_updated",
+        feePeriod: String(feePeriod || "").trim(),
+        status: normalizedStatus,
+        memberIds: ids,
+        rowCount: rows.length
+      });
     } catch (error) {
+      recordDiagnostic("error", "fees", "Bulk fee update failed.", summarizeDiagnosticError(error));
       if (isPermissionDeniedError(error)) {
         await updateFeeStatusesBulkViaServerAdmin({ feePeriod, status, memberIds });
         return;
@@ -3764,7 +3841,18 @@
 
       invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
+      const currentRow = state.fees.find((fee) => String(fee.id) === String(feeId || ""));
+      recordActivity("fees", "Fee row updated.", {
+        action: "fee_updated",
+        feeId: String(feeId || "").trim(),
+        memberId: currentRow?.memberId || "",
+        feePeriod: currentRow?.feePeriod || "",
+        status: normalizedStatus,
+        amount: Number(amount || 0),
+        paidAmount: Number(paidAmount || 0)
+      });
     } catch (error) {
+      recordDiagnostic("error", "fees", "Fee row update failed.", summarizeDiagnosticError(error));
       if (isPermissionDeniedError(error)) {
         await updateFeeRowViaServerAdmin({ feeId, status, amount, paidAmount, note, iban });
         return;
@@ -4173,6 +4261,12 @@
         iban: ibanValue
       });
     }
+    recordActivity("members", "Member finance updated.", {
+      action: "member_finance_updated",
+      memberId: String(memberId || "").trim(),
+      ibanUpdated: Boolean(ibanValue),
+      affectedFeeIds: Object.keys(statusByFeeId || {})
+    });
   }
 
   function computeDashboardStats() {
@@ -5789,6 +5883,13 @@
       invites: state.invites,
       equipment: state.equipment
     });
+    recordActivity("organization", existingIndex >= 0 ? "Organization section updated." : "Organization section created.", {
+      action: existingIndex >= 0 ? "organization_updated" : "organization_created",
+      organizationId: normalized.id,
+      headOf: normalized.headOf,
+      verantwortung: normalized.verantwortung,
+      coVerantwortung: normalized.coVerantwortung
+    });
   }
 
   async function deleteOrganizationEntry(organizationId) {
@@ -5797,6 +5898,7 @@
     }
     const normalizedId = String(organizationId || "").trim();
     if (!normalizedId) return;
+    const currentRow = (state.organization || []).find((row) => String(row.id) === normalizedId);
     if (backendClient && authState.user) {
       const response = await backendClient.from("organization").delete().eq("id", normalizedId);
       if (response.error) {
@@ -5817,6 +5919,12 @@
       events: state.events,
       invites: state.invites,
       equipment: state.equipment
+    });
+    recordActivity("organization", "Organization section deleted.", {
+      action: "organization_deleted",
+      organizationId: normalizedId,
+      headOf: currentRow?.headOf || "",
+      verantwortung: currentRow?.verantwortung || ""
     });
   }
 
