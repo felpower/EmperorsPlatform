@@ -185,6 +185,7 @@
   };
 
   const STORAGE_KEY = "emperors-local-state-v3";
+  const DIAGNOSTICS_LOG_KEY = "emperors-diagnostics-log-v1";
   const ACCESS_KEY = "emperors-local-access-role";
   const FEE_FILTER_KEY = "emperors-fee-period-filter";
   const FEE_STATUS_FILTER_KEY = "emperors-fee-status-filter";
@@ -218,6 +219,7 @@
   const MAX_AVATAR_DIMENSION = 1280;
   const MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
   const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
+  const MAX_DIAGNOSTIC_LOG_ENTRIES = 200;
   const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
 
@@ -377,6 +379,64 @@
 
   function saveStoredArray(key, value) {
     localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+  }
+
+  function loadDiagnosticsLog() {
+    try {
+      const raw = localStorage.getItem(DIAGNOSTICS_LOG_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveDiagnosticsLog(entries) {
+    try {
+      localStorage.setItem(DIAGNOSTICS_LOG_KEY, JSON.stringify(Array.isArray(entries) ? entries.slice(0, MAX_DIAGNOSTIC_LOG_ENTRIES) : []));
+    } catch {
+      // Ignore diagnostics persistence failures.
+    }
+  }
+
+  function summarizeDiagnosticError(error) {
+    if (!error) return "";
+    if (typeof error === "string") return error;
+    if (typeof error?.message === "string") return error.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  function recordDiagnostic(level, scope, message, details) {
+    const entry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      at: new Date().toISOString(),
+      level: String(level || "info").trim().toLowerCase(),
+      scope: String(scope || "app").trim(),
+      message: String(message || "").trim() || "Diagnostic event",
+      details: details ? String(details).trim() : ""
+    };
+    const next = [entry, ...loadDiagnosticsLog()].slice(0, MAX_DIAGNOSTIC_LOG_ENTRIES);
+    saveDiagnosticsLog(next);
+    return entry;
+  }
+
+  function clearDiagnosticsLog() {
+    localStorage.removeItem(DIAGNOSTICS_LOG_KEY);
+  }
+
+  function exportDiagnosticsLog() {
+    const blob = new Blob([JSON.stringify(loadDiagnosticsLog(), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "emperors-diagnostics-log.json";
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   function escapeHtml(value) {
@@ -3124,6 +3184,7 @@
       } catch (error) {
         equipmentStorageMode = "local";
         equipmentStatus = `Equipment remote table unavailable. Using local storage (${String(error?.message || "unknown error")}).`;
+        recordDiagnostic("error", "equipment", "Remote equipment load failed.", summarizeDiagnosticError(error));
       }
     } else {
       equipmentStorageMode = "local";
@@ -5301,6 +5362,7 @@
       return renderAuthGate();
     }
     const restrictions = bootstrapMeta.permissionsModel?.restrictedAreas || {};
+    const diagnosticEntries = loadDiagnosticsLog();
     return `
       <div class="grid two-up">
         ${currentAccessRole === "admin" ? `
@@ -5313,6 +5375,41 @@
             <label>Role<select id="admin-invite-role">${INVITE_ROLE_OPTIONS.map((role) => `<option value="${role}" ${role === authInviteRole ? "selected" : ""}>${roleLabel(role)}</option>`).join("")}</select></label>
           </div>
           <div class="button-row"><button type="button" class="primary-button" id="send-admin-invite">Send invite</button></div>
+        </article>
+        ` : ""}
+        ${currentAccessRole === "admin" ? `
+        <article class="setup-card">
+          <p class="eyebrow">Diagnostics</p>
+          <h3>Recent logs</h3>
+          <p class="meta">Important auth events, load failures, and app errors are stored locally in this browser for debugging.</p>
+          <div class="button-row" style="margin-bottom: 10px;">
+            <button type="button" class="ghost-button" id="export-diagnostics-log">Export logs</button>
+            <button type="button" class="ghost-button danger-button" id="clear-diagnostics-log">Clear logs</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Level</th>
+                  <th>Scope</th>
+                  <th>Message</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${diagnosticEntries.map((entry) => `
+                  <tr>
+                    <td>${formatDateTime(entry.at)}</td>
+                    <td>${statusPill(entry.level === "error" ? "expired" : entry.level === "warn" ? "pending" : "paid", entry.level)}</td>
+                    <td>${escapeHtml(entry.scope || "-")}</td>
+                    <td>${escapeHtml(entry.message || "-")}</td>
+                    <td class="meta">${escapeHtml(entry.details || "-")}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="5" class="meta">No diagnostics recorded yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
         </article>
         ` : ""}
       </div>
@@ -6879,6 +6976,7 @@
         try {
           authState.pendingAction = "sign-in";
           authState.status = "Signing you in...";
+          recordDiagnostic("info", "auth", `Sign-in started for ${email}.`);
           mount();
           await signInWithEmailPassword(email, password);
           try {
@@ -6888,9 +6986,11 @@
           }
           await loadBootstrapData();
           authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
+          recordDiagnostic("info", "auth", "Sign-in succeeded.", authState.user?.email || email);
           showToast(authState.status, "success");
         } catch (error) {
           authState.status = error.message || "Sign in failed.";
+          recordDiagnostic("error", "auth", "Sign-in failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -6914,12 +7014,15 @@
         try {
           authState.pendingAction = "reset-password";
           authState.status = "Sending password reset email...";
+          recordDiagnostic("info", "auth", `Password reset requested for ${email}.`);
           mount();
           await sendResetPasswordEmail(email);
           authState.status = `Password reset email sent to ${email}.`;
+          recordDiagnostic("info", "auth", "Password reset email sent.", email);
           showToast(authState.status, "success");
         } catch (error) {
           authState.status = error.message || "Could not send password reset email.";
+          recordDiagnostic("error", "auth", "Password reset request failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -6935,12 +7038,15 @@
         try {
           authState.pendingAction = "sign-out";
           authState.status = "Signing out...";
+          recordDiagnostic("info", "auth", "Sign-out started.", authState.user?.email || "");
           mount();
           await signOut();
           authState.status = "Signed out.";
+          recordDiagnostic("info", "auth", "Sign-out succeeded.");
           showToast(authState.status, "info");
         } catch (error) {
           authState.status = error.message || "Sign out failed.";
+          recordDiagnostic("error", "auth", "Sign-out failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -6970,12 +7076,15 @@
         try {
           authState.pendingAction = "invite-admin";
           authState.status = `Sending invite to ${email}...`;
+          recordDiagnostic("info", "invite", `Invite sending started for ${email}.`, authInviteRole);
           mount();
           await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
           authState.status = `Invite sent to ${email}. They must set their password before signing in.`;
+          recordDiagnostic("info", "invite", "Invite sent.", `${email} (${authInviteRole})`);
           showToast(authState.status, "success");
         } catch (error) {
           authState.status = error.message || "Could not send invite.";
+          recordDiagnostic("error", "invite", "Invite failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -7032,6 +7141,26 @@
     if (backToSignInButton) {
       backToSignInButton.onclick = function () {
         window.location.hash = "#dashboard";
+      };
+    }
+  }
+
+  function bindDiagnosticsActions() {
+    const exportButton = document.getElementById("export-diagnostics-log");
+    if (exportButton) {
+      exportButton.onclick = function () {
+        exportDiagnosticsLog();
+      };
+    }
+
+    const clearButton = document.getElementById("clear-diagnostics-log");
+    if (clearButton) {
+      clearButton.onclick = function () {
+        if (!window.confirm("Clear local diagnostics logs from this browser?")) return;
+        clearDiagnosticsLog();
+        recordDiagnostic("info", "diagnostics", "Diagnostics log cleared.");
+        mount();
+        switchView("settings");
       };
     }
   }
@@ -7931,6 +8060,7 @@
       bindPassSyncActions();
       bindFeeEditModeActions();
       bindAuthActions();
+      bindDiagnosticsActions();
       bindRecoveryActions();
       bindChangePasswordAction();
       bindTableExports();
@@ -7942,6 +8072,7 @@
       setupPassesStickyHeader();
     } catch (error) {
       console.error("Emperors bundle mount failed", error);
+      recordDiagnostic("error", "app", "App bundle mount failed.", summarizeDiagnosticError(error));
       const dashboard = document.getElementById("dashboard");
       if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${error.message}</p></article>`;
       switchView("dashboard");
@@ -7967,6 +8098,12 @@
   bindNavigation();
   bindButtonFeedback();
   bindMobileMenu();
+  window.addEventListener("error", function (event) {
+    recordDiagnostic("error", "window", "Unhandled browser error.", summarizeDiagnosticError(event.error || event.message));
+  });
+  window.addEventListener("unhandledrejection", function (event) {
+    recordDiagnostic("error", "promise", "Unhandled promise rejection.", summarizeDiagnosticError(event.reason));
+  });
   window.addEventListener("hashchange", function () {
     updateNavigationVisibility();
     switchView(getRouteView());
