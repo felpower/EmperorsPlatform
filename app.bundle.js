@@ -4623,13 +4623,25 @@
     }
 
     const rows = sortEquipmentRows(state.equipment || []);
-    const activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
-    const activeKindFilter = normalizeEquipmentKindFilter(selectedEquipmentKindFilter);
+    let activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
+    let activeKindFilter = normalizeEquipmentKindFilter(selectedEquipmentKindFilter);
     if (selectedEquipmentSheet !== activeSheet) {
       saveEquipmentSheetKey(activeSheet);
     }
-    const visibleRows = equipmentSheetRows(rows, activeSheet);
-    const filteredRows = filterEquipmentRowsByKind(visibleRows, activeKindFilter);
+    let visibleRows = equipmentSheetRows(rows, activeSheet);
+    if (!visibleRows.length && rows.length && activeSheet !== "all") {
+      activeSheet = "all";
+      saveEquipmentSheetKey(activeSheet);
+      visibleRows = equipmentSheetRows(rows, activeSheet);
+      equipmentStatus = equipmentStatus || "Your previous equipment sheet filter did not contain any items, so the view was reset to All sheets.";
+    }
+    let filteredRows = filterEquipmentRowsByKind(visibleRows, activeKindFilter);
+    if (!filteredRows.length && visibleRows.length && activeKindFilter !== "all") {
+      activeKindFilter = "all";
+      saveEquipmentKindFilter(activeKindFilter);
+      filteredRows = filterEquipmentRowsByKind(visibleRows, activeKindFilter);
+      equipmentStatus = equipmentStatus || "Your previous equipment type filter did not match any rows, so the view was reset to All.";
+    }
     const sortedRows = sortRows(filteredRows, "equipment", (item, key) => {
       if (key === "group") return String(item.group || "");
       if (key === "article") return String(item.article || "");
