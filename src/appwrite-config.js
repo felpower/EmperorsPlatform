@@ -6,7 +6,7 @@ window.ClubHubAppwriteConfig = {
   inviteFunctionId: "CreateAuthAccount",
   passSyncFunctionId: "PassSyncFunction",
   sepaExportFunctionId: "SepaExport",
-  diagnosticsFunctionId: "LogClientEvent",
+  diagnosticsFunctionId: "69fe0260003aa6db005b",
   profilePicturesBucketId: "ProfilePictures",
   equipmentPicturesBucketId: "equipment",
   teamsBucketId: "teams",
