@@ -5340,7 +5340,7 @@
 
   function renderOrganization() {
     const rows = sortOrganizationRows(state.organization || []);
-    const canEdit = currentAccessRole === "admin";
+    const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
     const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
     const branchRows = rootEntry ? rows.filter((entry) => String(entry.id) !== String(rootEntry.id)) : rows;
     const renderTaskItems = (tasks) => tasks.length
