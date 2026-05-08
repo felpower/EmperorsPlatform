@@ -143,6 +143,14 @@
     "JKU Astros": "69ec923f001233031abb",
     "Med Uni Wien Serpents": "69ec923f00123c58612b"
   };
+  const TEAM_LOGO_FALLBACK_URLS = {
+    "BOKU Beez": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/boku-beez-4768_1773399154_small.png",
+    "UNI-Wien Emperors": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png",
+    "WU Tigers": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/wu-tigers-431431_1773399181_small.png",
+    "TU Robots": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/tu-robots-2198_1773399105_small.png",
+    "JKU Astros": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/jku-astros-6632_1773399167_small.png",
+    "Med Uni Wien Serpents": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/med-uni-wien-serpents-7756_1773399129_small.png"
+  };
   const LEAGUE_GAMES_SNAPSHOT = [
     { id: "g-2025-10-11-emperors-beez", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T16:15:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "BOKU Beez" }, homeScore: 37, awayScore: 14 },
     { id: "g-2025-10-11-tigers-robots", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "WU Tigers" }, awayTeam: { name: "TU Robots" }, homeScore: 23, awayScore: 14 },
@@ -481,7 +489,8 @@
       ? APPWRITE_CONFIG.teamLogoFiles
       : {};
     const fileId = String(configuredMap[normalizedTeamName] || TEAM_BUCKET_FILE_MAP[normalizedTeamName] || "").trim();
-    return fileId ? storageTeamLogoUrl(fileId) : "";
+    const storageUrl = fileId ? storageTeamLogoUrl(fileId) : "";
+    return storageUrl || String(TEAM_LOGO_FALLBACK_URLS[normalizedTeamName] || "").trim();
   }
 
   function avatarFallbackOnErrorAttr() {
@@ -4635,7 +4644,7 @@
       return String(item.article || "");
     });
     const showGroupColumn = activeSheet === "all";
-    const canEdit = currentAccessRole === "admin";
+    const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
     const visibleColumnCount = canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6);
     const sheetTabs = equipmentSheetCounts(rows)
       .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
@@ -5391,7 +5400,7 @@
   }
 
   async function saveOrganizationEntry(entry) {
-    if (currentAccessRole !== "admin") {
+    if (!authState.user || currentAccessRole !== "admin") {
       throw new Error("Only admins can update organization entries.");
     }
     const normalized = normalizeOrganizationEntry({
@@ -5435,7 +5444,7 @@
   }
 
   async function deleteOrganizationEntry(organizationId) {
-    if (currentAccessRole !== "admin") {
+    if (!authState.user || currentAccessRole !== "admin") {
       throw new Error("Only admins can update organization entries.");
     }
     const normalizedId = String(organizationId || "").trim();
