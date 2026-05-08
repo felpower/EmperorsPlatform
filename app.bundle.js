@@ -287,6 +287,7 @@
   let remoteDiagnosticsLoading = false;
   let remoteDiagnosticsLoadedAt = 0;
   let remoteDiagnosticsDisabledReason = "";
+  let remoteDiagnosticsRetryAfter = 0;
   const remoteDiagnosticSyncIds = new Set();
   let buttonFeedbackBound = false;
   let equipmentStorageMode = "local";
@@ -536,7 +537,11 @@
 
   function queueRemoteDiagnostic(entry) {
     const functionId = diagnosticsFunctionId();
-    if (!functionId || !entry?.id || remoteDiagnosticSyncIds.has(entry.id) || remoteDiagnosticsDisabledReason) {
+    const now = Date.now();
+    if (!functionId || !entry?.id || remoteDiagnosticSyncIds.has(entry.id)) {
+      return;
+    }
+    if (remoteDiagnosticsRetryAfter && now < remoteDiagnosticsRetryAfter) {
       return;
     }
 
@@ -544,12 +549,13 @@
     Promise.resolve().then(async function () {
       try {
         await executeAppwriteFunction(functionId, { event: buildRemoteDiagnosticPayload(entry) }, { maxPolls: 6, pollDelayMs: 250 });
-        if (!remoteDiagnosticsStatus) {
-          remoteDiagnosticsStatus = "Remote diagnostics connected.";
-        }
+        remoteDiagnosticsDisabledReason = "";
+        remoteDiagnosticsRetryAfter = 0;
+        remoteDiagnosticsStatus = "Remote diagnostics connected.";
       } catch (error) {
         const message = summarizeDiagnosticError(error) || "Remote diagnostics failed.";
         remoteDiagnosticsDisabledReason = message;
+        remoteDiagnosticsRetryAfter = Date.now() + 15000;
         remoteDiagnosticsStatus = `Remote diagnostics unavailable: ${message}`;
         console.warn("[Diagnostics]", message);
       } finally {
@@ -5683,7 +5689,7 @@
           <h3>Recent logs</h3>
           <p class="meta">Important auth events, load failures, and app errors are stored locally in this browser and can also be forwarded to Appwrite for cross-device troubleshooting.</p>
           <div class="stack" style="gap: 10px; margin-bottom: 14px;">
-            <div class="meta"><strong>Remote logs:</strong> ${escapeHtml(remoteDiagnosticsStatus || (diagnosticsFunctionId() ? "Not loaded yet." : "Diagnostics function not configured."))}</div>
+            <div class="meta"><strong>Remote logs:</strong> ${escapeHtml(remoteDiagnosticsStatus || (diagnosticsFunctionId() ? "Not loaded yet." : "Diagnostics function not configured."))}${remoteDiagnosticsRetryAfter && remoteDiagnosticsRetryAfter > Date.now() ? ` (retrying after ${escapeHtml(new Date(remoteDiagnosticsRetryAfter).toLocaleTimeString())})` : ""}</div>
             <div class="button-row">
               <button type="button" class="ghost-button" id="refresh-remote-diagnostics-log">Refresh remote logs</button>
             </div>
