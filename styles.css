@@ -658,6 +658,44 @@ button {
   color: var(--ink);
 }
 
+.standings-card {
+  display: grid;
+  gap: 14px;
+}
+
+.standings-table-wrap {
+  margin-top: 0;
+}
+
+.standings-table tbody tr.standings-row-emperors {
+  background: rgba(246, 186, 66, 0.16);
+}
+
+.standings-team-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+}
+
+.standings-team-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line);
+  padding: 4px;
+  flex: 0 0 auto;
+}
+
+.standings-team-logo-fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: var(--ink);
+}
+
 .pill,
 .status {
   display: inline-flex;

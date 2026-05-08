@@ -153,8 +153,8 @@
     { id: "g-2026-04-18-beez-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-18T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4&t=3s", homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 3, awayScore: 6 },
     { id: "g-2026-04-18-robots-emperors", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-18T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4", isReplay: true, homeTeam: { name: "TU Robots" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 13, awayScore: 20 },
     { id: "g-2026-04-24-astros-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-24T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", streamLink: "https://www.youtube.com/live/WfA_Se67oFo?si=XTe5rlfKrkbKNjoh", isReplay: true, homeTeam: { name: "JKU Astros" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 36, awayScore: 9 },
-    { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink:"https://www.youtube.com/@acslatsports/streams", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
-    { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink:"https://www.youtube.com/watch?v=R0RkR8GwYyw", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=h7Ws4Dh9xK8",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: null, awayScore: null },
     { id: "g-2026-05-15-astros-emperors", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-15T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "JKU Astros" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: null, awayScore: null },
     { id: "g-2026-05-23-wildcard-1", stage: "Playoffs", subtitle: "Wildcard ACSL 3. vs. 6.", startsAt: "2026-05-23T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
     { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
@@ -163,6 +163,18 @@
     { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
     { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null }
   ];
+  const LEAGUE_STANDINGS_SNAPSHOT = {
+    label: "RegularSeason 2025/26",
+    updatedAt: "2026-05-08",
+    rows: [
+      { rank: 1, teamName: "UNI-Wien Emperors", wins: 3, losses: 0, draws: 0, pointsFor: 80, pointsAgainst: 34, pct: 1, diff: 46 },
+      { rank: 2, teamName: "WU Tigers", wins: 2, losses: 1, draws: 0, pointsFor: 68, pointsAgainst: 40, pct: 0.6666666667, diff: 28 },
+      { rank: 3, teamName: "TU Robots", wins: 1, losses: 2, draws: 0, pointsFor: 46, pointsAgainst: 57, pct: 0.3333333333, diff: -11 },
+      { rank: 4, teamName: "Med Uni Wien Serpents", wins: 1, losses: 2, draws: 0, pointsFor: 18, pointsAgainst: 77, pct: 0.3333333333, diff: -59 },
+      { rank: 5, teamName: "BOKU Beez", wins: 1, losses: 2, draws: 0, pointsFor: 54, pointsAgainst: 50, pct: 0.3333333333, diff: 4 },
+      { rank: 6, teamName: "JKU Astros", wins: 1, losses: 2, draws: 0, pointsFor: 57, pointsAgainst: 65, pct: 0.3333333333, diff: -8 }
+    ]
+  };
 
   const STORAGE_KEY = "emperors-local-state-v3";
   const ACCESS_KEY = "emperors-local-access-role";
@@ -5072,11 +5084,31 @@
       .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
   }
 
+  function buildLeagueStandingsViewModel() {
+    const activeFilters = new Set(normalizeGameTeamFilter(selectedGameTeams));
+    return (LEAGUE_STANDINGS_SNAPSHOT.rows || [])
+      .filter((row) => !activeFilters.size || activeFilters.has(String(row.teamName || "").trim()))
+      .sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0))
+      .map((row) => ({
+        rank: Number(row.rank || 0),
+        teamName: String(row.teamName || "").trim(),
+        teamLogo: teamLogoUrl(row.teamName),
+        wins: Number(row.wins || 0),
+        losses: Number(row.losses || 0),
+        draws: Number(row.draws || 0),
+        pointsFor: Number(row.pointsFor || 0),
+        pointsAgainst: Number(row.pointsAgainst || 0),
+        pct: Number(row.pct || 0),
+        diff: Number(row.diff || 0)
+      }));
+  }
+
   function renderGamesBoard() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
     const games = buildLeagueGamesViewModel();
+    const standings = buildLeagueStandingsViewModel();
     const filterOptions = gameFilterTeamOptions();
     if (!games.length) {
       return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
@@ -5097,7 +5129,6 @@
       <div>
         <p class="eyebrow">Austrian College Sports League</p>
         <h3>Games & results</h3>
-        <p class="meta">Full season board with team logos from your Appwrite bucket.</p>
       </div>
       <div class="pill-row" style="margin-top:0;">
         ${plainPill(`${games.length} games shown`)}
@@ -5106,14 +5137,63 @@
       </div>
       </div>
       <article class="setup-card" style="margin-bottom: 14px;">
-      <div class="game-filter-bar">
-        <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
+        <div class="game-filter-bar">
+          <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
         ${filterOptions.map((teamName) => `
         <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>
         `).join("")}
-      </div>
-      <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+        </div>
+        <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
       </article>
+      <section class="setup-card standings-card">
+        <div class="games-stage-head">
+          <div>
+            <p class="eyebrow">Standings</p>
+            <h3>${escapeHtml(LEAGUE_STANDINGS_SNAPSHOT.label)}</h3>
+            <p class="meta">Snapshot from Clubee standings on 08.05.2026.</p>
+          </div>
+          <div>${plainPill(`${standings.length} teams`)}</div>
+        </div>
+        <div class="table-wrap standings-table-wrap">
+          <table class="standings-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team</th>
+                <th>W</th>
+                <th>L</th>
+                <th>D</th>
+                <th>PF</th>
+                <th>PA</th>
+                <th>Pct</th>
+                <th>+/-</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${standings.map((row) => `
+                <tr class="${row.teamName === EMPERORS_TEAM_NAME ? "standings-row-emperors" : ""}">
+                  <td><strong>${row.rank}</strong></td>
+                  <td>
+                    <div class="standings-team-cell">
+                      ${row.teamLogo ? `<img src="${row.teamLogo}" alt="${escapeHtml(row.teamName)}" class="standings-team-logo" />` : `<div class="standings-team-logo standings-team-logo-fallback">${escapeHtml(row.teamName.slice(0, 1) || "?")}</div>`}
+                      <div>
+                        <strong>${escapeHtml(row.teamName)}</strong>
+                      </div>
+                    </div>
+                  </td>
+                  <td>${row.wins}</td>
+                  <td>${row.losses}</td>
+                  <td>${row.draws}</td>
+                  <td>${row.pointsFor}</td>
+                  <td>${row.pointsAgainst}</td>
+                  <td>${row.pct.toFixed(3)}</td>
+                  <td>${row.diff > 0 ? `+${row.diff}` : row.diff}</td>
+                </tr>
+              `).join("") || `<tr><td colspan="9" class="meta">No standings available for this filter.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>
       <div class="games-stage-stack">
       ${stageOrder.map((stage) => `
         <section class="setup-card games-stage">
