@@ -5735,7 +5735,6 @@
           venue: venueLabel(semiOne),
           streamLink: String(semiOne?.streamLink || "").trim(),
           lockedSeed: byRank(1),
-          winnerNote: "Winner of Wildcard 2 (currently #4 vs #5)"
         },
         {
           title: "Semifinal 2",
@@ -5744,7 +5743,6 @@
           venue: venueLabel(semiTwo),
           streamLink: String(semiTwo?.streamLink || "").trim(),
           lockedSeed: byRank(2),
-          winnerNote: "Winner of Wildcard 1 (currently #3 vs #6)"
         }
       ],
       finalGame: {
@@ -5771,7 +5769,6 @@
           <div>
             <p class="eyebrow">Standings</p>
             <h3>${escapeHtml(LEAGUE_STANDINGS_SNAPSHOT.label)}</h3>
-            <p class="meta">Snapshot from Clubee standings on 12.05.2026.</p>
           </div>
           <div class="games-standings-summary-meta">
             ${plainPill(`${standings.length} teams`)}
