@@ -702,6 +702,40 @@ button {
   gap: 14px;
 }
 
+.standings-shell {
+  margin-bottom: 14px;
+}
+
+.standings-shell[open] .games-standings-chevron {
+  transform: rotate(180deg);
+}
+
+.games-standings-summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.games-standings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.games-standings-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.games-standings-chevron {
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.18s ease;
+}
+
 .standings-table-wrap {
   margin-top: 0;
 }
@@ -733,6 +767,96 @@ button {
   place-items: center;
   font-weight: 800;
   color: var(--ink);
+}
+
+.playoff-bracket-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.playoff-bracket-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.playoff-round-card,
+.playoff-finals-card {
+  display: grid;
+  gap: 14px;
+}
+
+.playoff-round-head {
+  display: grid;
+  gap: 4px;
+}
+
+.playoff-round-list,
+.playoff-team-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.playoff-match-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.playoff-match-card.is-accented {
+  background: linear-gradient(135deg, rgba(246, 195, 22, 0.16), rgba(84, 184, 229, 0.12));
+}
+
+.playoff-match-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.playoff-team-slot {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  display: grid;
+  gap: 8px;
+}
+
+.playoff-team-slot.is-winner-slot {
+  border-style: dashed;
+}
+
+.playoff-team-slot-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.playoff-team-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line);
+  padding: 4px;
+  flex: 0 0 auto;
+}
+
+.playoff-team-logo-fallback {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.playoff-team-slot-note {
+  padding-left: 50px;
 }
 
 .pill,
@@ -1348,6 +1472,19 @@ code {
 
   .hero {
     padding: 14px;
+  }
+
+  .playoff-bracket-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .games-standings-summary,
+  .playoff-match-head {
+    flex-direction: column;
+  }
+
+  .playoff-team-slot-note {
+    padding-left: 0;
   }
 }
 

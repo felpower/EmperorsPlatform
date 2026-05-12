@@ -135,6 +135,8 @@
     }
   ];
   const GAMES_FILTER_STORAGE_KEY = "emperors-games-team-filter-v1";
+  const GAMES_VIEW_MODE_KEY = "emperors-games-view-mode-v1";
+  const GAMES_STANDINGS_OPEN_KEY = "emperors-games-standings-open-v1";
   const TEAM_BUCKET_FILE_MAP = {
     "BOKU Beez": "69ec923f001234b4a712",
     "UNI-Wien Emperors": "69ec923f00123235991d",
@@ -259,6 +261,10 @@
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
   let selectedEquipmentKindFilter = loadStoredValue(EQUIPMENT_KIND_FILTER_KEY, "all");
   let selectedGameTeams = loadStoredArray(GAMES_FILTER_STORAGE_KEY);
+  let selectedGamesViewMode = ["schedule", "playoffs"].includes(loadStoredValue(GAMES_VIEW_MODE_KEY, "schedule"))
+    ? loadStoredValue(GAMES_VIEW_MODE_KEY, "schedule")
+    : "schedule";
+  let gamesStandingsExpanded = loadStoredValue(GAMES_STANDINGS_OPEN_KEY, "true") !== "false";
   let expandedEquipmentContainerIds = loadStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY);
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
@@ -5578,6 +5584,17 @@
     saveStoredArray(GAMES_FILTER_STORAGE_KEY, selectedGameTeams);
   }
 
+  function saveSelectedGamesViewMode(mode) {
+    const normalized = mode === "playoffs" ? "playoffs" : "schedule";
+    selectedGamesViewMode = normalized;
+    saveStoredValue(GAMES_VIEW_MODE_KEY, normalized);
+  }
+
+  function saveGamesStandingsExpanded(value) {
+    gamesStandingsExpanded = Boolean(value);
+    saveStoredValue(GAMES_STANDINGS_OPEN_KEY, gamesStandingsExpanded ? "true" : "false");
+  }
+
   function gameFilterTeamOptions() {
     return Object.keys(TEAM_BUCKET_FILE_MAP);
   }
@@ -5639,54 +5656,128 @@
       }));
   }
 
-  function renderGamesBoard() {
-    const games = buildLeagueGamesViewModel();
-    const standings = buildLeagueStandingsViewModel();
-    const filterOptions = gameFilterTeamOptions();
-    if (!games.length) {
-      return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
-    }
-    const completedGames = games.filter((game) => game.hasScore);
-    const upcomingGames = games.filter((game) => !game.hasScore);
-    const stageOrder = [];
-    const gamesByStage = new Map();
-    games.forEach((game) => {
-      if (!gamesByStage.has(game.stage)) {
-        stageOrder.push(game.stage);
-        gamesByStage.set(game.stage, []);
-      }
-      gamesByStage.get(game.stage).push(game);
-    });
+  function buildRankedStandingsViewModel() {
+    return (LEAGUE_STANDINGS_SNAPSHOT.rows || [])
+      .slice()
+      .sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0))
+      .map((row) => ({
+        rank: Number(row.rank || 0),
+        teamName: String(row.teamName || "").trim(),
+        teamLogo: teamLogoUrl(row.teamName),
+        wins: Number(row.wins || 0),
+        losses: Number(row.losses || 0),
+        draws: Number(row.draws || 0),
+        pointsFor: Number(row.pointsFor || 0),
+        pointsAgainst: Number(row.pointsAgainst || 0),
+        pct: Number(row.pct || 0),
+        diff: Number(row.diff || 0)
+      }));
+  }
+
+  function renderBracketTeamSlot({ teamName = "", teamLogo = "", seedLabel = "", note = "", isWinnerSlot = false } = {}) {
+    const normalizedName = String(teamName || "").trim();
+    const normalizedSeed = String(seedLabel || "").trim();
+    const label = normalizedName || "TBD";
     return `
-      <div class="section-head">
-      <div>
-        <p class="eyebrow">Austrian College Sports League</p>
-        <h3>Games & results</h3>
-      </div>
-      <div class="pill-row" style="margin-top:0;">
-        ${plainPill(`${games.length} games shown`)}
-        ${plainPill(`${completedGames.length} finished`)}
-        ${plainPill(`${upcomingGames.length} upcoming`)}
-      </div>
-      </div>
-      <article class="setup-card" style="margin-bottom: 14px;">
-        <div class="game-filter-bar">
-          <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
-        ${filterOptions.map((teamName) => `
-        <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>
-        `).join("")}
+      <div class="playoff-team-slot ${isWinnerSlot ? "is-winner-slot" : ""}">
+        <div class="playoff-team-slot-main">
+          ${teamLogo
+            ? renderLazyImage({ src: teamLogo, alt: label, className: "playoff-team-logo", wrapperClass: "game-logo-lazy-media" })
+            : `<div class="playoff-team-logo playoff-team-logo-fallback">${escapeHtml((normalizedName || normalizedSeed || "?").slice(0, 1))}</div>`}
+          <div>
+            <strong>${escapeHtml(label)}</strong>
+            <div class="meta">${escapeHtml(normalizedSeed || (isWinnerSlot ? "Winner slot" : "Team"))}</div>
+          </div>
         </div>
-        <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
-      </article>
-      <section class="setup-card standings-card">
-        <div class="games-stage-head">
+        ${note ? `<div class="meta playoff-team-slot-note">${escapeHtml(note)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function buildPlayoffBracketViewModel() {
+    const ranked = buildRankedStandingsViewModel();
+    const byRank = (rank) => ranked.find((row) => row.rank === rank) || null;
+    const byId = (id) => LEAGUE_GAMES_SNAPSHOT.find((game) => String(game.id || "") === id) || null;
+    const wildcardOne = byId("g-2026-05-23-wildcard-1");
+    const wildcardTwo = byId("g-2026-05-23-wildcard-2");
+    const semiOne = byId("g-2026-06-06-semi-1");
+    const semiTwo = byId("g-2026-06-06-semi-2");
+    const thirdPlace = byId("g-2026-06-27-third-place");
+    const final = byId("g-2026-06-27-final");
+    const venueLabel = (game) => [game?.venueName, game?.venueCity].map((value) => String(value || "").trim()).filter(Boolean).join(" Â· ");
+
+    return {
+      wildcardGames: [
+        {
+          title: "Wildcard 1",
+          subtitle: wildcardOne?.subtitle || "ACSL #3 vs #6",
+          displayDateTime: formatDateTime(wildcardOne?.startsAt || ""),
+          venue: venueLabel(wildcardOne),
+          streamLink: String(wildcardOne?.streamLink || "").trim(),
+          topSeed: byRank(3),
+          bottomSeed: byRank(6)
+        },
+        {
+          title: "Wildcard 2",
+          subtitle: wildcardTwo?.subtitle || "ACSL #4 vs #5",
+          displayDateTime: formatDateTime(wildcardTwo?.startsAt || ""),
+          venue: venueLabel(wildcardTwo),
+          streamLink: String(wildcardTwo?.streamLink || "").trim(),
+          topSeed: byRank(4),
+          bottomSeed: byRank(5)
+        }
+      ],
+      semifinalGames: [
+        {
+          title: "Semifinal 1",
+          subtitle: semiOne?.subtitle || "ACSL #1 vs lowest remaining seed",
+          displayDateTime: formatDateTime(semiOne?.startsAt || ""),
+          venue: venueLabel(semiOne),
+          streamLink: String(semiOne?.streamLink || "").trim(),
+          lockedSeed: byRank(1),
+          winnerNote: "Winner of Wildcard 2 (currently #4 vs #5)"
+        },
+        {
+          title: "Semifinal 2",
+          subtitle: semiTwo?.subtitle || "ACSL #2 vs highest remaining seed",
+          displayDateTime: formatDateTime(semiTwo?.startsAt || ""),
+          venue: venueLabel(semiTwo),
+          streamLink: String(semiTwo?.streamLink || "").trim(),
+          lockedSeed: byRank(2),
+          winnerNote: "Winner of Wildcard 1 (currently #3 vs #6)"
+        }
+      ],
+      finalGame: {
+        title: "Final",
+        subtitle: final?.subtitle || "ACSL Summer Bowl",
+        displayDateTime: formatDateTime(final?.startsAt || ""),
+        venue: venueLabel(final),
+        streamLink: String(final?.streamLink || "").trim()
+      },
+      thirdPlaceGame: {
+        title: "3rd Place",
+        subtitle: thirdPlace?.subtitle || "ACSL Spiel um Platz 3",
+        displayDateTime: formatDateTime(thirdPlace?.startsAt || ""),
+        venue: venueLabel(thirdPlace),
+        streamLink: String(thirdPlace?.streamLink || "").trim()
+      }
+    };
+  }
+
+  function renderGamesStandingsPanel(standings) {
+    return `
+      <details class="setup-card standings-shell" id="games-standings-details" ${gamesStandingsExpanded ? "open" : ""}>
+        <summary class="games-standings-summary" data-no-toast="true">
           <div>
             <p class="eyebrow">Standings</p>
             <h3>${escapeHtml(LEAGUE_STANDINGS_SNAPSHOT.label)}</h3>
-            <p class="meta">Snapshot from Clubee standings on 08.05.2026.</p>
+            <p class="meta">Snapshot from Clubee standings on 12.05.2026.</p>
           </div>
-          <div>${plainPill(`${standings.length} teams`)}</div>
-        </div>
+          <div class="games-standings-summary-meta">
+            ${plainPill(`${standings.length} teams`)}
+            <span class="games-standings-chevron" aria-hidden="true">⌄</span>
+          </div>
+        </summary>
         <div class="table-wrap standings-table-wrap">
           <table class="standings-table">
             <thead>
@@ -5722,11 +5813,170 @@
                   <td>${row.pct.toFixed(3)}</td>
                   <td>${row.diff > 0 ? `+${row.diff}` : row.diff}</td>
                 </tr>
-              `).join("") || `<tr><td colspan="9" class="meta">No standings available for this filter.</td></tr>`}
+              `).join("")}
             </tbody>
           </table>
         </div>
+      </details>
+    `;
+  }
+
+  function renderPlayoffBracket(bracket) {
+    return `
+      <section class="playoff-bracket-shell">
+        <div class="playoff-bracket-columns">
+          <article class="setup-card playoff-round-card">
+            <div class="playoff-round-head">
+              <p class="eyebrow">Playoffs</p>
+              <h3>Wildcard</h3>
+            </div>
+            <div class="playoff-round-list">
+              ${bracket.wildcardGames.map((game) => `
+                <article class="playoff-match-card">
+                  <div class="playoff-match-head">
+                    <div>
+                      <strong>${escapeHtml(game.title)}</strong>
+                      <p class="meta">${escapeHtml(game.subtitle)}</p>
+                    </div>
+                    <div class="meta">${escapeHtml(game.displayDateTime)}</div>
+                  </div>
+                  <div class="playoff-team-stack">
+                    ${renderBracketTeamSlot({ teamName: game.topSeed?.teamName || "", teamLogo: game.topSeed?.teamLogo || "", seedLabel: game.topSeed ? `Seed #${game.topSeed.rank}` : "Seed #3" })}
+                    ${renderBracketTeamSlot({ teamName: game.bottomSeed?.teamName || "", teamLogo: game.bottomSeed?.teamLogo || "", seedLabel: game.bottomSeed ? `Seed #${game.bottomSeed.rank}` : "Seed #6" })}
+                  </div>
+                  <div class="pill-row">
+                    ${game.venue ? plainPill(game.venue) : ""}
+                    ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </article>
+          <article class="setup-card playoff-round-card">
+            <div class="playoff-round-head">
+              <p class="eyebrow">Playoffs</p>
+              <h3>Semifinals</h3>
+            </div>
+            <div class="playoff-round-list">
+              ${bracket.semifinalGames.map((game) => `
+                <article class="playoff-match-card">
+                  <div class="playoff-match-head">
+                    <div>
+                      <strong>${escapeHtml(game.title)}</strong>
+                      <p class="meta">${escapeHtml(game.subtitle)}</p>
+                    </div>
+                    <div class="meta">${escapeHtml(game.displayDateTime)}</div>
+                  </div>
+                  <div class="playoff-team-stack">
+                    ${renderBracketTeamSlot({ teamName: game.lockedSeed?.teamName || "", teamLogo: game.lockedSeed?.teamLogo || "", seedLabel: game.lockedSeed ? `Seed #${game.lockedSeed.rank}` : "" })}
+                    ${renderBracketTeamSlot({ teamName: "Wildcard Winner", seedLabel: "Seed decided after Wildcard", note: game.winnerNote, isWinnerSlot: true })}
+                  </div>
+                  <div class="pill-row">
+                    ${game.venue ? plainPill(game.venue) : ""}
+                    ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </article>
+          <article class="setup-card playoff-round-card playoff-finals-card">
+            <div class="playoff-round-head">
+              <p class="eyebrow">Finals Day</p>
+              <h3>Final & 3rd Place</h3>
+            </div>
+            <div class="playoff-round-list">
+              <article class="playoff-match-card is-accented">
+                <div class="playoff-match-head">
+                  <div>
+                    <strong>${escapeHtml(bracket.finalGame.title)}</strong>
+                    <p class="meta">${escapeHtml(bracket.finalGame.subtitle)}</p>
+                  </div>
+                  <div class="meta">${escapeHtml(bracket.finalGame.displayDateTime)}</div>
+                </div>
+                <div class="playoff-team-stack">
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Winner", seedLabel: "Winner SF1", isWinnerSlot: true })}
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Winner", seedLabel: "Winner SF2", isWinnerSlot: true })}
+                </div>
+                <div class="pill-row">
+                  ${bracket.finalGame.venue ? plainPill(bracket.finalGame.venue) : ""}
+                  ${bracket.finalGame.streamLink ? `<a href="${bracket.finalGame.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                </div>
+              </article>
+              <article class="playoff-match-card">
+                <div class="playoff-match-head">
+                  <div>
+                    <strong>${escapeHtml(bracket.thirdPlaceGame.title)}</strong>
+                    <p class="meta">${escapeHtml(bracket.thirdPlaceGame.subtitle)}</p>
+                  </div>
+                  <div class="meta">${escapeHtml(bracket.thirdPlaceGame.displayDateTime)}</div>
+                </div>
+                <div class="playoff-team-stack">
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Loser", seedLabel: "Loser SF1", isWinnerSlot: true })}
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Loser", seedLabel: "Loser SF2", isWinnerSlot: true })}
+                </div>
+                <div class="pill-row">
+                  ${bracket.thirdPlaceGame.venue ? plainPill(bracket.thirdPlaceGame.venue) : ""}
+                  ${bracket.thirdPlaceGame.streamLink ? `<a href="${bracket.thirdPlaceGame.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                </div>
+              </article>
+            </div>
+          </article>
+        </div>
       </section>
+    `;
+  }
+
+  function renderGamesBoard() {
+    const games = buildLeagueGamesViewModel();
+    const standings = buildRankedStandingsViewModel();
+    const filterOptions = gameFilterTeamOptions();
+    const bracket = buildPlayoffBracketViewModel();
+    if (!games.length) {
+      return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
+    }
+    const completedGames = games.filter((game) => game.hasScore);
+    const upcomingGames = games.filter((game) => !game.hasScore);
+    const stageOrder = [];
+    const gamesByStage = new Map();
+    games.forEach((game) => {
+      if (!gamesByStage.has(game.stage)) {
+        stageOrder.push(game.stage);
+        gamesByStage.set(game.stage, []);
+      }
+      gamesByStage.get(game.stage).push(game);
+    });
+    return `
+      <div class="section-head">
+      <div>
+        <p class="eyebrow">Austrian College Sports League</p>
+        <h3>Games & results</h3>
+      </div>
+      <div class="pill-row" style="margin-top:0;">
+        ${plainPill(`${games.length} games shown`)}
+        ${plainPill(`${completedGames.length} finished`)}
+        ${plainPill(`${upcomingGames.length} upcoming`)}
+      </div>
+      </div>
+      ${renderGamesStandingsPanel(standings)}
+      <article class="setup-card" style="margin-bottom: 14px;">
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 12px;">
+          <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" data-games-view-mode="schedule" data-no-toast="true">Regular season</button>
+          <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "playoffs" ? "is-active" : ""}" data-games-view-mode="playoffs" data-no-toast="true">Playoff picture</button>
+        </div>
+        ${selectedGamesViewMode === "schedule" ? `
+        <div class="game-filter-bar">
+          <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
+        ${filterOptions.map((teamName) => `
+        <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>
+        `).join("")}
+        </div>
+        ` : `
+        <p class="meta" style="margin:0;">Wildcard pairings are prefilled from the current standings, and semifinal slots already follow the current seeding logic.</p>
+        `}
+        <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+      </article>
+      ${selectedGamesViewMode === "playoffs" ? renderPlayoffBracket(bracket) : ""}
+      ${selectedGamesViewMode === "schedule" ? `
       <div class="games-stage-stack">
       ${stageOrder.map((stage) => `
         <section class="setup-card games-stage">
@@ -5779,10 +6029,23 @@
         </section>
       `).join("")}
       </div>
+      ` : ""}
     `;
   }
 
   function bindGamesActions() {
+    document.querySelectorAll("[data-games-view-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        saveSelectedGamesViewMode(String(button.dataset.gamesViewMode || "schedule"));
+        mount();
+      });
+    });
+    const standingsDetails = document.getElementById("games-standings-details");
+    if (standingsDetails) {
+      standingsDetails.addEventListener("toggle", () => {
+        saveGamesStandingsExpanded(standingsDetails.open);
+      });
+    }
     document.querySelectorAll("[data-game-team]").forEach((button) => {
       button.addEventListener("click", () => {
         const value = String(button.dataset.gameTeam || "").trim();
