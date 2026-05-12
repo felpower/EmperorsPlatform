@@ -161,8 +161,8 @@
     { id: "g-2026-04-18-beez-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-18T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4&t=3s", homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 3, awayScore: 6 },
     { id: "g-2026-04-18-robots-emperors", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-18T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4", isReplay: true, homeTeam: { name: "TU Robots" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 13, awayScore: 20 },
     { id: "g-2026-04-24-astros-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-24T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", streamLink: "https://www.youtube.com/live/WfA_Se67oFo?si=XTe5rlfKrkbKNjoh", isReplay: true, homeTeam: { name: "JKU Astros" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 36, awayScore: 9 },
-    { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink:"https://www.youtube.com/watch?v=R0RkR8GwYyw", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
-    { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=h7Ws4Dh9xK8",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink:"https://www.youtube.com/watch?v=R0RkR8GwYyw", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: 3, awayScore: 37 },
+    { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=h7Ws4Dh9xK8",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: 28, awayScore: 6 },
     { id: "g-2026-05-15-astros-emperors", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-15T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "JKU Astros" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: null, awayScore: null },
     { id: "g-2026-05-23-wildcard-1", stage: "Playoffs", subtitle: "Wildcard ACSL 3. vs. 6.", startsAt: "2026-05-23T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
     { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
@@ -173,14 +173,14 @@
   ];
   const LEAGUE_STANDINGS_SNAPSHOT = {
     label: "RegularSeason 2025/26",
-    updatedAt: "2026-05-08",
+    updatedAt: "2026-05-12",
     rows: [
       { rank: 1, teamName: "UNI-Wien Emperors", wins: 3, losses: 0, draws: 0, pointsFor: 80, pointsAgainst: 34, pct: 1, diff: 46 },
-      { rank: 2, teamName: "WU Tigers", wins: 2, losses: 1, draws: 0, pointsFor: 68, pointsAgainst: 40, pct: 0.6666666667, diff: 28 },
-      { rank: 3, teamName: "TU Robots", wins: 1, losses: 2, draws: 0, pointsFor: 46, pointsAgainst: 57, pct: 0.3333333333, diff: -11 },
-      { rank: 4, teamName: "Med Uni Wien Serpents", wins: 1, losses: 2, draws: 0, pointsFor: 18, pointsAgainst: 77, pct: 0.3333333333, diff: -59 },
-      { rank: 5, teamName: "BOKU Beez", wins: 1, losses: 2, draws: 0, pointsFor: 54, pointsAgainst: 50, pct: 0.3333333333, diff: 4 },
-      { rank: 6, teamName: "JKU Astros", wins: 1, losses: 2, draws: 0, pointsFor: 57, pointsAgainst: 65, pct: 0.3333333333, diff: -8 }
+      { rank: 2, teamName: "WU Tigers", wins: 3, losses: 1, draws: 0, pointsFor: 96, pointsAgainst: 46, pct: 0.75, diff: 50 },
+      { rank: 3, teamName: "TU Robots", wins: 2, losses: 2, draws: 0, pointsFor: 83, pointsAgainst: 60, pct: 0.5, diff: 23 },
+      { rank: 4, teamName: "JKU Astros", wins: 1, losses: 2, draws: 0, pointsFor: 57, pointsAgainst: 65, pct: 0.3333333333, diff: -8 },
+      { rank: 5, teamName: "Med Uni Wien Serpents", wins: 1, losses: 3, draws: 0, pointsFor: 21, pointsAgainst: 114, pct: 0.25, diff: -93 },
+      { rank: 6, teamName: "BOKU Beez", wins: 1, losses: 3, draws: 0, pointsFor: 60, pointsAgainst: 78, pct: 0.25, diff: -18 },
     ]
   };
 
@@ -294,8 +294,8 @@
   let equipmentStatus = "";
   let isSyncing = false;
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v2";
-  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v2";
+  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v1";
+  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v1";
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
