@@ -162,6 +162,32 @@ button {
   gap: 8px;
 }
 
+.sidebar-legal {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-legal-label {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(243, 246, 248, 0.64);
+}
+
+.sidebar-legal-link {
+  color: rgba(243, 246, 248, 0.84);
+  text-decoration: none;
+}
+
+.sidebar-legal-link:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
 .nav-link {
   width: 100%;
   text-align: left;
@@ -183,6 +209,67 @@ button {
 
 .main-content {
   padding: 20px;
+}
+
+.legal-layout {
+  width: min(960px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.legal-card {
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+
+.legal-card h1,
+.legal-card h2 {
+  font-family: "Space Grotesk", sans-serif;
+  margin: 0;
+}
+
+.legal-card h1 {
+  font-size: clamp(1.9rem, 3vw, 2.6rem);
+  margin-bottom: 18px;
+}
+
+.legal-card h2 {
+  margin-top: 24px;
+  margin-bottom: 10px;
+  font-size: 1.08rem;
+}
+
+.legal-card p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.legal-card p + p {
+  margin-top: 12px;
+}
+
+.legal-note {
+  margin-bottom: 18px !important;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(246, 195, 22, 0.16), rgba(84, 184, 229, 0.12));
+  border: 1px solid rgba(21, 27, 28, 0.08);
+}
+
+.legal-back-link {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 14px;
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.legal-back-link:hover {
+  text-decoration: underline;
 }
 
 .hero {
