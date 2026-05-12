@@ -518,6 +518,45 @@ button {
   padding: 4px;
 }
 
+.lazy-media {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lazy-media-image {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.lazy-media.is-loaded .lazy-media-image,
+.lazy-media-image.is-loaded {
+  opacity: 1;
+}
+
+.lazy-media-spinner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(21, 27, 28, 0.15);
+  border-top-color: rgba(21, 27, 28, 0.72);
+  animation: lazy-media-spin 0.8s linear infinite;
+  pointer-events: none;
+}
+
+.lazy-media.is-loaded .lazy-media-spinner,
+.lazy-media.is-error .lazy-media-spinner {
+  display: none;
+}
+
+@keyframes lazy-media-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .game-score {
   display: inline-flex;
   align-items: center;

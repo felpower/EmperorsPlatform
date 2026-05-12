@@ -6,5 +6,11 @@
   "background_color": "#f4efe3",
   "theme_color": "#123524",
   "description": "Team platform for football club operations, attendance, passes, and fees.",
-  "icons": []
+  "icons": [
+    {
+      "src": "./assets/emperors-mark.png?v=20260512a",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }

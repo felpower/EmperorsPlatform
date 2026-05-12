@@ -294,8 +294,8 @@
   let equipmentStatus = "";
   let isSyncing = false;
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v1";
-  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v1";
+  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v2";
+  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v2";
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -779,6 +779,117 @@
     const fileId = String(configuredMap[normalizedTeamName] || TEAM_BUCKET_FILE_MAP[normalizedTeamName] || "").trim();
     const storageUrl = fileId ? storageTeamLogoUrl(fileId) : "";
     return storageUrl || String(TEAM_LOGO_FALLBACK_URLS[normalizedTeamName] || "").trim();
+  }
+
+  function escapeAttribute(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("\"", "&quot;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function renderLazyImage({
+    src,
+    alt = "",
+    className = "",
+    style = "",
+    wrapperClass = "",
+    fallbackSrc = "",
+    eager = false
+  } = {}) {
+    const normalizedSrc = String(src || "").trim();
+    if (!normalizedSrc) return "";
+    const imgClassName = [className, "lazy-media-image"].filter(Boolean).join(" ");
+    const wrapperClassName = ["lazy-media", wrapperClass].filter(Boolean).join(" ");
+    return `
+      <span class="${wrapperClassName}">
+        <span class="lazy-media-spinner" aria-hidden="true"></span>
+        <img
+          data-lazy-src="${escapeAttribute(normalizedSrc)}"
+          ${fallbackSrc ? `data-lazy-error-src="${escapeAttribute(fallbackSrc)}"` : ""}
+          ${eager ? 'data-lazy-priority="eager"' : ""}
+          alt="${escapeAttribute(alt)}"
+          class="${imgClassName}"
+          ${style ? `style="${escapeAttribute(style)}"` : ""}
+          decoding="async"
+          loading="lazy"
+          fetchpriority="low"
+        />
+      </span>
+    `;
+  }
+
+  let lazyImageObserver = null;
+
+  function markLazyImageReady(img, state = "loaded") {
+    if (!img) return;
+    const container = img.closest(".lazy-media");
+    img.classList.add("is-loaded");
+    if (container) {
+      container.classList.add("is-loaded");
+      if (state === "error") container.classList.add("is-error");
+    }
+  }
+
+  function activateLazyImage(img) {
+    if (!img || img.dataset.lazyActivated === "true") return;
+    const nextSrc = String(img.dataset.lazySrc || "").trim();
+    if (!nextSrc) return;
+    img.dataset.lazyActivated = "true";
+    img.addEventListener("load", () => markLazyImageReady(img, "loaded"), { once: true });
+    img.addEventListener("error", () => {
+      const fallbackSrc = String(img.dataset.lazyErrorSrc || "").trim();
+      if (fallbackSrc && img.src !== fallbackSrc) {
+        img.dataset.lazyErrorSrc = "";
+        img.dataset.lazyActivated = "fallback";
+        img.addEventListener("load", () => markLazyImageReady(img, "loaded"), { once: true });
+        img.src = fallbackSrc;
+        return;
+      }
+      markLazyImageReady(img, "error");
+    }, { once: true });
+    img.src = nextSrc;
+  }
+
+  function setupLazyImages(root = document) {
+    const scope = root || document;
+    const images = Array.from(scope.querySelectorAll("img[data-lazy-src]"));
+    if (!images.length) return;
+    if (!("IntersectionObserver" in window)) {
+      images.forEach((img) => activateLazyImage(img));
+      return;
+    }
+    if (!lazyImageObserver) {
+      lazyImageObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const img = entry.target;
+          lazyImageObserver.unobserve(img);
+          activateLazyImage(img);
+        });
+      }, { rootMargin: "240px 0px" });
+    }
+    images.forEach((img) => {
+      if (img.dataset.lazyBound === "true") return;
+      img.dataset.lazyBound = "true";
+      lazyImageObserver.observe(img);
+    });
+  }
+
+  function hydrateVisibleLazyImages(root = document) {
+    const scope = root || document;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    scope.querySelectorAll("img[data-lazy-src]").forEach((img) => {
+      if (img.dataset.lazyActivated === "true" || img.dataset.lazyActivated === "fallback") return;
+      if (img.dataset.lazyPriority === "eager") {
+        activateLazyImage(img);
+        return;
+      }
+      const rect = img.getBoundingClientRect();
+      const isVisible = rect.width > 0 && rect.height > 0 && rect.bottom >= -160 && rect.top <= viewportHeight + 160;
+      if (isVisible) activateLazyImage(img);
+    });
   }
 
   function avatarFallbackOnErrorAttr() {
@@ -3221,6 +3332,11 @@
       confirmations: 0
     }));
     const organization = sortOrganizationRows(organizationRows || []);
+    const previousMembers = Array.isArray(state?.members) ? state.members : [];
+    const previousFees = Array.isArray(state?.fees) ? state.fees : [];
+    const previousEvents = Array.isArray(state?.events) ? state.events : [];
+    const previousInvites = Array.isArray(state?.invites) ? state.invites : [];
+    const shouldUseCachedBootstrap = !members.length && previousMembers.length;
 
     const currentUserRoles = (memberRoleRows || [])
       .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
@@ -3240,13 +3356,15 @@
     applyBootstrap({
       source: "appwrite",
       permissionsModel: demoData.permissionsModel,
-      members,
-      fees,
+      members: shouldUseCachedBootstrap ? previousMembers : members,
+      fees: shouldUseCachedBootstrap && !fees.length ? previousFees : fees,
       organization: organization.length ? organization : state.organization,
-      events,
-      invites
+      events: shouldUseCachedBootstrap && !events.length ? previousEvents : events,
+      invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites
     });
-    authState.status = `Appwrite data loaded for ${authDisplayName() || authState.user.email}.`;
+    authState.status = shouldUseCachedBootstrap
+      ? `Appwrite session restored for ${authDisplayName() || authState.user.email}. Showing cached data while remote records refresh.`
+      : `Appwrite data loaded for ${authDisplayName() || authState.user.email}.`;
     if (queryWarnings.length) {
       authState.status += ` Some data may be hidden by permissions (${queryWarnings.join(" | ")}).`;
     }
@@ -3257,7 +3375,9 @@
     const cached = getCacheWithTTL(BOOTSTRAP_CACHE_KEY);
     if (cached) {
       applyBootstrap(cached);
-      return;
+      if (!(backendClient && authState.user)) {
+        return;
+      }
     }
 
     // Load from source and cache
@@ -3280,7 +3400,9 @@
     const cached = getCacheWithTTL(EQUIPMENT_CACHE_KEY);
     if (cached) {
       state.equipment = cached;
-      return;
+      if (!(backendClient && authState.user)) {
+        return;
+      }
     }
 
     // Load from source and cache
@@ -3382,6 +3504,7 @@
 
   async function loadEquipmentData() {
     const localRows = loadEquipmentFromStorage();
+    const existingRows = sortEquipmentRows(state.equipment || []);
 
     if (backendClient && authState.user) {
       try {
@@ -3403,7 +3526,13 @@
           throw remoteResponse.error;
         }
         const remoteRows = sortEquipmentRows(remoteData.map(mapEquipmentRowFromRemote));
+        const fallbackRows = localRows.length ? localRows : existingRows;
         equipmentStorageMode = "remote";
+        if (!remoteRows.length && fallbackRows.length) {
+          equipmentStatus = "Remote equipment temporarily returned no rows. Showing cached equipment while the session refreshes.";
+          saveEquipmentToStorage(fallbackRows);
+          return;
+        }
         equipmentStatus = equipmentStatus || (remoteRows.length
           ? ""
           : "No equipment entries found in database yet. Admins can add items now.");
@@ -3421,6 +3550,12 @@
 
     if (localRows.length) {
       saveEquipmentToStorage(localRows);
+      return;
+    }
+
+    if (existingRows.length) {
+      equipmentStatus = equipmentStatus || "Showing cached equipment.";
+      saveEquipmentToStorage(existingRows);
       return;
     }
 
@@ -4338,7 +4473,14 @@
       <article class="setup-card">
         <p class="eyebrow">Your Profile</p>
         <div style="display:flex; align-items:center; gap: 12px;">
-          <img src="${resolveAvatarSrcForMember(userMember)}" onerror="${avatarFallbackOnErrorAttr()}" alt="Profile picture" style="width:56px; height:56px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          ${renderLazyImage({
+            src: resolveAvatarSrcForMember(userMember),
+            fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+            alt: "Profile picture",
+            style: "width:56px; height:56px; border-radius:999px; object-fit:cover; border:1px solid var(--line);",
+            wrapperClass: "avatar-lazy-media",
+            eager: true
+          })}
           <h3 style="margin:0;">${userMember.name}</h3>
         </div>
         <div style="display: grid; gap: 12px;">
@@ -4708,7 +4850,14 @@
         <article class="card profile-main-card" style="display:grid; gap: 12px;">
         <div style="display:flex; align-items:center; gap: 14px;">
           <button type="button" id="user-upload-profile-image-trigger" style="padding:0; border:0; background:none; cursor:${isOwnProfile(member) ? "pointer" : "default"};" ${isOwnProfile(member) ? "title=\"Change profile image\"" : "disabled"}>
-            <img src="${resolveAvatarSrcForMember(member)}" onerror="${avatarFallbackOnErrorAttr()}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+            ${renderLazyImage({
+              src: resolveAvatarSrcForMember(member),
+              fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+              alt: "Profile picture",
+              style: "width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);",
+              wrapperClass: "avatar-lazy-media",
+              eager: true
+            })}
           </button>
           ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
@@ -5067,7 +5216,7 @@
       return `
         <div style="display:grid; gap:8px;">
           ${photoSrc
-            ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item?.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true"><img src="${photoSrc}" alt="Equipment photo" style="width:88px; height:88px; object-fit:cover; border-radius:14px; border:1px solid var(--line);" /></button>`
+            ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item?.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:88px; height:88px; object-fit:cover; border-radius:14px; border:1px solid var(--line);", wrapperClass: "equipment-photo-lazy-media" })}</button>`
             : `<div class="meta" style="display:flex; align-items:center; justify-content:center; width:88px; height:88px; border-radius:14px; border:1px dashed var(--line); background:rgba(15,23,42,0.03);">No photo</div>`}
           <div class="button-row" style="gap:8px;">
             <button type="button" class="ghost-button small-button equipment-photo-trigger" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} data-input-id="${inputId}" data-no-toast="true">Upload photo</button>
@@ -5124,7 +5273,7 @@
         return `
           <tr>
             ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true"><img src="${photoSrc}" alt="Equipment photo" style="width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;" /></button>` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
+            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;", wrapperClass: "equipment-photo-lazy-media" })}</button>` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
@@ -5393,7 +5542,7 @@
             </div>
             <div class="game-scoreboard">
               <div class="game-team ${game.emperorsHome ? "is-emperors" : ""}">
-                ${game.homeTeamLogo ? `<img src="${game.homeTeamLogo}" alt="${game.homeTeamName}" class="game-team-logo" />` : ""}
+                ${game.homeTeamLogo ? renderLazyImage({ src: game.homeTeamLogo, alt: game.homeTeamName, className: "game-team-logo", wrapperClass: "game-logo-lazy-media" }) : ""}
                 <strong>${game.homeTeamName}</strong>
               </div>
               <div class="game-score">
@@ -5402,7 +5551,7 @@
                   : `<span class="meta">Kickoff</span>`}
               </div>
               <div class="game-team ${!game.emperorsHome ? "is-emperors" : ""}">
-                ${game.awayTeamLogo ? `<img src="${game.awayTeamLogo}" alt="${game.awayTeamName}" class="game-team-logo" />` : ""}
+                ${game.awayTeamLogo ? renderLazyImage({ src: game.awayTeamLogo, alt: game.awayTeamName, className: "game-team-logo", wrapperClass: "game-logo-lazy-media" }) : ""}
                 <strong>${game.awayTeamName}</strong>
               </div>
             </div>
@@ -5559,7 +5708,7 @@
                   <td><strong>${row.rank}</strong></td>
                   <td>
                     <div class="standings-team-cell">
-                      ${row.teamLogo ? `<img src="${row.teamLogo}" alt="${escapeHtml(row.teamName)}" class="standings-team-logo" />` : `<div class="standings-team-logo standings-team-logo-fallback">${escapeHtml(row.teamName.slice(0, 1) || "?")}</div>`}
+                      ${row.teamLogo ? renderLazyImage({ src: row.teamLogo, alt: row.teamName, className: "standings-team-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="standings-team-logo standings-team-logo-fallback">${escapeHtml(row.teamName.slice(0, 1) || "?")}</div>`}
                       <div>
                         <strong>${escapeHtml(row.teamName)}</strong>
                       </div>
@@ -5603,7 +5752,7 @@
             </div>
             <div class="game-match-body">
             <div class="game-match-team game-match-team-home">
-              ${game.homeTeamLogo ? `<img src="${game.homeTeamLogo}" alt="${escapeHtml(game.homeTeamName)}" class="game-match-logo" />` : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.homeTeamName.slice(0, 1) || "?")}</div>`}
+              ${game.homeTeamLogo ? renderLazyImage({ src: game.homeTeamLogo, alt: game.homeTeamName, className: "game-match-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.homeTeamName.slice(0, 1) || "?")}</div>`}
               <div>
               <strong>${escapeHtml(game.homeTeamName)}</strong>
               <p class="meta">${game.homeTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
@@ -5621,7 +5770,7 @@
               <strong>${escapeHtml(game.awayTeamName)}</strong>
               <p class="meta">${game.awayTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
               </div>
-              ${game.awayTeamLogo ? `<img src="${game.awayTeamLogo}" alt="${escapeHtml(game.awayTeamName)}" class="game-match-logo" />` : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.awayTeamName.slice(0, 1) || "?")}</div>`}
+              ${game.awayTeamLogo ? renderLazyImage({ src: game.awayTeamLogo, alt: game.awayTeamName, className: "game-match-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.awayTeamName.slice(0, 1) || "?")}</div>`}
             </div>
             </div>
           </article>
@@ -6131,6 +6280,11 @@
     document.querySelectorAll(".nav-link").forEach((link) => {
       link.classList.toggle("active", link.dataset.view === finalView);
     });
+    const activeSection = document.getElementById(finalView);
+    if (activeSection) {
+      setupLazyImages(activeSection);
+      window.requestAnimationFrame(() => hydrateVisibleLazyImages(activeSection));
+    }
   }
 
   function getRouteView() {
@@ -8429,8 +8583,10 @@
       bindChangePasswordAction();
       bindTableExports();
       bindTableSorts();
+      setupLazyImages(document);
       updateNavigationVisibility();
       switchView(getRouteView());
+      hydrateVisibleLazyImages(document.getElementById(resolveAllowedView(getRouteView())) || document);
       setupMembersStickyHeader();
       setupFeesStickyHeader();
       setupPassesStickyHeader();
