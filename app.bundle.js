@@ -130,8 +130,8 @@
       streamLink: "",
       homeTeam: { name: "JKU Astros", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/jku-astros-6632_1773399167_small.png" },
       awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
-      homeScore: null,
-      awayScore: null
+      homeScore: 25,
+      awayScore: 41
     }
   ];
   const GAMES_FILTER_STORAGE_KEY = "emperors-games-team-filter-v1";
@@ -165,7 +165,7 @@
     { id: "g-2026-04-24-astros-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-24T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", streamLink: "https://www.youtube.com/live/WfA_Se67oFo?si=XTe5rlfKrkbKNjoh", isReplay: true, homeTeam: { name: "JKU Astros" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 36, awayScore: 9 },
     { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink:"https://www.youtube.com/watch?v=R0RkR8GwYyw", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: 3, awayScore: 37 },
     { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=h7Ws4Dh9xK8",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: 28, awayScore: 6 },
-    { id: "g-2026-05-15-astros-emperors", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-15T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "JKU Astros" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: null, awayScore: null },
+    { id: "g-2026-05-15-astros-emperors", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-15T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "JKU Astros" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 25, awayScore: 41 },
     { id: "g-2026-05-23-wildcard-1", stage: "Playoffs", subtitle: "Wildcard ACSL 3. vs. 6.", startsAt: "2026-05-23T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
     { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
     { id: "g-2026-06-06-semi-1", stage: "Semifinals", subtitle: "Semi Finals ACSL 1. vs Lowest Seed", startsAt: "2026-06-06T14:15:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "TBA" }, awayTeam: { name: "TBA" }, homeScore: null, awayScore: null },
@@ -175,14 +175,14 @@
   ];
   const LEAGUE_STANDINGS_SNAPSHOT = {
     label: "RegularSeason 2025/26",
-    updatedAt: "2026-05-12",
+    updatedAt: "2026-05-16",
     rows: [
-      { rank: 1, teamName: "UNI-Wien Emperors", wins: 3, losses: 0, draws: 0, pointsFor: 80, pointsAgainst: 34, pct: 1, diff: 46 },
-      { rank: 2, teamName: "WU Tigers", wins: 3, losses: 1, draws: 0, pointsFor: 96, pointsAgainst: 46, pct: 0.75, diff: 50 },
+      { rank: 1, teamName: "UNI-Wien Emperors", wins: 4, losses: 0, draws: 0, pointsFor: 121, pointsAgainst: 59, pct: 1, diff: 62 },
+      { rank: 2, teamName: "WU Tigers", wins: 3, losses: 1, draws: 0, pointsFor: 98, pointsAgainst: 46, pct: 0.75, diff: 52 },
       { rank: 3, teamName: "TU Robots", wins: 2, losses: 2, draws: 0, pointsFor: 83, pointsAgainst: 60, pct: 0.5, diff: 23 },
-      { rank: 4, teamName: "JKU Astros", wins: 1, losses: 2, draws: 0, pointsFor: 57, pointsAgainst: 65, pct: 0.3333333333, diff: -8 },
-      { rank: 5, teamName: "Med Uni Wien Serpents", wins: 1, losses: 3, draws: 0, pointsFor: 21, pointsAgainst: 114, pct: 0.25, diff: -93 },
-      { rank: 6, teamName: "BOKU Beez", wins: 1, losses: 3, draws: 0, pointsFor: 60, pointsAgainst: 78, pct: 0.25, diff: -18 },
+      { rank: 4, teamName: "BOKU Beez", wins: 1, losses: 3, draws: 0, pointsFor: 60, pointsAgainst: 78, pct: 0.25, diff: -18 },
+      { rank: 5, teamName: "JKU Astros", wins: 1, losses: 3, draws: 0, pointsFor: 82, pointsAgainst: 106, pct: 0.25, diff: -24 },
+      { rank: 6, teamName: "Med Uni Wien Serpents", wins: 1, losses: 3, draws: 0, pointsFor: 21, pointsAgainst: 116, pct: 0.25, diff: -95 },
     ]
   };
 
