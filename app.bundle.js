@@ -171,7 +171,7 @@
     { id: "g-2026-06-06-semi-1", stage: "Semifinals", subtitle: "UNI-Wien Emperors vs. JKU Astros", startsAt: "2026-06-06T14:15:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=zMOdPBJRYgw",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "JKU Astros" }, homeScore: 14, awayScore: 24 },
     { id: "g-2026-06-06-semi-2", stage: "Semifinals", subtitle: "TU Robots vs. WU Tigers", startsAt: "2026-06-06T17:30:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=JqxiXr1XeiM",  homeTeam: { name: "TU Robots" }, awayTeam: { name: "WU Tigers" }, homeScore: 6, awayScore: 9 },
     { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
-    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: null, awayScore: null }
+    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: null, awayScore: null }
   ];
   const LEAGUE_STANDINGS_SNAPSHOT = {
     label: "RegularSeason 2025/26",
@@ -4807,12 +4807,12 @@
           ${rows.map((member, index) => {
             const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
             const primaryPosition = (member.positions || [])[0] || "";
-            const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER; //ToDo: Use actual roster image if available
+            const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
             return `
               <article class="roster-card">
                 <div class="roster-card-media-shell">
                   ${renderLazyImage({
-                    src: INLINE_AVATAR_PLACEHOLDER,
+                    src: rosterImageSrc,
                     fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
                     alt: `${member.name} roster portrait`,
                     className: "roster-player-image",
