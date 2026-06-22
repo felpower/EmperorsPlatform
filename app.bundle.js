@@ -193,6 +193,7 @@
   const FEE_STATUS_FILTER_KEY = "emperors-fee-status-filter";
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
+  const ROSTER_FILTER_KEY = "emperors-roster-position-filter-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
@@ -210,7 +211,7 @@
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
-  const viewIds = ["dashboard", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "roster", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -256,6 +257,11 @@
   let teardownPassesStickyHeader = null;
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
+  let selectedRosterPosition = loadStoredValue(ROSTER_FILTER_KEY, "all");
+  let publicRosterStatus = "";
+  let publicRosterLoadedAt = 0;
+  let publicRosterLoadAttempted = false;
+  let publicRosterLoadPromise = null;
   let passFilters = loadPassFilters();
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
@@ -3139,6 +3145,108 @@
       return normalized;
     }
 
+  function publicRosterField(row, ...keys) {
+    for (const key of keys) {
+      const normalizedKey = String(key || "");
+      if (Object.prototype.hasOwnProperty.call(row || {}, normalizedKey)) return row[normalizedKey];
+      const camelKey = normalizedKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      if (Object.prototype.hasOwnProperty.call(row || {}, camelKey)) return row[camelKey];
+    }
+    return undefined;
+  }
+
+  function publicRosterDisplayName(row) {
+    const firstName = String(publicRosterField(row, "first_name", "firstName") || "").trim();
+    const lastName = String(publicRosterField(row, "last_name", "lastName") || "").trim();
+    const displayName = String(publicRosterField(row, "display_name", "displayName", "name") || "").trim();
+    return {
+      firstName,
+      lastName,
+      displayName: `${firstName} ${lastName}`.trim() || displayName || "Unknown player"
+    };
+  }
+
+  function mapPublicRosterMemberRow(row, index) {
+    const { firstName, lastName, displayName } = publicRosterDisplayName(row);
+    const jerseyRaw = publicRosterField(row, "jersey_number", "jerseyNumber");
+    const membershipStatus = String(publicRosterField(row, "membership_status", "membershipStatus") || "pending").trim() || "pending";
+    const roles = capabilitySet(parseJsonArrayField(publicRosterField(row, "roles_json", "rolesJson"), []));
+    return normalizeMember({
+      id: String(publicRosterField(row, "id", "$id") || `roster-${index + 1}`),
+      firstName,
+      lastName,
+      name: displayName,
+      email: "",
+      positions: parseJsonArrayField(publicRosterField(row, "positions_json", "positionsJson"), []),
+      roles,
+      jerseyNumber: jerseyRaw === null || jerseyRaw === undefined || jerseyRaw === "" ? null : Number(jerseyRaw),
+      active: membershipStatus === "active",
+      membershipStatus,
+      deletedAt: publicRosterField(row, "deleted_at", "deletedAt") || null,
+      passStatus: "missing",
+      feeStatus: "pending",
+      notes: ""
+    }, index);
+  }
+
+  async function loadPublicRosterBootstrap() {
+    if (!backendClient) return;
+    const response = await backendClient
+      .from("members")
+      .select("id, first_name, last_name, display_name, positions_json, roles_json, jersey_number, membership_status, deleted_at");
+    if (response.error) {
+      throw response.error;
+    }
+
+    const publicMembers = (response.data || []).map(mapPublicRosterMemberRow);
+    state = normalizeState({
+      ...state,
+      source: "appwrite-public",
+      permissionsModel: bootstrapMeta.permissionsModel || demoData.permissionsModel,
+      members: publicMembers
+    });
+    bootstrapMeta = {
+      source: "appwrite-public",
+      permissionsModel: bootstrapMeta.permissionsModel || demoData.permissionsModel
+    };
+    publicRosterStatus = publicMembers.length
+      ? ""
+      : "No public roster players were returned from Appwrite.";
+    publicRosterLoadedAt = Date.now();
+    saveState();
+  }
+
+  function publicRosterErrorMessage(error) {
+    const message = String(error?.message || error || "Could not load the public roster.").trim();
+    if (/permission|unauthorized|missing scope|read/i.test(message)) {
+      return "The roster page is public, but Appwrite is not allowing guest reads for the members collection yet.";
+    }
+    return message;
+  }
+
+  function ensurePublicRosterLoaded() {
+    if (!backendClient || authState.user || publicRosterLoadPromise || publicRosterLoadAttempted) return;
+    publicRosterLoadAttempted = true;
+    publicRosterStatus = publicRosterStatus || "Loading roster...";
+    publicRosterLoadPromise = loadPublicRosterBootstrap()
+      .then(() => {
+        publicRosterStatus = publicRosterStatus || "";
+        mount();
+        switchView("roster");
+      })
+      .catch((error) => {
+        publicRosterStatus = publicRosterErrorMessage(error);
+        authState.status = publicRosterStatus;
+        mount();
+        switchView("roster");
+      })
+      .finally(() => {
+        publicRosterLoadPromise = null;
+      });
+    mount();
+    switchView("roster");
+  }
+
   async function loadRemoteBootstrap() {
     if (!backendClient) {
       authState.status = "Appwrite client not ready yet. Please refresh the page and try again.";
@@ -3382,6 +3490,24 @@
     if (cached) {
       applyBootstrap(cached);
       if (!(backendClient && authState.user)) {
+        if (backendClient && getRouteView() === "roster") {
+          try {
+            publicRosterLoadAttempted = true;
+            await loadPublicRosterBootstrap();
+            setCacheWithTTL(BOOTSTRAP_CACHE_KEY, {
+              members: state.members,
+              fees: state.fees,
+              events: state.events,
+              invites: state.invites,
+              equipment: state.equipment,
+              source: bootstrapMeta.source,
+              permissionsModel: bootstrapMeta.permissionsModel
+            });
+          } catch (error) {
+            publicRosterStatus = publicRosterErrorMessage(error);
+            authState.status = publicRosterStatus;
+          }
+        }
         return;
       }
     }
@@ -3438,6 +3564,14 @@
     // Pure Appwrite only
     if (backendClient && authState.user) {
       await loadRemoteBootstrap();
+    } else if (backendClient && getRouteView() === "roster") {
+      try {
+        publicRosterLoadAttempted = true;
+        await loadPublicRosterBootstrap();
+      } catch (error) {
+        publicRosterStatus = publicRosterErrorMessage(error);
+        authState.status = publicRosterStatus;
+      }
     } else {
       await loadLocalBootstrap();
     }
@@ -4530,6 +4664,139 @@
       <div style="max-width: 760px; display: grid; gap: 12px;">
         ${athleteStatsHtml}
       </div>
+    `;
+  }
+
+  function rosterPositionLabel(position) {
+    const normalized = String(position || "").trim().toUpperCase();
+    const labels = {
+      QB: "Quarterback",
+      RB: "Running Back",
+      FB: "Fullback",
+      WR: "Wide Receiver",
+      TE: "Tight End",
+      OL: "Offensive Line",
+      OT: "Offensive Tackle",
+      OG: "Offensive Guard",
+      C: "Center",
+      DL: "Defensive Line",
+      DT: "Defensive Tackle",
+      DE: "Defensive End",
+      NT: "Nose Tackle",
+      LB: "Linebacker",
+      ILB: "Inside Linebacker",
+      OLB: "Outside Linebacker",
+      DB: "Defensive Back",
+      CB: "Cornerback",
+      S: "Safety",
+      K: "Kicker",
+      P: "Punter"
+    };
+    return labels[normalized] || normalized || "Position open";
+  }
+
+  function rosterPositionSummary(member) {
+    const positions = Array.isArray(member?.positions) ? member.positions.filter(Boolean) : [];
+    if (!positions.length) return "Position open";
+    return positions.map(rosterPositionLabel).join(" / ");
+  }
+
+  function isRosterMember(member) {
+    if (!member || member.deletedAt) return false;
+    if (String(member.membershipStatus || "").trim().toLowerCase() !== "active") return false;
+    const roles = (member.roles || []).map((role) => String(role || "").toLowerCase()).filter(Boolean);
+    if (roles.includes("player")) return true;
+    return !roles.length && ((member.positions || []).length > 0 || member.jerseyNumber !== null);
+  }
+
+  function rosterPositionOptions() {
+    const available = new Set(
+      state.members
+        .filter(isRosterMember)
+        .flatMap((member) => member.positions || [])
+        .map((position) => String(position || "").trim().toUpperCase())
+        .filter(Boolean)
+    );
+    const ordered = memberPositionOptions.filter((position) => available.has(position));
+    const extras = Array.from(available).filter((position) => !ordered.includes(position)).sort();
+    return [...ordered, ...extras];
+  }
+
+  function sortedRosterMembers() {
+    const selected = String(selectedRosterPosition || "all").trim().toUpperCase();
+    return state.members
+      .filter(isRosterMember)
+      .filter((member) => selected === "ALL" || (member.positions || []).map((position) => String(position || "").toUpperCase()).includes(selected))
+      .sort((left, right) => {
+        const leftNumber = left.jerseyNumber === null || left.jerseyNumber === undefined ? 999 : Number(left.jerseyNumber);
+        const rightNumber = right.jerseyNumber === null || right.jerseyNumber === undefined ? 999 : Number(right.jerseyNumber);
+        if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+        return String(left.lastName || left.name || "").localeCompare(String(right.lastName || right.name || ""), undefined, { sensitivity: "base" });
+      });
+  }
+
+  function renderRoster() {
+    const positions = rosterPositionOptions();
+    const selected = String(selectedRosterPosition || "all").trim().toUpperCase();
+    if (selected !== "ALL" && !positions.includes(selected)) {
+      selectedRosterPosition = "all";
+      saveStoredValue(ROSTER_FILTER_KEY, selectedRosterPosition);
+    }
+    const rows = sortedRosterMembers();
+    const totalPlayers = state.members.filter(isRosterMember).length;
+    const loadingMessage = publicRosterLoadPromise ? "Loading roster..." : publicRosterStatus;
+    return `
+      <section class="roster-page">
+        <div class="roster-page-head">
+          <div>
+            <p class="eyebrow">Team</p>
+            <h2>Roster</h2>
+            <p class="roster-page-copy">Active Emperors players from the member database.</p>
+          </div>
+          <div class="roster-count">
+            <strong>${totalPlayers}</strong>
+            <span>Players</span>
+          </div>
+        </div>
+        <div class="roster-filter-bar" aria-label="Roster position filter">
+          <button type="button" class="roster-filter-chip ${selectedRosterPosition === "all" ? "is-active" : ""}" data-roster-position="all" data-no-toast="true">All</button>
+          ${positions.map((position) => `
+            <button type="button" class="roster-filter-chip ${selectedRosterPosition.toUpperCase() === position ? "is-active" : ""}" data-roster-position="${escapeAttribute(position)}" data-no-toast="true">${escapeHtml(position)}</button>
+          `).join("")}
+        </div>
+        ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
+        <div class="roster-grid">
+          ${rows.map((member, index) => {
+            const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
+            const primaryPosition = (member.positions || [])[0] || "";
+            return `
+              <article class="roster-card">
+                <div class="roster-card-media-shell">
+                  ${renderLazyImage({
+                    src: INLINE_AVATAR_PLACEHOLDER,
+                    alt: `${member.name} placeholder portrait`,
+                    className: "roster-player-image",
+                    wrapperClass: "roster-player-media",
+                    eager: index < 8
+                  })}
+                  <div class="roster-number-badge">#${escapeHtml(numberLabel)}</div>
+                  ${primaryPosition ? `<div class="roster-position-badge">${escapeHtml(primaryPosition)}</div>` : ""}
+                </div>
+                <div class="roster-card-body">
+                  <h3>${escapeHtml(member.name)}</h3>
+                  <p>${escapeHtml(rosterPositionSummary(member))}</p>
+                </div>
+              </article>
+            `;
+          }).join("") || `
+            <article class="setup-card roster-empty-card">
+              <p class="eyebrow">Roster</p>
+              <h3>No players found</h3>
+              <p class="muted">No active player records match the selected position.</p>
+            </article>
+          `}
+        </div>
+      </section>
     `;
   }
 
@@ -6363,16 +6630,16 @@
 
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
-    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
-    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
-    return ["dashboard", "members", "user", "organization", "equipment", "events", "recovery"];
+    if (normalizedRole === "admin") return ["dashboard", "roster", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "coach") return ["dashboard", "roster", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    if (normalizedRole === "tech_admin") return ["dashboard", "roster", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    return ["dashboard", "roster", "members", "user", "organization", "equipment", "events", "recovery"];
   }
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "events" || normalizedViewId === "organization";
+    return normalizedViewId === "roster" || normalizedViewId === "events" || normalizedViewId === "organization";
   }
 
   function canAccessView(viewId) {
@@ -6533,6 +6800,9 @@
 
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
+    if (finalView === "roster") {
+      ensurePublicRosterLoaded();
+    }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
       if (section) section.classList.toggle("active", viewId === finalView);
@@ -8102,6 +8372,18 @@
     });
   }
 
+  function bindRosterActions() {
+    document.querySelectorAll(".roster-filter-chip").forEach((button) => {
+      button.onclick = function () {
+        const nextPosition = String(button.dataset.rosterPosition || "all").trim() || "all";
+        selectedRosterPosition = nextPosition === "all" ? "all" : nextPosition.toUpperCase();
+        saveStoredValue(ROSTER_FILTER_KEY, selectedRosterPosition);
+        mount();
+        switchView("roster");
+      };
+    });
+  }
+
   function bindMemberFilters() {
     const filtersDropdown = document.querySelector(".member-filters-dropdown");
     if (filtersDropdown) {
@@ -8815,6 +9097,7 @@
       bindLocalPreviewActions();
       document.getElementById("dashboard").innerHTML = renderDashboard();
       bindDashboardActions();
+      document.getElementById("roster").innerHTML = renderRoster();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
@@ -8831,6 +9114,7 @@
       bindOrganizationActions();
       bindEquipmentActions();
       bindGamesActions();
+      bindRosterActions();
       bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();
