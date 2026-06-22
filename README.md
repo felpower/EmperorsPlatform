@@ -146,6 +146,14 @@ Available scripts:
 - `npm run smoke:appwrite:auth-members`
 - `npm run smoke:appwrite:collections`
 - `npm run smoke:appwrite:parity-members-fees`
+- `node scripts/import-roster-pictures.mjs --extract-only`
+- `node scripts/import-roster-pictures.mjs --apply`
+
+Roster picture import expects:
+
+- `APPWRITE_API_KEY` with database and storage write permissions
+- `APPWRITE_ROSTER_BUCKET_ID` defaults to `RosterPictures`
+- `members.rosterImage` as a string attribute containing the uploaded storage file id
 
 ## Security Notes
 

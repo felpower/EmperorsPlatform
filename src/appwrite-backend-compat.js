@@ -218,6 +218,7 @@
       iban: String(rowValue(row, "iban") || "").trim(),
       positions_json: rowValue(row, "positions_json") || rowValue(row, "positionsJson") || [],
       roles_json: rowValue(row, "roles_json") || rowValue(row, "rolesJson") || ["player"],
+      rosterImage: String(rowValue(row, "rosterImage") || rowValue(row, "roster_image") || "").trim(),
       jersey_number: rowValue(row, "jersey_number") !== undefined ? rowValue(row, "jersey_number") : rowValue(row, "jerseyNumber"),
       membership_status: String(rowValue(row, "membership_status") || rowValue(row, "membershipStatus") || "active"),
       notes: String(rowValue(row, "notes") || ""),
@@ -259,6 +260,8 @@
     if (hasOwn(input, "iban")) sanitized.iban = input.iban ? String(input.iban).trim() : null;
     if (hasOwn(input, "first_name")) sanitized.first_name = input.first_name ? String(input.first_name).trim() : null;
     if (hasOwn(input, "last_name")) sanitized.last_name = input.last_name ? String(input.last_name).trim() : null;
+    if (hasOwn(input, "rosterImage")) sanitized.rosterImage = input.rosterImage ? String(input.rosterImage).trim() : null;
+    if (hasOwn(input, "roster_image")) sanitized.rosterImage = input.roster_image ? String(input.roster_image).trim() : null;
     if (hasOwn(input, "membership_status")) sanitized.membership_status = input.membership_status ? String(input.membership_status).trim() : "pending";
     if (hasOwn(input, "notes")) sanitized.notes = input.notes ? String(input.notes).trim() : null;
     if (hasOwn(input, "profile_id")) sanitized.profile_id = input.profile_id ? String(input.profile_id).trim() : null;

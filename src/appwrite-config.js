@@ -8,6 +8,7 @@ window.ClubHubAppwriteConfig = {
   sepaExportFunctionId: "SepaExport",
   diagnosticsFunctionId: "69fe0260003aa6db005b",
   profilePicturesBucketId: "ProfilePictures",
+  rosterPicturesBucketId: "RosterPictures",
   equipmentPicturesBucketId: "equipment",
   teamsBucketId: "teams",
   teamLogoFiles: {

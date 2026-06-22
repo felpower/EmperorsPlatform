@@ -28,6 +28,7 @@ Recommended extra columns for better parity:
 - last_name (string, optional)
 - positions_json (string, optional, store JSON array)
 - roles_json (string, optional, store JSON array)
+- rosterImage (string, optional, Appwrite Storage file id from the RosterPictures bucket)
 - membership_status (string, optional) values: active, pending, inactive
 - notes (string, optional)
 - profile_id (string, optional)

@@ -10,7 +10,8 @@
     "backfill:members-iban": "node scripts/backfill-members-iban-from-fees.mjs",
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
     "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
-    "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs"
+    "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs",
+    "import:roster-pictures": "node scripts/import-roster-pictures.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

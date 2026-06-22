@@ -727,6 +727,24 @@
     return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}/view?${query.toString()}`;
   }
 
+  function storageRosterImageUrl(fileId) {
+    const normalizedReference = String(fileId || "").trim();
+    if (!normalizedReference) return "";
+    if (/^(https?:|data:)/i.test(normalizedReference)) return normalizedReference;
+    const bucketId = String(APPWRITE_CONFIG?.rosterPicturesBucketId || "RosterPictures").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    if (!bucketId || !endpoint || !projectId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const query = new URLSearchParams({ project: projectId });
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedReference)}/view?${query.toString()}`;
+  }
+
+  function resolveRosterImageSrcForMember(member) {
+    const rosterImage = String(member?.rosterImage || member?.roster_image || "").trim();
+    return storageRosterImageUrl(rosterImage);
+  }
+
   function equipmentPhotoVersionKey(equipmentId) {
     return `clubhub-equipment-photo-version-${String(equipmentId || "").trim()}`;
   }
@@ -1867,6 +1885,7 @@
       memberIban: String(member.memberIban || member.iban || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
+      rosterImage: String(member.rosterImage || member.roster_image || "").trim(),
       jerseyNumber: member.jerseyNumber === null || member.jerseyNumber === undefined || member.jerseyNumber === "" ? null : Number(member.jerseyNumber),
       active: Boolean(member.active),
       rookie: Boolean(member.rookie),
@@ -3179,6 +3198,7 @@
       email: "",
       positions: parseJsonArrayField(publicRosterField(row, "positions_json", "positionsJson"), []),
       roles,
+      rosterImage: String(publicRosterField(row, "rosterImage", "roster_image") || "").trim(),
       jerseyNumber: jerseyRaw === null || jerseyRaw === undefined || jerseyRaw === "" ? null : Number(jerseyRaw),
       active: membershipStatus === "active",
       membershipStatus,
@@ -3191,9 +3211,14 @@
 
   async function loadPublicRosterBootstrap() {
     if (!backendClient) return;
-    const response = await backendClient
+    let response = await backendClient
       .from("members")
-      .select("id, first_name, last_name, display_name, positions_json, roles_json, jersey_number, membership_status, deleted_at");
+      .select("id, first_name, last_name, display_name, positions_json, roles_json, rosterImage, jersey_number, membership_status, deleted_at");
+    if (response.error && /rosterImage/i.test(String(response.error?.message || ""))) {
+      response = await backendClient
+        .from("members")
+        .select("id, first_name, last_name, display_name, positions_json, roles_json, jersey_number, membership_status, deleted_at");
+    }
     if (response.error) {
       throw response.error;
     }
@@ -3276,12 +3301,21 @@
       return response.data || [];
     };
 
-    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    }
     if (memberRowsResponse.error && /(invite_sent_at|activated_at)/i.test(String(memberRowsResponse.error?.message || ""))) {
-      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at");
+      if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
+        memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      }
     }
     if (memberRowsResponse.error && /iban/i.test(String(memberRowsResponse.error?.message || ""))) {
-      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at");
+      if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
+        memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      }
     }
     if (memberRowsResponse.error) {
       throw memberRowsResponse.error;
@@ -3377,6 +3411,7 @@
         memberIban: String(row.iban || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
+        rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
         jerseyNumber: row.jersey_number === null || row.jersey_number === undefined ? null : Number(row.jersey_number),
         active: String(row.membership_status || "") === "active",
         rookie: false,
@@ -4769,12 +4804,14 @@
           ${rows.map((member, index) => {
             const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
             const primaryPosition = (member.positions || [])[0] || "";
+            const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
             return `
               <article class="roster-card">
                 <div class="roster-card-media-shell">
                   ${renderLazyImage({
-                    src: INLINE_AVATAR_PLACEHOLDER,
-                    alt: `${member.name} placeholder portrait`,
+                    src: rosterImageSrc,
+                    fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+                    alt: `${member.name} roster portrait`,
                     className: "roster-player-image",
                     wrapperClass: "roster-player-media",
                     eager: index < 8

@@ -25,6 +25,7 @@ const schema = {
       { type: "string", key: "last_name", size: 255, required: false },
       { type: "string", key: "positions_json", size: 2048, required: false },
       { type: "string", key: "roles_json", size: 2048, required: false },
+      { type: "string", key: "rosterImage", size: 255, required: false },
       { type: "string", key: "membership_status", size: 32, required: false },
       { type: "string", key: "iban", size: 128, required: false },
       { type: "string", key: "notes", size: 2048, required: false },
