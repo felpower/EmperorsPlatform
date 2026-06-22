@@ -224,7 +224,8 @@
   const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
   const MAX_DIAGNOSTIC_LOG_ENTRIES = 200;
   const MAX_REMOTE_DIAGNOSTIC_ENTRIES = 150;
-  const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
+  //const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
+  const INLINE_AVATAR_PLACEHOLDER = "assets/emperors_avatar.png";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
 
   const backendClient =
@@ -4809,7 +4810,7 @@
               <article class="roster-card">
                 <div class="roster-card-media-shell">
                   ${renderLazyImage({
-                    src: rosterImageSrc,
+                    src: INLINE_AVATAR_PLACEHOLDER,
                     fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
                     alt: `${member.name} roster portrait`,
                     className: "roster-player-image",
