@@ -1897,7 +1897,7 @@
       inviteSentAt: member.inviteSentAt || null,
       activatedAt: member.activatedAt || null,
       passStatus: member.passStatus || "missing",
-      passExpiry: member.passExpiry || "",
+      passExpiry: normalizeToIsoDate(member.passExpiry || member.expires_on || member.expiry_date || ""),
       licenseName: member.licenseName || "",
       feeStatus: member.feeStatus || "pending",
       notes: member.notes || "",
@@ -3397,7 +3397,7 @@
       const { firstName, lastName, displayName } = normalizeDisplayName(row);
       const memberId = String(row.id || "");
       const pass = passesByMember.get(memberId) || null;
-      const passExpiry = String(pass?.expires_on || "");
+      const passExpiry = normalizeToIsoDate(pass?.expires_on || pass?.expiry_date || "");
       const licenseName = String(pass?.federation_reference || "");
       const rawPassStatus = String(pass?.pass_status || "");
       const memberFees = feesByMember.get(memberId) || [];
@@ -3904,7 +3904,7 @@
       })();
       const normalizedPassExpiry = normalizedPassStatus === "missing"
         ? ""
-        : String(memberPayload.passExpiry || "").trim();
+        : normalizeToIsoDate(memberPayload.passExpiry || "");
 
       const patch = {
         first_name: firstName || null,
@@ -4807,7 +4807,7 @@
           ${rows.map((member, index) => {
             const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
             const primaryPosition = (member.positions || [])[0] || "";
-            const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
+            //const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
             return `
               <article class="roster-card">
                 <div class="roster-card-media-shell">
@@ -4995,7 +4995,7 @@
                   </td>
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${member.passExpiry || ""}" /></div>`
+                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${normalizeToIsoDate(member.passExpiry) || ""}" /></div>`
                       : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : member.licenseName || "No pass data"}</div></div>`}
                   </td>
                 ` : ""}
@@ -6898,7 +6898,7 @@
     form.elements.jerseyNumber.value = member?.jerseyNumber ?? "";
     form.elements.membershipStatus.value = member?.membershipStatus || "active";
     form.elements.passStatus.value = displayPassStatus(member?.passStatus || "valid");
-    form.elements.passExpiry.value = member?.passExpiry || (!member ? defaultPassExpiryDate() : "");
+    form.elements.passExpiry.value = normalizeToIsoDate(member?.passExpiry || "") || (!member ? defaultPassExpiryDate() : "");
     form.elements.notes.value = member?.notes || "";
     title.textContent = member ? `Edit ${member.name}` : "Add a club member";
     submit.textContent = member ? "Save changes" : "Save member";
@@ -7030,7 +7030,7 @@
         const normalizedPassStatus = String(passStatusInput.value || "missing").trim().toLowerCase();
         const normalizedPassExpiry = normalizedPassStatus === "missing"
           ? ""
-          : String(passExpiryInput.value || "").trim();
+          : normalizeToIsoDate(passExpiryInput.value || member.passExpiry || "");
         try {
           await saveMember({
             memberId,
@@ -7265,6 +7265,12 @@
           passExpiry: String(formData.get("passExpiry") || "").trim(),
           notes: String(formData.get("notes") || "").trim()
         };
+        const existingMember = payload.memberId ? memberById(payload.memberId) : null;
+        const normalizedPassStatus = displayPassStatus(payload.passStatus);
+        payload.passStatus = normalizedPassStatus;
+        payload.passExpiry = normalizedPassStatus === "missing"
+          ? ""
+          : normalizeToIsoDate(payload.passExpiry || existingMember?.passExpiry || "");
         if (!payload.firstName && !payload.lastName) {
           authState.status = "Please enter at least a first name or a last name.";
           authState.pendingAction = "";
