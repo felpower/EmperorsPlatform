@@ -4727,8 +4727,8 @@
       S: "Safety",
       K: "Kicker",
       P: "Punter",
-      Coach: "Coach",
-      Staff: "Staff"
+      COACH: "Coach",
+      STAFF: "Staff"
     };
     return labels[normalized] || normalized || "Position open";
   }
@@ -4739,32 +4739,74 @@
     return positions.map(rosterPositionLabel).join(" / ");
   }
 
+  function rosterMemberRoles(member) {
+    return (member?.roles || [])
+      .map((role) => String(role || "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  function rosterMemberPositions(member) {
+    return (member?.positions || [])
+      .map((position) => String(position || "").trim().toUpperCase())
+      .filter(Boolean);
+  }
+
+  function hasAthleteRosterPosition(member) {
+    return rosterMemberPositions(member).some((position) => position && position !== "COACH" && position !== "STAFF");
+  }
+
+  function isRosterAthlete(member) {
+    const roles = rosterMemberRoles(member);
+    if (roles.includes("player")) return true;
+    if (roles.includes("coach") || roles.includes("staff")) return false;
+    return hasAthleteRosterPosition(member) || member?.jerseyNumber !== null && member?.jerseyNumber !== undefined;
+  }
+
+  function isRosterCoach(member) {
+    return rosterMemberRoles(member).includes("coach") || rosterMemberPositions(member).includes("COACH");
+  }
+
+  function isRosterStaff(member) {
+    return rosterMemberRoles(member).includes("staff") || rosterMemberPositions(member).includes("STAFF");
+  }
+
   function isRosterMember(member) {
     if (!member || member.deletedAt) return false;
     if (String(member.membershipStatus || "").trim().toLowerCase() !== "active") return false;
-    const roles = (member.roles || []).map((role) => String(role || "").toLowerCase()).filter(Boolean);
-    if (roles.includes("player") || roles.includes("coach") || roles.includes("staff")) return true;
-    return !roles.length && ((member.positions || []).length > 0 || member.jerseyNumber !== null);
+    return isRosterAthlete(member) || isRosterCoach(member) || isRosterStaff(member);
   }
 
   function rosterPositionOptions() {
-    const available = new Set(
-      state.members
-        .filter(isRosterMember)
-        .flatMap((member) => member.positions || [])
-        .map((position) => String(position || "").trim().toUpperCase())
-        .filter(Boolean)
-    );
-    const ordered = memberPositionOptions.filter((position) => available.has(position));
+    const rosterMembers = state.members.filter(isRosterMember);
+    const available = new Set(rosterMembers.flatMap(rosterMemberPositions));
+    if (rosterMembers.some(isRosterCoach)) available.add("COACH");
+    if (rosterMembers.some(isRosterStaff)) available.add("STAFF");
+    const ordered = memberPositionOptions
+      .map((position) => String(position || "").trim().toUpperCase())
+      .filter((position, index, list) => position && available.has(position) && list.indexOf(position) === index);
     const extras = Array.from(available).filter((position) => !ordered.includes(position)).sort();
     return [...ordered, ...extras];
+  }
+
+  function rosterPositionFilterLabel(position) {
+    const normalized = String(position || "").trim().toUpperCase();
+    if (normalized === "COACH" || normalized === "STAFF") return rosterPositionLabel(normalized);
+    return normalized;
+  }
+
+  function rosterMemberMatchesSelectedPosition(member, selected) {
+    const normalized = String(selected || "ALL").trim().toUpperCase();
+    if (normalized === "ALL") return true;
+    if (normalized === "COACH") return isRosterCoach(member);
+    if (normalized === "STAFF") return isRosterStaff(member);
+    return rosterMemberPositions(member).includes(normalized);
   }
 
   function sortedRosterMembers() {
     const selected = String(selectedRosterPosition || "all").trim().toUpperCase();
     return state.members
       .filter(isRosterMember)
-      .filter((member) => selected === "ALL" || (member.positions || []).map((position) => String(position || "").toUpperCase()).includes(selected))
+      .filter((member) => rosterMemberMatchesSelectedPosition(member, selected))
       .sort((left, right) => {
         const leftNumber = left.jerseyNumber === null || left.jerseyNumber === undefined ? 999 : Number(left.jerseyNumber);
         const rightNumber = right.jerseyNumber === null || right.jerseyNumber === undefined ? 999 : Number(right.jerseyNumber);
@@ -4773,69 +4815,143 @@
       });
   }
 
+  function rosterCardBadge(member, sectionKey) {
+    if (sectionKey === "coaches") return "Coach";
+    if (sectionKey === "staff") return "Staff";
+    return rosterMemberPositions(member).find((position) => position !== "COACH" && position !== "STAFF") || "";
+  }
+
+  function rosterCardSummary(member, sectionKey) {
+    const summary = rosterPositionSummary(member);
+    if (summary !== "Position open") return summary;
+    if (sectionKey === "coaches") return "Coach";
+    if (sectionKey === "staff") return "Staff";
+    return summary;
+  }
+
+  function renderRosterCard(member, sectionKey, index) {
+    const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
+    const positionBadge = rosterCardBadge(member, sectionKey);
+    //const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
+    const showNumberBadge = sectionKey === "athletes" || numberLabel !== "--";
+    return `
+      <article class="roster-card">
+        <div class="roster-card-media-shell">
+          ${renderLazyImage({
+            src: INLINE_AVATAR_PLACEHOLDER,//ToDo: Add as soon as enough pictures are available: rosterImageSrc, Keep inlive placeholder for now to avoid broken images
+            fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+            alt: `${member.name} roster portrait`,
+            className: "roster-player-image",
+            wrapperClass: "roster-player-media",
+            eager: index < 8
+          })}
+          ${showNumberBadge ? `<div class="roster-number-badge">#${escapeHtml(numberLabel)}</div>` : ""}
+          ${positionBadge ? `<div class="roster-position-badge">${escapeHtml(positionBadge)}</div>` : ""}
+        </div>
+        <div class="roster-card-body">
+          <h3>${escapeHtml(member.name)}</h3>
+          <p>${escapeHtml(rosterCardSummary(member, sectionKey))}</p>
+        </div>
+      </article>
+    `;
+  }
+
+  function rosterSectionsForRows(rows) {
+    return [
+      {
+        key: "athletes",
+        eyebrow: "Players",
+        title: "Athletes",
+        emptyTitle: "No athletes found",
+        emptyCopy: "No active athlete records match the selected filter.",
+        rows: rows.filter(isRosterAthlete)
+      },
+      {
+        key: "coaches",
+        eyebrow: "Sideline",
+        title: "Coaches",
+        emptyTitle: "No coaches found",
+        emptyCopy: "No active coach records match the selected filter.",
+        rows: rows.filter(isRosterCoach)
+      },
+      {
+        key: "staff",
+        eyebrow: "Operations",
+        title: "Staff",
+        emptyTitle: "No staff found",
+        emptyCopy: "No active staff records match the selected filter.",
+        rows: rows.filter(isRosterStaff)
+      }
+    ];
+  }
+
+  function renderRosterSection(section, showEmptySections) {
+    if (!section.rows.length && !showEmptySections) return "";
+    return `
+      <section class="roster-section roster-section-${section.key}">
+        <div class="roster-section-head">
+          <div>
+            <p class="eyebrow">${escapeHtml(section.eyebrow)}</p>
+            <h3>${escapeHtml(section.title)}</h3>
+          </div>
+          <span class="roster-section-count">${section.rows.length}</span>
+        </div>
+        <div class="roster-grid">
+          ${section.rows.map((member, index) => renderRosterCard(member, section.key, index)).join("") || `
+            <article class="setup-card roster-empty-card">
+              <p class="eyebrow">Roster</p>
+              <h3>${escapeHtml(section.emptyTitle)}</h3>
+              <p class="muted">${escapeHtml(section.emptyCopy)}</p>
+            </article>
+          `}
+        </div>
+      </section>
+    `;
+  }
+
   function renderRoster() {
     const positions = rosterPositionOptions();
-    const selected = String(selectedRosterPosition || "all").trim().toUpperCase();
+    let selected = String(selectedRosterPosition || "all").trim().toUpperCase();
     if (selected !== "ALL" && !positions.includes(selected)) {
       selectedRosterPosition = "all";
+      selected = "ALL";
       saveStoredValue(ROSTER_FILTER_KEY, selectedRosterPosition);
     }
     const rows = sortedRosterMembers();
-    const totalPlayers = state.members.filter(isRosterMember).length;
+    const totalRosterMembers = state.members.filter(isRosterMember).length;
     const loadingMessage = publicRosterLoadPromise ? "Loading roster..." : publicRosterStatus;
+    const showEmptySections = selected === "ALL";
+    const sections = rosterSectionsForRows(rows);
+    const sectionsHtml = sections.map((section) => renderRosterSection(section, showEmptySections)).join("") || `
+      <div class="roster-grid">
+        <article class="setup-card roster-empty-card">
+          <p class="eyebrow">Roster</p>
+          <h3>No roster records found</h3>
+          <p class="muted">No active roster records match the selected filter.</p>
+        </article>
+      </div>
+    `;
     return `
       <section class="roster-page">
         <div class="roster-page-head">
           <div>
             <p class="eyebrow">Team</p>
             <h2>Roster</h2>
-            <p class="roster-page-copy">Active Emperors players from the member database.</p>
+            <p class="roster-page-copy">Active Emperors athletes, coaches and staff from the member database.</p>
           </div>
           <div class="roster-count">
-            <strong>${totalPlayers}</strong>
-            <span>Players</span>
+            <strong>${totalRosterMembers}</strong>
+            <span>Roster</span>
           </div>
         </div>
         <div class="roster-filter-bar" aria-label="Roster position filter">
           <button type="button" class="roster-filter-chip ${selectedRosterPosition === "all" ? "is-active" : ""}" data-roster-position="all" data-no-toast="true">All</button>
           ${positions.map((position) => `
-            <button type="button" class="roster-filter-chip ${selectedRosterPosition.toUpperCase() === position ? "is-active" : ""}" data-roster-position="${escapeAttribute(position)}" data-no-toast="true">${escapeHtml(position)}</button>
+            <button type="button" class="roster-filter-chip ${selectedRosterPosition.toUpperCase() === position ? "is-active" : ""}" data-roster-position="${escapeAttribute(position)}" data-no-toast="true">${escapeHtml(rosterPositionFilterLabel(position))}</button>
           `).join("")}
         </div>
         ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
-        <div class="roster-grid">
-          ${rows.map((member, index) => {
-            const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
-            const primaryPosition = (member.positions || [])[0] || "";
-            //const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
-            return `
-              <article class="roster-card">
-                <div class="roster-card-media-shell">
-                  ${renderLazyImage({
-                    src: INLINE_AVATAR_PLACEHOLDER, // ToDo: rosterImageSrc Use actual roster image src when available
-                    fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
-                    alt: `${member.name} roster portrait`,
-                    className: "roster-player-image",
-                    wrapperClass: "roster-player-media",
-                    eager: index < 8
-                  })}
-                  <div class="roster-number-badge">#${escapeHtml(numberLabel)}</div>
-                  ${primaryPosition ? `<div class="roster-position-badge">${escapeHtml(primaryPosition)}</div>` : ""}
-                </div>
-                <div class="roster-card-body">
-                  <h3>${escapeHtml(member.name)}</h3>
-                  <p>${escapeHtml(rosterPositionSummary(member))}</p>
-                </div>
-              </article>
-            `;
-          }).join("") || `
-            <article class="setup-card roster-empty-card">
-              <p class="eyebrow">Roster</p>
-              <h3>No players found</h3>
-              <p class="muted">No active player records match the selected position.</p>
-            </article>
-          `}
-        </div>
+        <div class="roster-sections">${sectionsHtml}</div>
       </section>
     `;
   }
