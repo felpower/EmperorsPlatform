@@ -8,6 +8,7 @@
   --brand-2: #f6c316;
   --brand-3: #54b8e5;
   --brand-4: #e44a32;
+  --success: #20744f;
   --warning: #ca8a1d;
   --danger: #cf4b36;
   --shadow: 0 20px 45px rgba(17, 22, 24, 0.09);
@@ -855,6 +856,139 @@ button {
 .roster-empty-card {
   grid-column: 1 / -1;
   border-radius: 8px;
+}
+
+.tryout-page {
+  display: grid;
+  gap: 18px;
+}
+
+.tryout-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 24px;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(21, 27, 28, 0.97), rgba(42, 50, 52, 0.96)),
+    linear-gradient(90deg, rgba(246, 195, 22, 0.2), rgba(228, 74, 50, 0.14));
+  color: #f7fafc;
+  box-shadow: var(--shadow);
+}
+
+.tryout-hero h2 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 0.98;
+}
+
+.tryout-hero p {
+  margin: 10px 0 0;
+  max-width: 780px;
+  color: rgba(247, 250, 252, 0.78);
+  line-height: 1.45;
+}
+
+.tryout-date-panel {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  padding: 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tryout-date-panel span {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(247, 250, 252, 0.72);
+}
+
+.tryout-date-panel strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.tryout-date-panel p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.tryout-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.tryout-form {
+  display: grid;
+  gap: 16px;
+}
+
+.tryout-fieldset {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(84, 184, 229, 0.06);
+}
+
+.tryout-fieldset legend {
+  padding: 0 6px;
+  font-weight: 800;
+}
+
+.tryout-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.tryout-consent {
+  align-items: flex-start;
+}
+
+.tryout-privacy-note {
+  margin: -6px 0 0;
+}
+
+.tryout-privacy-note a {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.tryout-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tryout-form-status {
+  margin: 0;
+  min-height: 20px;
+  color: #5b676c;
+}
+
+.tryout-form-status.success {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.tryout-form-status.error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.tryout-info {
+  display: grid;
+  gap: 12px;
 }
 
 .game-score {
@@ -1792,6 +1926,20 @@ code {
 
   .roster-card-body {
     min-height: 108px;
+  }
+
+  .tryout-hero,
+  .tryout-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tryout-hero {
+    padding: 20px;
+  }
+
+  .tryout-form-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .playoff-bracket-columns {

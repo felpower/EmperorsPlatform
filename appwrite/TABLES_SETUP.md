@@ -133,6 +133,38 @@ Columns:
 - sent_at (datetime, optional)
 - recipient_count (integer, required)
 
+## 8) tryout_registrations
+
+Table ID:
+
+- tryout_registrations
+
+Columns:
+
+- first_name (string, required)
+- last_name (string, required)
+- email (string, required)
+- phone (string, optional)
+- uni_wien_student (string, required) values: yes, accepted_or_starting, no, prefer_to_discuss
+- study_program (string, optional)
+- previous_football_experience (string, required)
+- football_experience_details (string, optional)
+- other_sports (string, optional)
+- preferred_position (string, optional)
+- height_cm (integer, optional)
+- weight_kg (integer, optional)
+- availability_notes (string, optional)
+- contact_consent (boolean, required)
+- tryout_cycle (string, required) example: next
+- status (string, required) example: new, contacted, invited
+- source (string, optional)
+- submitted_at (datetime, required)
+
+Public signup requirement:
+
+- allow create("any")
+- allow read/update/delete for authenticated users or admins only
+
 ## Permissions recommendation
 
 For now (fastest path), set table read/write permissions so authenticated users can operate while we finish migration and testing.
@@ -150,5 +182,6 @@ These table IDs are already mapped in src/appwrite-config.js:
 - eventsTableId
 - eventRecipientsTableId
 - invitesTableId
+- tryoutRegistrationsTableId
 
 If you use different IDs, update src/appwrite-config.js accordingly.

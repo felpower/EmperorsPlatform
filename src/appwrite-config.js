@@ -21,6 +21,7 @@ window.ClubHubAppwriteConfig = {
   eventsTableId: "events",
   eventRecipientsTableId: "event_recipients",
   invitesTableId: "invites",
+  tryoutRegistrationsTableId: "tryout_registrations",
   equipmentTableId: "equipment_inventory",
   diagnosticsTableId: "diagnostics_logs"
 };

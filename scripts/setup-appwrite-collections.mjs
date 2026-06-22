@@ -14,6 +14,13 @@ const collectionPermissions = [
   'delete("users")'
 ];
 
+const publicCreateCollectionPermissions = [
+  'read("users")',
+  'create("any")',
+  'update("users")',
+  'delete("users")'
+];
+
 const schema = {
   members: {
     name: "members",
@@ -97,6 +104,30 @@ const schema = {
       { type: "datetime", key: "sent_at", required: false },
       { type: "integer", key: "recipient_count", required: true }
     ]
+  },
+  tryout_registrations: {
+    name: "tryout_registrations",
+    permissions: publicCreateCollectionPermissions,
+    attributes: [
+      { type: "string", key: "first_name", size: 255, required: true },
+      { type: "string", key: "last_name", size: 255, required: true },
+      { type: "string", key: "email", size: 320, required: true },
+      { type: "string", key: "phone", size: 64, required: false },
+      { type: "string", key: "uni_wien_student", size: 64, required: true },
+      { type: "string", key: "study_program", size: 255, required: false },
+      { type: "string", key: "previous_football_experience", size: 64, required: true },
+      { type: "string", key: "football_experience_details", size: 2048, required: false },
+      { type: "string", key: "other_sports", size: 2048, required: false },
+      { type: "string", key: "preferred_position", size: 64, required: false },
+      { type: "integer", key: "height_cm", required: false },
+      { type: "integer", key: "weight_kg", required: false },
+      { type: "string", key: "availability_notes", size: 2048, required: false },
+      { type: "boolean", key: "contact_consent", required: true },
+      { type: "string", key: "tryout_cycle", size: 64, required: true },
+      { type: "string", key: "status", size: 32, required: true },
+      { type: "string", key: "source", size: 64, required: false },
+      { type: "datetime", key: "submitted_at", required: true }
+    ]
   }
 };
 
@@ -140,7 +171,7 @@ async function ensureCollection(collectionId, definition) {
     body: {
       collectionId,
       name: definition.name,
-      permissions: collectionPermissions,
+      permissions: definition.permissions || collectionPermissions,
       documentSecurity: false,
       enabled: true
     }
@@ -182,6 +213,11 @@ async function ensureAttribute(collectionId, attribute) {
     });
   } else if (attribute.type === "datetime") {
     await request(`/databases/${DATABASE_ID}/collections/${collectionId}/attributes/datetime`, {
+      method: "POST",
+      body: base
+    });
+  } else if (attribute.type === "boolean") {
+    await request(`/databases/${DATABASE_ID}/collections/${collectionId}/attributes/boolean`, {
       method: "POST",
       body: base
     });

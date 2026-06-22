@@ -194,6 +194,7 @@
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
   const ROSTER_FILTER_KEY = "emperors-roster-position-filter-v1";
+  const TRYOUT_REGISTRATIONS_STORAGE_KEY = "emperors-tryout-registrations-local-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
@@ -211,7 +212,7 @@
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
-  const viewIds = ["dashboard", "roster", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -3608,6 +3609,12 @@
         publicRosterStatus = publicRosterErrorMessage(error);
         authState.status = publicRosterStatus;
       }
+    } else if (backendClient && isPublicView(getRouteView())) {
+      bootstrapMeta = {
+        source: state.source || "demo",
+        permissionsModel: state.permissionsModel || demoData.permissionsModel
+      };
+      ensureValidFeeFilter();
     } else {
       await loadLocalBootstrap();
     }
@@ -4952,6 +4959,222 @@
         </div>
         ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
         <div class="roster-sections">${sectionsHtml}</div>
+      </section>
+    `;
+  }
+
+  function tryoutRegistrationStatusMessage(message, tone = "info") {
+    const status = document.getElementById("tryout-form-status");
+    if (!status) return;
+    status.textContent = message;
+    status.className = `tryout-form-status ${tone}`;
+  }
+
+  function optionalInteger(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+  }
+
+  function compactPayload(payload) {
+    return Object.fromEntries(
+      Object.entries(payload || {}).filter(([, value]) => value !== "" && value !== null && value !== undefined)
+    );
+  }
+
+  function collectTryoutRegistrationPayload(form) {
+    const formData = new FormData(form);
+    const heightCm = optionalInteger(formData.get("heightCm"));
+    const weightKg = optionalInteger(formData.get("weightKg"));
+    return compactPayload({
+      first_name: String(formData.get("firstName") || "").trim(),
+      last_name: String(formData.get("lastName") || "").trim(),
+      email: String(formData.get("email") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
+      uni_wien_student: String(formData.get("uniWienStudent") || "").trim(),
+      study_program: String(formData.get("studyProgram") || "").trim(),
+      previous_football_experience: String(formData.get("footballExperience") || "").trim(),
+      football_experience_details: String(formData.get("footballExperienceDetails") || "").trim(),
+      other_sports: String(formData.get("otherSports") || "").trim(),
+      preferred_position: String(formData.get("preferredPosition") || "").trim(),
+      height_cm: heightCm,
+      weight_kg: weightKg,
+      availability_notes: String(formData.get("availabilityNotes") || "").trim(),
+      contact_consent: formData.get("contactConsent") === "yes",
+      tryout_cycle: "next",
+      status: "new",
+      source: "website",
+      submitted_at: new Date().toISOString()
+    });
+  }
+
+  function validateTryoutRegistration(payload) {
+    if (!payload.first_name || !payload.last_name) return "Please enter your first and last name.";
+    if (!payload.email) return "Please enter your email address.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return "Please enter a valid email address.";
+    if (!payload.uni_wien_student) return "Please tell us whether you are a student at the University of Vienna.";
+    if (!payload.previous_football_experience) return "Please select your American Football experience level.";
+    if (!payload.contact_consent) return "Please confirm that we may contact you about tryouts.";
+    return "";
+  }
+
+  function saveTryoutRegistrationLocally(payload) {
+    const current = (() => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    })();
+    const record = { id: `tryout-${Date.now()}`, ...payload };
+    current.push(record);
+    localStorage.setItem(TRYOUT_REGISTRATIONS_STORAGE_KEY, JSON.stringify(current));
+    return record;
+  }
+
+  async function saveTryoutRegistration(payload) {
+    if (!backendClient) {
+      return { localOnly: true, data: saveTryoutRegistrationLocally(payload) };
+    }
+    const response = await backendClient.from("tryout_registrations").insert([payload]);
+    if (response.error) throw response.error;
+    return { localOnly: false, data: Array.isArray(response.data) ? response.data[0] : response.data };
+  }
+
+  function renderTryout() {
+    return `
+      <section class="tryout-page">
+        <div class="tryout-hero">
+          <div>
+            <p class="eyebrow">Tryout</p>
+            <h2>Join the Emperors</h2>
+            <p>We hold American Football tryouts twice per year. The next date is still to be announced, but you can already register and we will contact you when details are confirmed.</p>
+          </div>
+          <div class="tryout-date-panel" aria-label="Next tryout date">
+            <span>Next tryout</span>
+            <strong>Date TBA</strong>
+            <p>Spring or autumn window, depending on field and coaching availability.</p>
+          </div>
+        </div>
+
+        <div class="tryout-layout">
+          <form id="tryout-form" class="tryout-form setup-card" novalidate>
+            <div>
+              <p class="eyebrow">Signup</p>
+              <h3>Tryout registration</h3>
+              <p class="muted">Tell us a bit about your background so the coaches can plan the session and follow up with the right information.</p>
+            </div>
+
+            <div class="form-grid">
+              <label>First name
+                <input name="firstName" autocomplete="given-name" required />
+              </label>
+              <label>Last name
+                <input name="lastName" autocomplete="family-name" required />
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <label>Email
+                <input name="email" type="email" autocomplete="email" required />
+              </label>
+              <label>Phone
+                <input name="phone" type="tel" autocomplete="tel" placeholder="Optional" />
+              </label>
+            </div>
+
+            <fieldset class="tryout-fieldset">
+              <legend>Are you a student at the University of Vienna?</legend>
+              <div class="tryout-choice-grid">
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="yes" required /><span>Yes, Uni Wien student</span></label>
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="accepted_or_starting" /><span>Accepted / starting soon</span></label>
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="no" /><span>No</span></label>
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="prefer_to_discuss" /><span>Not sure yet</span></label>
+              </div>
+            </fieldset>
+
+            <label>Study program at Uni Wien
+              <input name="studyProgram" placeholder="Optional" />
+            </label>
+
+            <div class="form-grid">
+              <label>American Football experience
+                <select name="footballExperience" required>
+                  <option value="">Select one</option>
+                  <option value="none">No American Football experience yet</option>
+                  <option value="flag_football">Flag Football</option>
+                  <option value="tackle_training">Tackle Football training</option>
+                  <option value="tackle_team">Played on a tackle team</option>
+                  <option value="coaching_or_staff">Coaching / staff background</option>
+                  <option value="other">Other football experience</option>
+                </select>
+              </label>
+              <label>Preferred position or role
+                <select name="preferredPosition">
+                  <option value="">Undecided</option>
+                  <option value="offense">Offense</option>
+                  <option value="defense">Defense</option>
+                  <option value="special_teams">Special Teams</option>
+                  <option value="line">Line</option>
+                  <option value="skill_position">Skill position</option>
+                  <option value="coach_or_staff">Coach / staff</option>
+                </select>
+              </label>
+            </div>
+
+            <label>Football background details
+              <textarea name="footballExperienceDetails" rows="3" placeholder="Teams, leagues, positions, years played, or what you want to learn"></textarea>
+            </label>
+
+            <label>Other sports background
+              <textarea name="otherSports" rows="3" placeholder="Tell us about other sports, gym training, martial arts, athletics, ball sports, etc."></textarea>
+            </label>
+
+            <div class="form-grid">
+              <label>Height in cm
+                <input name="heightCm" type="number" min="120" max="230" placeholder="Optional" />
+              </label>
+              <label>Weight in kg
+                <input name="weightKg" type="number" min="35" max="220" placeholder="Optional" />
+              </label>
+            </div>
+
+            <label>Availability or notes
+              <textarea name="availabilityNotes" rows="3" placeholder="Training availability, injuries we should know before the tryout, questions, etc."></textarea>
+            </label>
+
+            <label class="status-check tryout-consent">
+              <input type="checkbox" name="contactConsent" value="yes" required />
+              <span>I agree that the Uni Wien Emperors may contact me about tryouts and team onboarding.</span>
+            </label>
+            <p class="meta tryout-privacy-note">Your information is used for tryout coordination. See <a href="./datenschutz.html">Datenschutz</a>.</p>
+
+            <div class="tryout-form-actions">
+              <button type="submit" class="primary-button" id="tryout-submit-button">Register interest</button>
+              <p id="tryout-form-status" class="tryout-form-status" aria-live="polite"></p>
+            </div>
+          </form>
+
+          <aside class="tryout-info">
+            <article class="setup-card">
+              <p class="eyebrow">Eligibility</p>
+              <h3>Uni Wien team</h3>
+              <p class="muted">Because this is a university team, student status at the University of Vienna matters. Register anyway if you are unsure and we will clarify the next step.</p>
+            </article>
+            <article class="setup-card">
+              <p class="eyebrow">Experience</p>
+              <h3>Rookies welcome</h3>
+              <p class="muted">No football experience is required. Coaches use your answers to group drills and understand your athletic background.</p>
+            </article>
+            <article class="setup-card">
+              <p class="eyebrow">After signup</p>
+              <h3>We will follow up</h3>
+              <p class="muted">Once the date, time and location are set, the team will send you the tryout details and what to bring.</p>
+            </article>
+          </aside>
+        </div>
       </section>
     `;
   }
@@ -6786,16 +7009,16 @@
 
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
-    if (normalizedRole === "admin") return ["dashboard", "roster", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "coach") return ["dashboard", "roster", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
-    if (normalizedRole === "tech_admin") return ["dashboard", "roster", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
-    return ["dashboard", "roster", "members", "user", "organization", "equipment", "events", "recovery"];
+    if (normalizedRole === "admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "coach") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    if (normalizedRole === "tech_admin") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    return ["dashboard", "roster", "tryout", "members", "user", "organization", "equipment", "events", "recovery"];
   }
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "events" || normalizedViewId === "organization";
+    return normalizedViewId === "roster" || normalizedViewId === "tryout" || normalizedViewId === "events" || normalizedViewId === "organization";
   }
 
   function canAccessView(viewId) {
@@ -9098,6 +9321,46 @@
     }
   }
 
+  function bindTryoutActions() {
+    const form = document.getElementById("tryout-form");
+    const submitButton = document.getElementById("tryout-submit-button");
+    if (!form) return;
+    form.onsubmit = async function (event) {
+      event.preventDefault();
+      const payload = collectTryoutRegistrationPayload(form);
+      const validationMessage = validateTryoutRegistration(payload);
+      if (validationMessage) {
+        tryoutRegistrationStatusMessage(validationMessage, "error");
+        showToast(validationMessage, "error");
+        return;
+      }
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = "Submitting...";
+      }
+      tryoutRegistrationStatusMessage("Submitting your registration...", "info");
+      try {
+        const result = await saveTryoutRegistration(payload);
+        form.reset();
+        const message = result.localOnly
+          ? "Registration saved in this local preview. Live Appwrite storage is not configured here."
+          : "Registration received. We will contact you when the next tryout details are confirmed.";
+        tryoutRegistrationStatusMessage(message, "success");
+        showToast(message, "success");
+      } catch (error) {
+        const message = error?.message || "Could not submit the tryout registration.";
+        tryoutRegistrationStatusMessage(message, "error");
+        showToast(message, "error");
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = "Register interest";
+        }
+      }
+    };
+  }
+
   function openEquipmentPhotoDialog(photoSrc, title) {
     const dialog = document.getElementById("equipment-photo-dialog");
     const image = document.getElementById("equipment-photo-dialog-image");
@@ -9260,6 +9523,7 @@
       document.getElementById("dashboard").innerHTML = renderDashboard();
       bindDashboardActions();
       document.getElementById("roster").innerHTML = renderRoster();
+      document.getElementById("tryout").innerHTML = renderTryout();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
@@ -9272,6 +9536,7 @@
       document.getElementById("settings").innerHTML = renderSettings();
       document.getElementById("recovery").innerHTML = renderRecoveryGate();
       bindMemberActions();
+      bindTryoutActions();
       bindUserPageActions();
       bindOrganizationActions();
       bindEquipmentActions();
