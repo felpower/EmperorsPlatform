@@ -216,7 +216,7 @@
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
     "QB", "RB", "FB", "WR", "TE", "OL", "DL", "LB", "DB", "CB", "S", "K", "P",
-    "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB"
+    "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB", "Coach", "Staff"
   ];
   const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
   const MAX_AVATAR_DIMENSION = 1280;
@@ -4726,7 +4726,9 @@
       CB: "Cornerback",
       S: "Safety",
       K: "Kicker",
-      P: "Punter"
+      P: "Punter",
+      Coach: "Coach",
+      Staff: "Staff"
     };
     return labels[normalized] || normalized || "Position open";
   }
@@ -4741,7 +4743,7 @@
     if (!member || member.deletedAt) return false;
     if (String(member.membershipStatus || "").trim().toLowerCase() !== "active") return false;
     const roles = (member.roles || []).map((role) => String(role || "").toLowerCase()).filter(Boolean);
-    if (roles.includes("player")) return true;
+    if (roles.includes("player") || roles.includes("coach") || roles.includes("staff")) return true;
     return !roles.length && ((member.positions || []).length > 0 || member.jerseyNumber !== null);
   }
 
@@ -4805,7 +4807,7 @@
           ${rows.map((member, index) => {
             const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
             const primaryPosition = (member.positions || [])[0] || "";
-            const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
+            const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER; //ToDo: Use actual roster image if available
             return `
               <article class="roster-card">
                 <div class="roster-card-media-shell">
