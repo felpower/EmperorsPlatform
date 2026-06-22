@@ -4812,7 +4812,7 @@
               <article class="roster-card">
                 <div class="roster-card-media-shell">
                   ${renderLazyImage({
-                    src: rosterImageSrc,
+                    src: INLINE_AVATAR_PLACEHOLDER, // ToDo: rosterImageSrc Use actual roster image src when available
                     fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
                     alt: `${member.name} roster portrait`,
                     className: "roster-player-image",
