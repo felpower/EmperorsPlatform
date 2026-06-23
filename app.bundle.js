@@ -195,6 +195,7 @@
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
   const ROSTER_FILTER_KEY = "emperors-roster-position-filter-v1";
   const TRYOUT_REGISTRATIONS_STORAGE_KEY = "emperors-tryout-registrations-local-v1";
+  const TRYOUT_REGISTRATION_FILTER_KEY = "emperors-tryout-registration-filters-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
@@ -264,6 +265,11 @@
   let publicRosterLoadedAt = 0;
   let publicRosterLoadAttempted = false;
   let publicRosterLoadPromise = null;
+  let tryoutSubmissions = [];
+  let tryoutSubmissionsStatus = "";
+  let tryoutSubmissionsLoading = false;
+  let tryoutSubmissionsLoadedAt = 0;
+  let tryoutSubmissionFilters = loadTryoutSubmissionFilters();
   let passFilters = loadPassFilters();
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
@@ -4970,6 +4976,200 @@
     status.className = `tryout-form-status ${tone}`;
   }
 
+  function loadTryoutSubmissionFilters() {
+    try {
+      const raw = sessionStorage.getItem(TRYOUT_REGISTRATION_FILTER_KEY);
+      if (!raw) return { search: "", uniWien: "all", experience: "all", status: "all" };
+      const parsed = JSON.parse(raw);
+      return {
+        search: String(parsed?.search || ""),
+        uniWien: String(parsed?.uniWien || "all"),
+        experience: String(parsed?.experience || "all"),
+        status: String(parsed?.status || "all")
+      };
+    } catch {
+      return { search: "", uniWien: "all", experience: "all", status: "all" };
+    }
+  }
+
+  function saveTryoutSubmissionFilters() {
+    sessionStorage.setItem(TRYOUT_REGISTRATION_FILTER_KEY, JSON.stringify(tryoutSubmissionFilters));
+  }
+
+  function canManageTryoutSubmissions() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    const role = String(currentAccessRole || "").trim().toLowerCase();
+    return role === "admin" || role === "coach";
+  }
+
+  function tryoutValue(row, ...keys) {
+    return publicRosterField(row, ...keys);
+  }
+
+  function normalizeTryoutSubmissionRow(row) {
+    return {
+      id: String(tryoutValue(row, "id", "$id") || ""),
+      firstName: String(tryoutValue(row, "first_name", "firstName") || "").trim(),
+      lastName: String(tryoutValue(row, "last_name", "lastName") || "").trim(),
+      email: String(tryoutValue(row, "email") || "").trim(),
+      phone: String(tryoutValue(row, "phone") || "").trim(),
+      uniWienStudent: String(tryoutValue(row, "uni_wien_student", "uniWienStudent") || "").trim(),
+      studyProgram: String(tryoutValue(row, "study_program", "studyProgram") || "").trim(),
+      footballExperience: String(tryoutValue(row, "previous_football_experience", "previousFootballExperience") || "").trim(),
+      footballExperienceDetails: String(tryoutValue(row, "football_experience_details", "footballExperienceDetails") || "").trim(),
+      otherSports: String(tryoutValue(row, "other_sports", "otherSports") || "").trim(),
+      preferredPosition: String(tryoutValue(row, "preferred_position", "preferredPosition") || "").trim(),
+      heightCm: tryoutValue(row, "height_cm", "heightCm") ?? "",
+      weightKg: tryoutValue(row, "weight_kg", "weightKg") ?? "",
+      availabilityNotes: String(tryoutValue(row, "availability_notes", "availabilityNotes") || "").trim(),
+      contactConsent: Boolean(tryoutValue(row, "contact_consent", "contactConsent")),
+      tryoutCycle: String(tryoutValue(row, "tryout_cycle", "tryoutCycle") || "next").trim(),
+      status: String(tryoutValue(row, "status") || "new").trim(),
+      source: String(tryoutValue(row, "source") || "").trim(),
+      submittedAt: String(tryoutValue(row, "submitted_at", "submittedAt", "$createdAt") || "").trim()
+    };
+  }
+
+  function tryoutLabel(kind, value) {
+    const normalized = String(value || "").trim();
+    const labels = {
+      uniWienStudent: {
+        yes: "Uni Wien student",
+        accepted_or_starting: "Accepted / starting soon",
+        no: "No",
+        prefer_to_discuss: "Not sure"
+      },
+      footballExperience: {
+        none: "No football experience",
+        flag_football: "Flag Football",
+        tackle_training: "Tackle training",
+        tackle_team: "Tackle team",
+        coaching_or_staff: "Coaching / staff",
+        other: "Other"
+      },
+      preferredPosition: {
+        offense: "Offense",
+        defense: "Defense",
+        special_teams: "Special Teams",
+        line: "Line",
+        skill_position: "Skill position",
+        coach_or_staff: "Coach / staff"
+      },
+      status: {
+        new: "New",
+        contacted: "Contacted",
+        invited: "Invited",
+        archived: "Archived"
+      }
+    };
+    return labels[kind]?.[normalized] || normalized || "-";
+  }
+
+  function localTryoutSubmissionRows() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.map(normalizeTryoutSubmissionRow) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadTryoutSubmissions() {
+    if (!canManageTryoutSubmissions()) return;
+    tryoutSubmissionsLoading = true;
+    tryoutSubmissionsStatus = "Loading tryout submissions...";
+    mount();
+    switchView("tryout");
+    try {
+      if (!backendClient || !authState.user) {
+        tryoutSubmissions = localTryoutSubmissionRows();
+      } else {
+        const response = await backendClient
+          .from("tryout_registrations")
+          .select("*");
+        if (response.error) throw response.error;
+        tryoutSubmissions = (response.data || []).map(normalizeTryoutSubmissionRow);
+      }
+      tryoutSubmissionsLoadedAt = Date.now();
+      tryoutSubmissionsStatus = tryoutSubmissions.length
+        ? `Loaded ${tryoutSubmissions.length} tryout submission${tryoutSubmissions.length === 1 ? "" : "s"}.`
+        : "No tryout submissions found yet.";
+    } catch (error) {
+      tryoutSubmissionsStatus = error?.message || "Could not load tryout submissions.";
+      showToast(tryoutSubmissionsStatus, "error");
+    } finally {
+      tryoutSubmissionsLoading = false;
+      mount();
+      switchView("tryout");
+    }
+  }
+
+  function sortedTryoutSubmissions(rows = tryoutSubmissions) {
+    return [...rows].sort((left, right) => String(right.submittedAt || "").localeCompare(String(left.submittedAt || "")));
+  }
+
+  function filteredTryoutSubmissions() {
+    const search = String(tryoutSubmissionFilters.search || "").trim().toLowerCase();
+    const uniWien = String(tryoutSubmissionFilters.uniWien || "all").trim();
+    const experience = String(tryoutSubmissionFilters.experience || "all").trim();
+    const status = String(tryoutSubmissionFilters.status || "all").trim();
+    return sortedTryoutSubmissions().filter((row) => {
+      if (uniWien !== "all" && row.uniWienStudent !== uniWien) return false;
+      if (experience !== "all" && row.footballExperience !== experience) return false;
+      if (status !== "all" && row.status !== status) return false;
+      if (!search) return true;
+      const haystack = [
+        row.firstName,
+        row.lastName,
+        row.email,
+        row.phone,
+        row.studyProgram,
+        row.footballExperienceDetails,
+        row.otherSports,
+        row.availabilityNotes
+      ].join(" ").toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+
+  function tryoutSubmissionFilterOptions(key) {
+    const values = Array.from(new Set(tryoutSubmissions.map((row) => String(row[key] || "").trim()).filter(Boolean))).sort();
+    return values;
+  }
+
+  function tryoutSubmissionExportColumns() {
+    return [
+      { key: "submittedAt", label: "Submitted at" },
+      { key: "firstName", label: "First name" },
+      { key: "lastName", label: "Last name" },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Phone" },
+      { key: "uniWienStudent", label: "Uni Wien status" },
+      { key: "studyProgram", label: "Study program" },
+      { key: "footballExperience", label: "Football experience" },
+      { key: "preferredPosition", label: "Preferred position" },
+      { key: "heightCm", label: "Height cm" },
+      { key: "weightKg", label: "Weight kg" },
+      { key: "footballExperienceDetails", label: "Football background details" },
+      { key: "otherSports", label: "Other sports" },
+      { key: "availabilityNotes", label: "Availability / notes" },
+      { key: "status", label: "Status" },
+      { key: "tryoutCycle", label: "Tryout cycle" },
+      { key: "source", label: "Source" }
+    ];
+  }
+
+  function tryoutSubmissionExportRows(rows = filteredTryoutSubmissions()) {
+    return rows.map((row) => ({
+      ...row,
+      submittedAt: row.submittedAt ? formatDate(row.submittedAt) : "",
+      uniWienStudent: tryoutLabel("uniWienStudent", row.uniWienStudent),
+      footballExperience: tryoutLabel("footballExperience", row.footballExperience),
+      preferredPosition: tryoutLabel("preferredPosition", row.preferredPosition),
+      status: tryoutLabel("status", row.status)
+    }));
+  }
+
   function optionalInteger(value) {
     const raw = String(value ?? "").trim();
     if (!raw) return null;
@@ -5041,6 +5241,136 @@
     const response = await backendClient.from("tryout_registrations").insert([payload]);
     if (response.error) throw response.error;
     return { localOnly: false, data: Array.isArray(response.data) ? response.data[0] : response.data };
+  }
+
+  function renderTryoutFilterSelect({ id, label, value, options, kind }) {
+    return `
+      <label>${escapeHtml(label)}
+        <select id="${escapeAttribute(id)}" class="tryout-submission-filter">
+          <option value="all" ${value === "all" ? "selected" : ""}>All</option>
+          ${options.map((option) => `
+            <option value="${escapeAttribute(option)}" ${value === option ? "selected" : ""}>${escapeHtml(kind ? tryoutLabel(kind, option) : option)}</option>
+          `).join("")}
+        </select>
+      </label>
+    `;
+  }
+
+  function renderTryoutSubmissionsPanel() {
+    if (!canManageTryoutSubmissions()) return "";
+    const filteredRows = filteredTryoutSubmissions();
+    const loaded = Boolean(tryoutSubmissionsLoadedAt);
+    const exportDisabled = filteredRows.length ? "" : "disabled";
+    const loadedLabel = loaded
+      ? `Last loaded ${new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(tryoutSubmissionsLoadedAt))}`
+      : "Not loaded yet";
+    const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
+    const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
+    const statusOptions = Array.from(new Set(["new", "contacted", "invited", "archived", ...tryoutSubmissionFilterOptions("status")]));
+
+    return `
+      <section class="tryout-admin-panel setup-card">
+        <div class="tryout-admin-head">
+          <div>
+            <p class="eyebrow">Coach desk</p>
+            <h3>Tryout submissions</h3>
+            <p class="muted">${escapeHtml(tryoutSubmissionsStatus || loadedLabel)}</p>
+          </div>
+          <div class="tryout-admin-actions">
+            <button type="button" class="ghost-button" id="tryout-load-submissions" data-no-toast="true" ${tryoutSubmissionsLoading ? "disabled" : ""}>${loaded ? "Refresh submissions" : "Load submissions"}</button>
+            <button type="button" class="ghost-button" id="tryout-export-csv" data-no-toast="true" ${exportDisabled}>CSV for Sheets</button>
+            <button type="button" class="ghost-button" id="tryout-export-excel" data-no-toast="true" ${exportDisabled}>Excel</button>
+          </div>
+        </div>
+
+        <div class="tryout-admin-filters">
+          <label>Search
+            <input id="tryout-submission-search" value="${escapeAttribute(tryoutSubmissionFilters.search || "")}" placeholder="Name, email, sport, notes" />
+          </label>
+          ${renderTryoutFilterSelect({
+            id: "tryout-filter-uni-wien",
+            label: "Uni Wien",
+            value: tryoutSubmissionFilters.uniWien || "all",
+            options: uniOptions,
+            kind: "uniWienStudent"
+          })}
+          ${renderTryoutFilterSelect({
+            id: "tryout-filter-experience",
+            label: "Experience",
+            value: tryoutSubmissionFilters.experience || "all",
+            options: experienceOptions,
+            kind: "footballExperience"
+          })}
+          ${renderTryoutFilterSelect({
+            id: "tryout-filter-status",
+            label: "Status",
+            value: tryoutSubmissionFilters.status || "all",
+            options: statusOptions,
+            kind: "status"
+          })}
+        </div>
+
+        <div class="tryout-admin-summary">
+          <span>${filteredRows.length} shown</span>
+          <span>${tryoutSubmissions.length} total</span>
+          <span>${tryoutSubmissions.filter((row) => row.uniWienStudent === "yes").length} Uni Wien students</span>
+        </div>
+
+        <div class="table-wrap tryout-submissions-table-wrap">
+          <table class="tryout-submissions-table">
+            <thead>
+              <tr>
+                <th>Submitted</th>
+                <th>Name</th>
+                <th>Uni Wien</th>
+                <th>Football</th>
+                <th>Metrics</th>
+                <th>Notes</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${loaded ? (filteredRows.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row.submittedAt ? formatDate(row.submittedAt) : "-")}</td>
+                  <td>
+                    <strong>${escapeHtml(`${row.firstName} ${row.lastName}`.trim() || "-")}</strong>
+                    <div class="meta">${escapeHtml(row.email || "-")}</div>
+                    ${row.phone ? `<div class="meta">${escapeHtml(row.phone)}</div>` : ""}
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(tryoutLabel("uniWienStudent", row.uniWienStudent))}</strong>
+                    ${row.studyProgram ? `<div class="meta">${escapeHtml(row.studyProgram)}</div>` : ""}
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(tryoutLabel("footballExperience", row.footballExperience))}</strong>
+                    ${row.preferredPosition ? `<div class="meta">${escapeHtml(tryoutLabel("preferredPosition", row.preferredPosition))}</div>` : ""}
+                  </td>
+                  <td>
+                    ${row.heightCm ? `<div>${escapeHtml(row.heightCm)} cm</div>` : `<div class="meta">Height -</div>`}
+                    ${row.weightKg ? `<div>${escapeHtml(row.weightKg)} kg</div>` : `<div class="meta">Weight -</div>`}
+                  </td>
+                  <td>
+                    <details class="tryout-submission-details">
+                      <summary>Details</summary>
+                      ${row.footballExperienceDetails ? `<p><strong>Football:</strong> ${escapeHtml(row.footballExperienceDetails)}</p>` : ""}
+                      ${row.otherSports ? `<p><strong>Other sports:</strong> ${escapeHtml(row.otherSports)}</p>` : ""}
+                      ${row.availabilityNotes ? `<p><strong>Availability:</strong> ${escapeHtml(row.availabilityNotes)}</p>` : ""}
+                      ${!row.footballExperienceDetails && !row.otherSports && !row.availabilityNotes ? `<p class="meta">No notes</p>` : ""}
+                    </details>
+                  </td>
+                  <td>${statusPill(row.status || "new", tryoutLabel("status", row.status || "new"))}</td>
+                </tr>
+              `).join("") || `
+                <tr><td colspan="7" class="meta">No submissions match the current filters.</td></tr>
+              `) : `
+                <tr><td colspan="7" class="meta">Load submissions to review tryout registrations.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
   }
 
   function renderTryout() {
@@ -5175,6 +5505,7 @@
             </article>
           </aside>
         </div>
+        ${renderTryoutSubmissionsPanel()}
       </section>
     `;
   }
@@ -9324,41 +9655,123 @@
   function bindTryoutActions() {
     const form = document.getElementById("tryout-form");
     const submitButton = document.getElementById("tryout-submit-button");
-    if (!form) return;
-    form.onsubmit = async function (event) {
-      event.preventDefault();
-      const payload = collectTryoutRegistrationPayload(form);
-      const validationMessage = validateTryoutRegistration(payload);
-      if (validationMessage) {
-        tryoutRegistrationStatusMessage(validationMessage, "error");
-        showToast(validationMessage, "error");
-        return;
-      }
-
-      if (submitButton) {
-        submitButton.disabled = true;
-        submitButton.textContent = "Submitting...";
-      }
-      tryoutRegistrationStatusMessage("Submitting your registration...", "info");
-      try {
-        const result = await saveTryoutRegistration(payload);
-        form.reset();
-        const message = result.localOnly
-          ? "Registration saved in this local preview. Live Appwrite storage is not configured here."
-          : "Registration received. We will contact you when the next tryout details are confirmed.";
-        tryoutRegistrationStatusMessage(message, "success");
-        showToast(message, "success");
-      } catch (error) {
-        const message = error?.message || "Could not submit the tryout registration.";
-        tryoutRegistrationStatusMessage(message, "error");
-        showToast(message, "error");
-      } finally {
-        if (submitButton) {
-          submitButton.disabled = false;
-          submitButton.textContent = "Register interest";
+    if (form) {
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        const payload = collectTryoutRegistrationPayload(form);
+        const validationMessage = validateTryoutRegistration(payload);
+        if (validationMessage) {
+          tryoutRegistrationStatusMessage(validationMessage, "error");
+          showToast(validationMessage, "error");
+          return;
         }
+
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Submitting...";
+        }
+        tryoutRegistrationStatusMessage("Submitting your registration...", "info");
+        try {
+          const result = await saveTryoutRegistration(payload);
+          if (tryoutSubmissionsLoadedAt && result.data) {
+            tryoutSubmissions = [normalizeTryoutSubmissionRow(result.data), ...tryoutSubmissions];
+          }
+          form.reset();
+          const message = result.localOnly
+            ? "Registration saved in this local preview. Live Appwrite storage is not configured here."
+            : "Registration received. We will contact you when the next tryout details are confirmed.";
+          tryoutRegistrationStatusMessage(message, "success");
+          showToast(message, "success");
+          if (tryoutSubmissionsLoadedAt) {
+            mount();
+            switchView("tryout");
+          }
+        } catch (error) {
+          const message = error?.message || "Could not submit the tryout registration.";
+          tryoutRegistrationStatusMessage(message, "error");
+          showToast(message, "error");
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = "Register interest";
+          }
+        }
+      };
+    }
+
+    const loadButton = document.getElementById("tryout-load-submissions");
+    if (loadButton) {
+      loadButton.onclick = function () {
+        loadTryoutSubmissions();
+      };
+    }
+
+    const searchInput = document.getElementById("tryout-submission-search");
+    if (searchInput) {
+      searchInput.oninput = function () {
+        const rawValue = String(searchInput.value || "");
+        const cursorStart = Number.isFinite(searchInput.selectionStart) ? searchInput.selectionStart : rawValue.length;
+        const cursorEnd = Number.isFinite(searchInput.selectionEnd) ? searchInput.selectionEnd : rawValue.length;
+        tryoutSubmissionFilters = {
+          ...tryoutSubmissionFilters,
+          search: rawValue
+        };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+        const nextSearchInput = document.getElementById("tryout-submission-search");
+        if (nextSearchInput) {
+          nextSearchInput.focus();
+          const safeStart = Math.min(cursorStart, nextSearchInput.value.length);
+          const safeEnd = Math.min(cursorEnd, nextSearchInput.value.length);
+          nextSearchInput.setSelectionRange(safeStart, safeEnd);
+        }
+      };
+    }
+
+    const uniFilter = document.getElementById("tryout-filter-uni-wien");
+    if (uniFilter) {
+      uniFilter.onchange = function () {
+        tryoutSubmissionFilters = { ...tryoutSubmissionFilters, uniWien: String(uniFilter.value || "all") };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const experienceFilter = document.getElementById("tryout-filter-experience");
+    if (experienceFilter) {
+      experienceFilter.onchange = function () {
+        tryoutSubmissionFilters = { ...tryoutSubmissionFilters, experience: String(experienceFilter.value || "all") };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const statusFilter = document.getElementById("tryout-filter-status");
+    if (statusFilter) {
+      statusFilter.onchange = function () {
+        tryoutSubmissionFilters = { ...tryoutSubmissionFilters, status: String(statusFilter.value || "all") };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const exportCsvButton = document.getElementById("tryout-export-csv");
+    if (exportCsvButton) {
+      exportCsvButton.onclick = function () {
+        downloadCsv(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.csv");
+      };
+    }
+
+    const exportExcelButton = document.getElementById("tryout-export-excel");
+    if (exportExcelButton) {
+      exportExcelButton.onclick = function () {
+        downloadExcel(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.xls");
       }
-    };
+    }
   }
 
   function openEquipmentPhotoDialog(photoSrc, title) {

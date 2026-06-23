@@ -991,6 +991,70 @@ button {
   gap: 12px;
 }
 
+.tryout-admin-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.tryout-admin-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.tryout-admin-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tryout-admin-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.tryout-admin-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tryout-admin-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(84, 184, 229, 0.1);
+  color: #314047;
+  font-weight: 700;
+}
+
+.tryout-submissions-table-wrap {
+  overflow-x: auto;
+}
+
+.tryout-submissions-table {
+  min-width: 980px;
+}
+
+.tryout-submission-details {
+  max-width: 320px;
+}
+
+.tryout-submission-details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.tryout-submission-details p {
+  margin: 8px 0 0;
+  line-height: 1.35;
+}
+
 .game-score {
   display: inline-flex;
   align-items: center;
@@ -1321,6 +1385,8 @@ button {
 
 .status.pending,
 .status.invited,
+.status.new,
+.status.contacted,
 .status.due,
 .status.expiring,
 .status.not_collected,
@@ -1392,6 +1458,11 @@ button {
 }
 
 .status.deleted {
+  background: rgba(80, 89, 97, 0.18);
+  color: #4c5a63;
+}
+
+.status.archived {
   background: rgba(80, 89, 97, 0.18);
   color: #4c5a63;
 }
@@ -1940,6 +2011,16 @@ code {
   .tryout-form-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .tryout-admin-head,
+  .tryout-admin-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tryout-admin-filters {
+    grid-template-columns: 1fr;
   }
 
   .playoff-bracket-columns {
