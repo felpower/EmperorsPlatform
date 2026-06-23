@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+
+  <title>404 | Uni Wien Emperors</title>
+  <meta
+    name="description"
+    content="Page not found on the Uni Wien Emperors website."
+  />
+
+  <style>
+    :root {
+      --emperors-blue: #003b73;
+      --emperors-blue-dark: #002b55;
+      --emperors-gold: #f7c600;
+      --emperors-grey: #e5e7eb;
+      --emperors-grey-dark: #6b7280;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(247, 198, 0, 0.18), transparent 32rem),
+        linear-gradient(135deg, var(--emperors-blue-dark), var(--emperors-blue));
+      color: var(--white);
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+    }
+
+    .page {
+      width: min(100%, 980px);
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 3rem;
+      align-items: center;
+    }
+
+    .brand-panel {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 420px;
+      border-radius: 2rem;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      box-shadow: 0 2rem 5rem rgba(0, 43, 85, 0.45);
+      overflow: hidden;
+    }
+
+    .brand-panel::before {
+      content: "404";
+      position: absolute;
+      inset: auto auto -2.5rem -1rem;
+      font-size: clamp(7rem, 18vw, 13rem);
+      font-weight: 900;
+      line-height: 1;
+      color: rgba(255, 255, 255, 0.08);
+      letter-spacing: -0.08em;
+    }
+
+    .brand-panel::after {
+      content: "";
+      position: absolute;
+      width: 16rem;
+      height: 16rem;
+      border-radius: 999px;
+      background: rgba(247, 198, 0, 0.22);
+      filter: blur(12px);
+      top: -5rem;
+      right: -5rem;
+    }
+
+    .mark {
+      position: relative;
+      z-index: 1;
+      width: min(72%, 310px);
+      filter: drop-shadow(0 1.4rem 1.8rem rgba(0, 43, 85, 0.35));
+    }
+
+    .content {
+      max-width: 560px;
+    }
+
+    .wordmark {
+      width: min(100%, 320px);
+      margin-bottom: 2rem;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin: 0 0 1rem;
+      color: var(--emperors-gold);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.82rem;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 2.25rem;
+      height: 0.2rem;
+      border-radius: 999px;
+      background: var(--emperors-gold);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.4rem, 6vw, 5rem);
+      line-height: 0.96;
+      letter-spacing: -0.06em;
+    }
+
+    p {
+      margin: 1.4rem 0 0;
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      line-height: 1.7;
+      color: var(--emperors-grey);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.9rem;
+      margin-top: 2rem;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 3rem;
+      padding: 0.8rem 1.15rem;
+      border-radius: 999px;
+      font-weight: 800;
+      text-decoration: none;
+      transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .button-primary {
+      background: var(--emperors-gold);
+      color: var(--emperors-blue-dark);
+      box-shadow: 0 0.8rem 1.5rem rgba(247, 198, 0, 0.22);
+    }
+
+    .button-secondary {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--white);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+    }
+
+    .quick-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem;
+      margin-top: 1.4rem;
+      padding: 0;
+      list-style: none;
+    }
+
+    .quick-links a {
+      color: var(--emperors-grey);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(229, 231, 235, 0.36);
+    }
+
+    .quick-links a:hover {
+      color: var(--emperors-gold);
+      border-bottom-color: var(--emperors-gold);
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding: 1rem;
+      }
+
+      .page {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+        text-align: center;
+      }
+
+      .brand-panel {
+        min-height: 300px;
+      }
+
+      .content {
+        margin-inline: auto;
+      }
+
+      .wordmark {
+        margin-inline: auto;
+      }
+
+      .eyebrow {
+        justify-content: center;
+      }
+
+      .actions,
+      .quick-links {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <section class="brand-panel" aria-hidden="true">
+      <img
+        class="mark"
+        src="./assets/emperors-mark.png"
+        alt=""
+      />
+    </section>
+
+    <section class="content">
+      <img
+        class="wordmark"
+        src="./assets/emperors-wordmark.png"
+        alt="Uni Wien Emperors"
+      />
+
+      <div class="eyebrow">Page not found</div>
+
+      <h1>Flag on the play.</h1>
+
+      <p>
+        The page you were looking for does not exist, has moved, or the route was incomplete.
+        Get back to the Uni Wien Emperors website and continue with games, roster details,
+        tryout information, or membership pages.
+      </p>
+
+      <div class="actions">
+        <a class="button button-primary" href="./">Back to home</a>
+        <a class="button button-secondary" href="./tryout">Tryout info</a>
+      </div>
+
+      <ul class="quick-links" aria-label="Helpful links">
+        <li><a href="./games">Games</a></li>
+        <li><a href="./roster">Roster</a></li>
+        <li><a href="./members">Members</a></li>
+        <li><a href="./organization">Organization</a></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>
