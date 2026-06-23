@@ -2542,20 +2542,28 @@
     return "ready";
   }
 
+  function memberInviteDateLabel(member) {
+    const inviteDate = String(member?.inviteSentAt || "").trim();
+    return inviteDate ? formatDate(inviteDate) : "";
+  }
+
   function renderMemberInviteAction(member) {
     if (currentAccessRole !== "admin") return "";
     if (member?.deletedAt) return "";
     if (!String(member?.email || "").trim()) return "";
     const state = memberInviteState(member);
     if (state === "activated") return "";
-    const label = state === "invited" ? "Invited" : "Invite";
+    const label = state === "invited" ? "Reinvite" : "Invite";
     return `<button class="ghost-button small-button invite-member-button" type="button" data-member-id="${member.id}" data-invite-state="${state}">${label}</button>`;
   }
 
   function memberInviteStateLabel(member) {
     const state = memberInviteState(member);
     if (state === "activated") return "Activated";
-    if (state === "invited") return "Invite pending";
+    if (state === "invited") {
+      const dateLabel = memberInviteDateLabel(member);
+      return dateLabel ? `Invited at ${dateLabel}` : "Invite pending";
+    }
     return "Not invited";
   }
 
@@ -2565,7 +2573,10 @@
     if (!String(member?.email || "").trim()) return `<span class="meta">No email</span>`;
     const state = memberInviteState(member);
     if (state === "activated") return statusPill("activated", "Activated");
-    if (state === "invited") return statusPill("invited", "Invited");
+    if (state === "invited") {
+      const dateLabel = memberInviteDateLabel(member);
+      return statusPill("invited", dateLabel ? `Invited at ${dateLabel}` : "Invited");
+    }
     return statusPill("not_invited", "Not invited");
   }
 
@@ -7862,8 +7873,11 @@
         if (!member || !member.email) return;
         const inviteState = memberInviteState(member);
         if (inviteState === "invited") {
-          window.alert("You already invited this person. Wait until they activate their account.");
-          return;
+          const dateLabel = memberInviteDateLabel(member);
+          const confirmed = window.confirm(
+            `You already invited ${member.name || member.email}${dateLabel ? ` on ${dateLabel}` : ""}. Send a new invite email?`
+          );
+          if (!confirmed) return;
         }
         if (inviteState === "activated") {
           window.alert("This person already activated their account. No invite is needed.");
@@ -7871,12 +7885,15 @@
         }
         const originalButtonHTML = button.innerHTML;
         button.disabled = true;
-        button.innerHTML = `<span class="auth-spinner"></span> Inviting...`;
+        button.innerHTML = `<span class="auth-spinner"></span> ${inviteState === "invited" ? "Reinviting..." : "Inviting..."}`;
         try {
           button.blur();
           await inviteMember(member.id);
-          authState.status = `Invite sent to ${member.email}.`;
-          showToast(`Invite sent to ${member.email}.`, "success");
+          const successMessage = inviteState === "invited"
+            ? `Invite resent to ${member.email}.`
+            : `Invite sent to ${member.email}.`;
+          authState.status = successMessage;
+          showToast(successMessage, "success");
           if (shouldUseRemoteData()) {
             await loadBootstrapData();
           } else {
