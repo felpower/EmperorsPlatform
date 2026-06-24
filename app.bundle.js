@@ -2538,7 +2538,6 @@
   function memberInviteState(member) {
     if (member?.activatedAt) return "activated";
     if (member?.inviteSentAt) return "invited";
-    if (member?.profileId) return "activated"; // Fallback for old records without activatedAt
     return "ready";
   }
 
