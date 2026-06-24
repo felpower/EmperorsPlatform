@@ -58,6 +58,17 @@ module.exports = async ({ req, res, log }) => {
     return { response, payload };
   };
 
+  const appwriteErrorMessage = (result, fallback) => {
+    const message = String(result?.payload?.message || result?.payload?.error || fallback || "Appwrite request failed.").trim();
+    const status = result?.response?.status;
+    const type = String(result?.payload?.type || "").trim();
+    const suffix = [
+      status ? `status ${status}` : "",
+      type
+    ].filter(Boolean).join(", ");
+    return suffix ? `${message} (${suffix})` : message;
+  };
+
   const fail = (message, extra = {}) => {
     const details = {
       error: String(message || "Unknown function error."),
@@ -72,7 +83,7 @@ module.exports = async ({ req, res, log }) => {
     const search = encodeURIComponent(email);
     const list = await request(`/users?search=${search}&limit=100`);
     if (!list.response.ok) {
-      return fail(list.payload?.message || "Could not search users.", { stage: "search_users" });
+      return fail(appwriteErrorMessage(list, "Could not search users."), { stage: "search_users" });
     }
 
     const users = Array.isArray(list.payload?.users) ? list.payload.users : [];
@@ -94,7 +105,7 @@ module.exports = async ({ req, res, log }) => {
       });
 
       if (!create.response.ok) {
-        return fail(create.payload?.message || "Could not create user.", { stage: "create_user", email });
+        return fail(appwriteErrorMessage(create, "Could not create user."), { stage: "create_user", email });
       }
 
       user = create.payload || null;
@@ -102,6 +113,13 @@ module.exports = async ({ req, res, log }) => {
     }
 
     const userId = String(user?.$id || user?.id || "").trim();
+    if (!userId) {
+      return fail("Could not resolve Appwrite user ID for invite recovery email.", {
+        stage: "resolve_user_id",
+        createdUser,
+        email
+      });
+    }
 
     let recoverySent = false;
     if (sendRecovery) {
@@ -109,15 +127,16 @@ module.exports = async ({ req, res, log }) => {
         return fail("Missing redirectTo (or PUBLIC_SITE_URL) for recovery email.", { stage: "prepare_recovery", email });
       }
 
-      const recovery = await request(`/users/${encodeURIComponent(userId)}/recovery`, {
+      const recovery = await request("/account/recovery", {
         method: "POST",
         body: {
+          email,
           url: redirectTo
         }
       });
 
       if (!recovery.response.ok) {
-        return fail(recovery.payload?.message || "Could not send invite recovery email.", {
+        return fail(appwriteErrorMessage(recovery, "Could not send invite recovery email."), {
           stage: "send_recovery",
           userId,
           createdUser,

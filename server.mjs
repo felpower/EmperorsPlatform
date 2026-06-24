@@ -479,9 +479,10 @@ async function sendAppwriteInvite({ email, fullName, req }) {
     throw new Error("Could not resolve Appwrite user ID for invite recovery email.");
   }
 
-  await appwriteAdminRequest(`/users/${encodeURIComponent(userId)}/recovery`, {
+  await appwriteAdminRequest("/account/recovery", {
     method: "POST",
     body: {
+      email: String(email || "").trim(),
       url: redirectTo
     }
   });
