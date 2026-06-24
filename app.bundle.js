@@ -1697,6 +1697,25 @@
       throw new Error("Invite email is missing for this member.");
     }
 
+    const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
+    const sendRecoveryEmailDirectly = async () => {
+      const recoveryResponse = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+      if (recoveryResponse?.error) {
+        throw recoveryResponse.error;
+      }
+    };
+
+    if (resolvedMember?.profileId) {
+      await sendRecoveryEmailDirectly();
+      if (memberId) {
+        const updateResponse = await backendClient.from("members").update({ invite_sent_at: new Date().toISOString() }).eq("id", memberId);
+        if (updateResponse.error) {
+          throw updateResponse.error;
+        }
+      }
+      return { ok: true, bypassedInviteFunction: true };
+    }
+
     const invokeInviteFunction = async ({ sendRecovery = true } = {}) => {
       const functionId = String(APPWRITE_CONFIG?.inviteFunctionId || "").trim();
       if (!functionId) {
@@ -1771,7 +1790,6 @@
       return parsedBody;
     };
 
-    const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
     let functionResult = null;
     let functionFailureMessage = "";
     try {
