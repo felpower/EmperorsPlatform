@@ -5,6 +5,7 @@ Desktop.ini
 
 # Dependencies
 node_modules/
+package-lock.json
 
 # Logs
 *.log
