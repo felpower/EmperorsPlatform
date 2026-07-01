@@ -5430,7 +5430,7 @@
           <div>
             <p class="eyebrow">Legacy</p>
             <h2>Hall of Fame</h2>
-            <p class="roster-page-copy">Honoring the Emperors who left it all on the field since 2022.</p>
+            <p class="roster-page-copy">Honoring the Emperors who left it all on the field since 2017.</p>
           </div>
           <div class="roster-count">
             <strong>${rows.length}</strong>
