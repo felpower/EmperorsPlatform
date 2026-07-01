@@ -876,6 +876,7 @@ button {
 .hof-year-head {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 10px;
   padding-bottom: 10px;
   border-bottom: 2px solid var(--brand-2);
@@ -889,12 +890,14 @@ button {
 }
 
 .hof-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 16px;
 }
 
 .hof-card {
+  width: 190px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -2098,8 +2101,11 @@ code {
   }
 
   .hof-grid {
-    grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
     gap: 12px;
+  }
+
+  .hof-card {
+    width: 158px;
   }
 
   .hof-card-body {
