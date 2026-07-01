@@ -10,6 +10,7 @@ window.ClubHubAppwriteConfig = {
   profilePicturesBucketId: "ProfilePictures",
   rosterPicturesBucketId: "RosterPictures",
   equipmentPicturesBucketId: "equipment",
+  hallOfFamePicturesBucketId: "hall_of_fame",
   teamsBucketId: "teams",
   teamLogoFiles: {
     "JKU Astros": "69ec923f001233031abb"

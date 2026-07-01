@@ -140,11 +140,19 @@ const schema = {
     name: "hall_of_fame",
     permissions: publicReadCollectionPermissions,
     attributes: [
-      { type: "string", key: "id", size: 64, required: true },
       { type: "integer", key: "year", required: true },
       { type: "string", key: "name", size: 255, required: true },
-      { type: "string", key: "position", size: 128, required: false }
+      { type: "string", key: "position", size: 128, required: false },
+      { type: "string", key: "photo_file_id", size: 255, required: false },
+      { type: "string", key: "photo_url", size: 512, required: false }
     ]
+  }
+};
+
+const buckets = {
+  hall_of_fame: {
+    name: "Hall of Fame Photos",
+    permissions: publicReadCollectionPermissions
   }
 };
 
@@ -172,6 +180,30 @@ async function request(path, { method = "GET", body } = {}) {
   }
 
   return payload;
+}
+
+async function ensureBucket(bucketId, definition) {
+  const list = await request(`/storage/buckets`);
+  const existing = (list.buckets || []).find((bucket) => bucket.$id === bucketId);
+
+  if (existing) {
+    console.log(`Bucket exists: ${bucketId}`);
+    return existing;
+  }
+
+  const created = await request(`/storage/buckets`, {
+    method: "POST",
+    body: {
+      bucketId,
+      name: definition.name,
+      permissions: definition.permissions || collectionPermissions,
+      fileSecurity: false,
+      enabled: true
+    }
+  });
+
+  console.log(`Created bucket: ${bucketId}`);
+  return created;
 }
 
 async function ensureCollection(collectionId, definition) {
@@ -251,6 +283,10 @@ async function main() {
     for (const attribute of definition.attributes) {
       await ensureAttribute(collectionId, attribute);
     }
+  }
+
+  for (const [bucketId, definition] of Object.entries(buckets)) {
+    await ensureBucket(bucketId, definition);
   }
 
   console.log("Appwrite collections setup complete.");

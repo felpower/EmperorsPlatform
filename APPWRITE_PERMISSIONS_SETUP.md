@@ -128,7 +128,7 @@ Delete:
 
 ### Collection: `hall_of_fame`
 
-**Attributes:** `id` (string, required), `year` (integer, required), `name` (string, required), `position` (string, optional)
+**Attributes:** `year` (integer, required), `name` (string, required), `position` (string, optional) — no `id` attribute; like `organization` and `equipment_inventory`, the app's custom id is stored as the Appwrite document `$id`, not a separate field.
 
 Running `npm run setup:appwrite` (with `APPWRITE_API_KEY` set) creates this collection with `Read: Any` / `Create, Update, Delete: Users`. The app's UI only exposes add/edit/delete to admins, but for real defense-in-depth, tighten this further in the Appwrite Console:
 

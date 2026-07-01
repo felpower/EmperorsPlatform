@@ -78,28 +78,28 @@
     ],
     equipment: [],
     hallOfFame: [
-      { id: "hof-seed-1", year: 2022, name: "Thaddeus \"Thunderfoot\" Kowalski", position: "Kicker" },
-      { id: "hof-seed-2", year: 2022, name: "Biggus Blockus Huber", position: "Offensive Tackle" },
-      { id: "hof-seed-3", year: 2022, name: "Werner \"The Vienna Wall\" Steinberger", position: "Defensive Tackle" },
+      { id: "hof-seed-1", year: 2022, name: "Thaddeus \"Thunderfoot\" Kowalski", position: "Kicker/Punter" },
+      { id: "hof-seed-2", year: 2022, name: "Biggus Blockus Huber", position: "O-Line" },
+      { id: "hof-seed-3", year: 2022, name: "Werner \"The Vienna Wall\" Steinberger", position: "D-Line" },
       { id: "hof-seed-4", year: 2022, name: "Scrambling Sam Novak", position: "Quarterback" },
       { id: "hof-seed-5", year: 2022, name: "Gruber \"Hands of Glue\" Aigner", position: "Wide Receiver" },
       { id: "hof-seed-6", year: 2023, name: "Bianca \"Blitzkrieg\" Steiner", position: "Linebacker" },
-      { id: "hof-seed-7", year: 2023, name: "Marco \"The Mongoose\" Falkner", position: "Cornerback" },
+      { id: "hof-seed-7", year: 2023, name: "Marco \"The Mongoose\" Falkner", position: "Defensive Back" },
       { id: "hof-seed-8", year: 2023, name: "Sir Fumbles-a-Lot Fischer", position: "Running Back" },
       { id: "hof-seed-9", year: 2023, name: "Gunnar \"Gronk of Grinzing\" Wagner", position: "Tight End" },
-      { id: "hof-seed-10", year: 2023, name: "Ilse \"Iron Lung\" Brandstätter", position: "Middle Linebacker" },
+      { id: "hof-seed-10", year: 2023, name: "Ilse \"Iron Lung\" Brandstätter", position: "Linebacker" },
       { id: "hof-seed-11", year: 2023, name: "Dominik \"Touchdown Dance\" Divjak", position: "Wide Receiver" },
-      { id: "hof-seed-12", year: 2024, name: "Sepp \"The Sandwich\" Moser", position: "Center" },
-      { id: "hof-seed-13", year: 2024, name: "Nikolaus \"Ice Cold Niki\" Berger", position: "Kicker" },
-      { id: "hof-seed-14", year: 2024, name: "Franzi \"Freight Train\" Reisinger", position: "Fullback" },
-      { id: "hof-seed-15", year: 2024, name: "Alexander \"The Filing Cabinet\" Pichler", position: "Offensive Guard" },
-      { id: "hof-seed-16", year: 2025, name: "Katharina \"Sackmaster\" Lechner", position: "Defensive End" },
+      { id: "hof-seed-12", year: 2024, name: "Sepp \"The Sandwich\" Moser", position: "O-Line" },
+      { id: "hof-seed-13", year: 2024, name: "Nikolaus \"Ice Cold Niki\" Berger", position: "Kicker/Punter" },
+      { id: "hof-seed-14", year: 2024, name: "Franzi \"Freight Train\" Reisinger", position: "Running Back" },
+      { id: "hof-seed-15", year: 2024, name: "Alexander \"The Filing Cabinet\" Pichler", position: "O-Line" },
+      { id: "hof-seed-16", year: 2025, name: "Katharina \"Sackmaster\" Lechner", position: "D-Line" },
       { id: "hof-seed-17", year: 2025, name: "Rudi \"Rocket\" Hofer", position: "Running Back" },
       { id: "hof-seed-18", year: 2025, name: "Fabian \"The Professor\" Gruber", position: "Quarterback" },
-      { id: "hof-seed-19", year: 2025, name: "Lena \"Lockdown\" Winkler", position: "Cornerback" },
-      { id: "hof-seed-20", year: 2025, name: "Tobias \"Big Toby\" Kranzl", position: "Nose Tackle" },
+      { id: "hof-seed-19", year: 2025, name: "Lena \"Lockdown\" Winkler", position: "Defensive Back" },
+      { id: "hof-seed-20", year: 2025, name: "Tobias \"Big Toby\" Kranzl", position: "D-Line" },
       { id: "hof-seed-21", year: 2025, name: "Manuel \"Mad Hands\" Ortner", position: "Wide Receiver" },
-      { id: "hof-seed-22", year: 2025, name: "Sophie \"The Wrecking Ball\" Zach", position: "Strong Safety" }
+      { id: "hof-seed-22", year: 2025, name: "Sophie \"The Wrecking Ball\" Zach", position: "Defensive Back" }
     ]
   };
   const CLUBEE_GAMES_SOURCE_URL = "https://clubee.com/afbo/spiele-568998v4/leagues/16957/seasons/218";
@@ -248,6 +248,8 @@
   const MAX_AVATAR_DIMENSION = 1280;
   const MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
   const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
+  const MAX_HOF_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
+  const MAX_HOF_PHOTO_DIMENSION = 1600;
   const MAX_DIAGNOSTIC_LOG_ENTRIES = 200;
   const MAX_REMOTE_DIAGNOSTIC_ENTRIES = 150;
   //const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
@@ -1056,6 +1058,108 @@
       // Ignore missing file errors so photo removal stays idempotent.
     }
     bumpEquipmentPhotoVersion(normalizedEquipmentId);
+  }
+
+  function hallOfFamePhotoVersionKey(hofId) {
+    return `clubhub-hof-photo-version-${String(hofId || "").trim()}`;
+  }
+
+  function hallOfFamePhotoVersion(hofId) {
+    const key = hallOfFamePhotoVersionKey(hofId);
+    return key ? String(localStorage.getItem(key) || "").trim() : "";
+  }
+
+  function bumpHallOfFamePhotoVersion(hofId) {
+    const key = hallOfFamePhotoVersionKey(hofId);
+    if (!key) return;
+    localStorage.setItem(key, String(Date.now()));
+  }
+
+  function hallOfFamePhotoFileId(hofId) {
+    const normalized = String(hofId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const safe = normalized || "unknown";
+    return `hof-${safe}`.slice(0, 36);
+  }
+
+  function storageHallOfFamePhotoUrl(fileId, hofId = "") {
+    const bucketId = String(APPWRITE_CONFIG?.hallOfFamePicturesBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedFileId = String(fileId || "").trim();
+    if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const version = hallOfFamePhotoVersion(hofId || normalizedFileId);
+    const query = new URLSearchParams({ project: projectId });
+    if (version) query.set("v", version);
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
+  async function uploadHallOfFamePhotoToStorage(file, hofId) {
+    const bucketId = String(APPWRITE_CONFIG?.hallOfFamePicturesBucketId || "").trim();
+    if (!bucketId) {
+      throw new Error("Missing hallOfFamePicturesBucketId in Appwrite config.");
+    }
+    const normalizedHofId = String(hofId || "").trim();
+    if (!normalizedHofId) {
+      throw new Error("Hall of Fame entry id is missing.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      throw new Error("Appwrite Storage API is unavailable in this browser runtime.");
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    const fileId = hallOfFamePhotoFileId(normalizedHofId);
+
+    try {
+      if (typeof storage.deleteFile === "function") {
+        await storage.deleteFile(bucketId, fileId);
+      }
+    } catch {
+      // Ignore missing file errors; create below will handle fresh uploads.
+    }
+
+    await storage.createFile(bucketId, fileId, file);
+    bumpHallOfFamePhotoVersion(normalizedHofId);
+    return {
+      photoFileId: fileId,
+      photoUrl: storageHallOfFamePhotoUrl(fileId, normalizedHofId)
+    };
+  }
+
+  async function deleteHallOfFamePhotoFromStorage(hofId, photoFileId) {
+    const bucketId = String(APPWRITE_CONFIG?.hallOfFamePicturesBucketId || "").trim();
+    if (!bucketId) return;
+    const normalizedHofId = String(hofId || "").trim();
+    const normalizedFileId = String(photoFileId || hallOfFamePhotoFileId(normalizedHofId)).trim();
+    if (!normalizedFileId) return;
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      return;
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    try {
+      await storage.deleteFile(bucketId, normalizedFileId);
+    } catch {
+      // Ignore missing file errors so photo removal stays idempotent.
+    }
+    bumpHallOfFamePhotoVersion(normalizedHofId);
   }
 
   function resolveEquipmentPhotoSrc(item) {
@@ -2260,7 +2364,9 @@
       id: String(organizationRowValue(row, ["id", "$id"]) || `hof-${index + 1}`).trim(),
       year: Number.isFinite(year) && year > 0 ? year : new Date().getFullYear(),
       name: String(organizationRowValue(row, ["name"]) || "").trim(),
-      position: String(organizationRowValue(row, ["position"]) || "").trim()
+      position: String(organizationRowValue(row, ["position"]) || "").trim(),
+      photoFileId: String(organizationRowValue(row, ["photoFileId", "photo_file_id"]) || "").trim(),
+      photoUrl: String(organizationRowValue(row, ["photoUrl", "photo_url"]) || "").trim()
     };
   }
 
@@ -5080,13 +5186,15 @@
       id: publicRosterField(row, "id", "$id"),
       year: publicRosterField(row, "year"),
       name: publicRosterField(row, "name"),
-      position: publicRosterField(row, "position")
+      position: publicRosterField(row, "position"),
+      photoFileId: publicRosterField(row, "photo_file_id", "photoFileId"),
+      photoUrl: publicRosterField(row, "photo_url", "photoUrl")
     }, index);
   }
 
   async function loadPublicHallOfFameBootstrap() {
     if (!backendClient) return;
-    const response = await backendClient.from("hall_of_fame").select("id, year, name, position");
+    const response = await backendClient.from("hall_of_fame").select("id, year, name, position, photo_file_id, photo_url");
     if (response.error) {
       throw response.error;
     }
@@ -5134,7 +5242,9 @@
       id: entry?.id || generateHallOfFameId(),
       year: entry?.year,
       name: entry?.name,
-      position: entry?.position
+      position: entry?.position,
+      photoFileId: entry?.photoFileId,
+      photoUrl: entry?.photoUrl
     }, 0);
     if (!normalized.name) {
       throw new Error("Name is required.");
@@ -5143,7 +5253,9 @@
       id: normalized.id,
       year: normalized.year,
       name: normalized.name,
-      position: normalized.position || null
+      position: normalized.position || null,
+      photo_file_id: normalized.photoFileId || null,
+      photo_url: normalized.photoUrl || null
     };
     if (backendClient && authState.user) {
       const response = await backendClient.from("hall_of_fame").upsert(remotePayload, { onConflict: "id" });
@@ -5196,6 +5308,9 @@
         throw response.error;
       }
     }
+    if (currentRow?.photoFileId || currentRow?.photoUrl) {
+      await deleteHallOfFamePhotoFromStorage(normalizedId, currentRow.photoFileId);
+    }
     const nextRows = (state.hallOfFame || []).filter((row) => String(row.id) !== normalizedId);
     applyBootstrap({
       source: bootstrapMeta.source,
@@ -5216,18 +5331,38 @@
     });
   }
 
+  function updateHallOfFamePhotoPreview(url) {
+    const image = document.getElementById("hof-photo-preview-image");
+    const placeholder = document.getElementById("hof-photo-preview-placeholder");
+    const removeButton = document.getElementById("hof-photo-remove");
+    const normalizedUrl = String(url || "").trim();
+    if (image) {
+      image.src = normalizedUrl;
+      image.style.display = normalizedUrl ? "block" : "none";
+    }
+    if (placeholder) {
+      placeholder.style.display = normalizedUrl ? "none" : "flex";
+    }
+    if (removeButton) {
+      removeButton.style.display = normalizedUrl ? "" : "none";
+    }
+  }
+
   function openHallOfFameDialog(entry) {
     const dialog = document.getElementById("hof-dialog");
     const form = document.getElementById("hof-form");
     const title = document.getElementById("hof-dialog-title");
     const submit = document.getElementById("hof-submit-button");
     if (!dialog || !form) return;
-    hallOfFameDialogEditingId = String(entry?.id || "").trim();
+    hallOfFameDialogEditingId = String(entry?.id || generateHallOfFameId()).trim();
     form.reset();
     form.elements.hofId.value = hallOfFameDialogEditingId;
     form.elements.name.value = entry?.name || "";
     form.elements.year.value = entry?.year || new Date().getFullYear();
     form.elements.position.value = entry?.position || "";
+    form.elements.photoFileId.value = entry?.photoFileId || "";
+    form.elements.photoUrl.value = entry?.photoUrl || "";
+    updateHallOfFamePhotoPreview(entry?.photoUrl || "");
     title.textContent = entry ? `Edit ${entry.name}` : "Add Hall of Famer";
     submit.textContent = entry ? "Save changes" : "Add to Hall of Fame";
     dialog.showModal();
@@ -5238,7 +5373,7 @@
       <article class="hof-card">
         <div class="hof-card-media-shell">
           ${renderLazyImage({
-            src: INLINE_AVATAR_PLACEHOLDER,
+            src: member.photoUrl || INLINE_AVATAR_PLACEHOLDER,
             fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
             alt: `${member.name} portrait`,
             className: "hof-player-image",
@@ -9456,6 +9591,63 @@
     const submitButton = document.getElementById("hof-submit-button");
     const closeButton = document.getElementById("hof-dialog-close");
     const cancelButton = document.getElementById("hof-dialog-cancel");
+    const photoTrigger = document.getElementById("hof-photo-trigger");
+    const photoInput = document.getElementById("hof-photo-input");
+    const photoRemove = document.getElementById("hof-photo-remove");
+
+    if (photoTrigger && photoInput) {
+      photoTrigger.onclick = function () {
+        photoInput.click();
+      };
+    }
+
+    if (photoInput && form) {
+      photoInput.onchange = async function () {
+        const originalFile = photoInput.files && photoInput.files[0];
+        if (!originalFile) return;
+        const hofId = String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim();
+        if (!hofId) return;
+        try {
+          let uploadFile = originalFile;
+          if (Number(uploadFile.size || 0) > MAX_HOF_PHOTO_UPLOAD_BYTES) {
+            uploadFile = await compressImageForAvatar(uploadFile, {
+              maxBytes: MAX_HOF_PHOTO_UPLOAD_BYTES,
+              maxDimension: MAX_HOF_PHOTO_DIMENSION
+            });
+          }
+          if (Number(uploadFile.size || 0) > MAX_HOF_PHOTO_UPLOAD_BYTES) {
+            throw new Error("Photo is still too large after compression. Please choose a smaller image.");
+          }
+          const uploaded = await uploadHallOfFamePhotoToStorage(uploadFile, hofId);
+          form.elements.photoFileId.value = uploaded.photoFileId || "";
+          form.elements.photoUrl.value = uploaded.photoUrl || "";
+          updateHallOfFamePhotoPreview(uploaded.photoUrl || "");
+          showToast("Photo uploaded.", "success");
+        } catch (error) {
+          showToast(error?.message || "Could not upload photo.", "error");
+        } finally {
+          photoInput.value = "";
+        }
+      };
+    }
+
+    if (photoRemove && form) {
+      photoRemove.onclick = async function () {
+        const hofId = String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim();
+        const photoFileId = String(form.elements.photoFileId.value || "").trim();
+        try {
+          if (hofId) {
+            await deleteHallOfFamePhotoFromStorage(hofId, photoFileId);
+          }
+          form.elements.photoFileId.value = "";
+          form.elements.photoUrl.value = "";
+          updateHallOfFamePhotoPreview("");
+          showToast("Photo removed.", "success");
+        } catch (error) {
+          showToast(error?.message || "Could not remove photo.", "error");
+        }
+      };
+    }
 
     if (addButton) {
       addButton.onclick = function () {
@@ -9489,7 +9681,9 @@
           id: String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim(),
           year: Number(form.elements.year.value || new Date().getFullYear()),
           name: String(form.elements.name.value || "").trim(),
-          position: String(form.elements.position.value || "").trim()
+          position: String(form.elements.position.value || "").trim(),
+          photoFileId: String(form.elements.photoFileId.value || "").trim(),
+          photoUrl: String(form.elements.photoUrl.value || "").trim()
         };
         if (!payload.name) {
           showToast("Name is required.", "error");
