@@ -5369,9 +5369,12 @@
   }
 
   function renderHallOfFameCard(member, canManage, index) {
+    const photoAttr = member.photoUrl
+      ? ` data-hof-photo-src="${escapeAttribute(member.photoUrl)}" data-hof-photo-name="${escapeAttribute(member.name)}"`
+      : "";
     return `
       <article class="hof-card">
-        <div class="hof-card-media-shell">
+        <div class="hof-card-media-shell"${photoAttr}>
           ${renderLazyImage({
             src: member.photoUrl || INLINE_AVATAR_PLACEHOLDER,
             fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
@@ -9584,6 +9587,28 @@
     });
   }
 
+  function bindHallOfFameLightbox() {
+    const dialog = document.getElementById("hof-lightbox");
+    const img = document.getElementById("hof-lightbox-img");
+    const caption = document.getElementById("hof-lightbox-caption");
+    if (!dialog || !img || !caption) return;
+
+    document.querySelectorAll(".hof-card-media-shell[data-hof-photo-src]").forEach((shell) => {
+      shell.onclick = function () {
+        img.src = String(shell.dataset.hofPhotoSrc || "");
+        img.alt = String(shell.dataset.hofPhotoName || "");
+        caption.textContent = String(shell.dataset.hofPhotoName || "");
+        dialog.showModal();
+      };
+    });
+
+    dialog.onclick = function (event) {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    };
+  }
+
   function bindHallOfFameActions() {
     const addButton = document.getElementById("hof-add-entry");
     const dialog = document.getElementById("hof-dialog");
@@ -9729,6 +9754,8 @@
         }
       };
     });
+
+    bindHallOfFameLightbox();
   }
 
   function bindMemberFilters() {
