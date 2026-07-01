@@ -858,6 +858,104 @@ button {
   border-radius: 8px;
 }
 
+.hof-page {
+  display: grid;
+  gap: 18px;
+}
+
+.hof-years {
+  display: grid;
+  gap: 28px;
+}
+
+.hof-year-section {
+  display: grid;
+  gap: 12px;
+}
+
+.hof-year-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--brand-2);
+}
+
+.hof-year-head h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.hof-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.hof-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-strong);
+  box-shadow: var(--shadow);
+}
+
+.hof-card-media-shell {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  background:
+    linear-gradient(180deg, rgba(246, 195, 22, 0.22), rgba(21, 27, 28, 0.08)),
+    #f2f5f7;
+}
+
+.hof-player-media {
+  width: 100%;
+  height: 100%;
+}
+
+.hof-player-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hof-position-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(246, 195, 22, 0.94);
+  color: #171d1d;
+  font-weight: 900;
+}
+
+.hof-card-body {
+  display: grid;
+  gap: 6px;
+  min-height: 94px;
+  padding: 14px 14px 16px;
+}
+
+.hof-card-body h3 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.12rem;
+  line-height: 1.08;
+}
+
+.hof-card-body p {
+  margin: 0;
+  color: #5b676c;
+  line-height: 1.25;
+}
+
 .tryout-page {
   display: grid;
   gap: 18px;
@@ -1996,6 +2094,15 @@ code {
   }
 
   .roster-card-body {
+    min-height: 108px;
+  }
+
+  .hof-grid {
+    grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+    gap: 12px;
+  }
+
+  .hof-card-body {
     min-height: 108px;
   }
 

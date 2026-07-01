@@ -1,6 +1,6 @@
 # Appwrite Auth Email Templates
 
-These templates are styled to match the previous Supabase invite/recovery look.
+These templates are styled for the current Uni Wien Emperors Appwrite invite/recovery flow.
 
 Files:
 - invite.html

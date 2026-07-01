@@ -126,6 +126,27 @@ Delete:
   - Role: admin
 ```
 
+### Collection: `hall_of_fame`
+
+**Attributes:** `id` (string, required), `year` (integer, required), `name` (string, required), `position` (string, optional)
+
+Running `npm run setup:appwrite` (with `APPWRITE_API_KEY` set) creates this collection with `Read: Any` / `Create, Update, Delete: Users`. The app's UI only exposes add/edit/delete to admins, but for real defense-in-depth, tighten this further in the Appwrite Console:
+
+**Document-Level Permissions:**
+```
+Read:
+  - Any (the Hall of Fame page is public)
+
+Create:
+  - Role: admin
+
+Update:
+  - Role: admin
+
+Delete:
+  - Role: admin
+```
+
 ## Testing Permissions
 
 After configuring, test in your app:

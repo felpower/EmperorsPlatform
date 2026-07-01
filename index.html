@@ -17,10 +17,10 @@
       href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260623a" />
+    <link rel="stylesheet" href="./styles.css?v=20260701a" />
     <script src="https://cdn.jsdelivr.net/npm/appwrite@17.0.0"></script>
-    <script src="./src/appwrite-config.js?v=20260622b"></script>
-    <script src="./src/appwrite-backend-compat.js?v=20260622b"></script>
+    <script src="./src/appwrite-config.js?v=20260701a"></script>
+    <script src="./src/appwrite-backend-compat.js?v=20260701a"></script>
     <script src="./src/modules/cache-utils.js?v=20260508a"></script>
     <script src="./src/modules/iban-utils.js?v=20260508a"></script>
     <script src="./src/modules/profile-finance.js?v=20260508a"></script>
@@ -46,6 +46,7 @@
         <nav class="nav" aria-label="Primary">
           <a class="nav-link active" href="#dashboard" data-view="dashboard">Dashboard</a>
           <a class="nav-link" href="#roster" data-view="roster">Roster</a>
+          <a class="nav-link" href="#hall-of-fame" data-view="hall-of-fame">Hall of Fame</a>
           <a class="nav-link" href="#tryout" data-view="tryout">Tryout</a>
           <a class="nav-link" href="#members" data-view="members">Members</a>
           <a class="nav-link" href="#fees" data-view="fees">Membership Finance</a>
@@ -76,6 +77,7 @@
 
         <section id="dashboard" class="view active" aria-label="Dashboard"></section>
         <section id="roster" class="view" aria-label="Roster"></section>
+        <section id="hall-of-fame" class="view" aria-label="Hall of Fame"></section>
         <section id="tryout" class="view" aria-label="Tryout"></section>
         <section id="members" class="view" aria-label="Members"></section>
         <section id="fees" class="view" aria-label="Membership finance"></section>
@@ -276,6 +278,64 @@
       </div>
     </dialog>
 
-    <script defer src="./app.bundle.js?v=20260623b"></script>
+    <dialog id="hof-dialog" class="dialog">
+      <form method="post" id="hof-form" class="dialog-form" novalidate>
+        <input type="hidden" name="hofId" />
+
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Hall of Fame</p>
+            <h3 id="hof-dialog-title">Add Hall of Famer</h3>
+          </div>
+          <button class="ghost-icon" id="hof-dialog-close" type="button" value="cancel" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Name
+            <input name="name" placeholder="e.g. Thaddeus &quot;Thunderfoot&quot; Kowalski" required />
+          </label>
+
+          <label>
+            Induction year
+            <input name="year" type="number" min="2022" max="2100" required />
+          </label>
+        </div>
+
+        <label>
+          Position
+          <input name="position" list="hof-position-options" placeholder="e.g. Quarterback" />
+        </label>
+        <datalist id="hof-position-options">
+          <option value="Quarterback"></option>
+          <option value="Running Back"></option>
+          <option value="Fullback"></option>
+          <option value="Wide Receiver"></option>
+          <option value="Tight End"></option>
+          <option value="Offensive Tackle"></option>
+          <option value="Offensive Guard"></option>
+          <option value="Center"></option>
+          <option value="Defensive End"></option>
+          <option value="Defensive Tackle"></option>
+          <option value="Nose Tackle"></option>
+          <option value="Linebacker"></option>
+          <option value="Middle Linebacker"></option>
+          <option value="Cornerback"></option>
+          <option value="Safety"></option>
+          <option value="Strong Safety"></option>
+          <option value="Kicker"></option>
+          <option value="Punter"></option>
+          <option value="Head Coach"></option>
+          <option value="Coach"></option>
+        </datalist>
+
+        <div class="dialog-actions">
+          <button value="cancel" id="hof-dialog-cancel" type="button" class="ghost-button">Cancel</button>
+          <button value="default" type="button" class="primary-button" id="hof-submit-button">Add to Hall of Fame</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script defer src="./app.bundle.js?v=20260701a"></script>
   </body>
 </html>

@@ -1,5 +1,9 @@
 (async function () {
   const APPWRITE_CONFIG = window.ClubHubAppwriteConfig || null;
+  const moduleRegistry = window.ClubHubModules || {};
+  const cacheModule = moduleRegistry.cache || null;
+  const ibanModule = moduleRegistry.iban || null;
+  const profileFinanceModule = moduleRegistry.profileFinance || null;
 
   const demoData = {
     source: "demo",
@@ -14,39 +18,216 @@
     fees: [],
     events: [],
     invites: [],
+    organization: [
+      {
+        id: "org-emperors",
+        headOf: "Emperors",
+        verantwortung: "Jimmy Huynh",
+        coVerantwortung: "Lukas Steiner",
+        aufgaben: "Jahresbericht, Jahresvoranschlag, Stadlaukontakt/ Vertragsverlängerung, Raumbuchungen Stadlau, Camps planen & buchen, Weihnachtsfeier veranstalten"
+      },
+      {
+        id: "org-finanzen",
+        headOf: "Finanzen",
+        verantwortung: "Patrick Felbauer",
+        coVerantwortung: "",
+        aufgaben: "Jahresbericht, Jahresvoranschlag, Einzahler überprüfen, Auszahlungen tätigen, SEPA-Lastschriften austeilen & einsammeln"
+      },
+      {
+        id: "org-technik",
+        headOf: "Technik",
+        verantwortung: "Patrick Felbauer",
+        coVerantwortung: "",
+        aufgaben: ""
+      },
+      {
+        id: "org-coaching",
+        headOf: "Coaching",
+        verantwortung: "Max Frank",
+        coVerantwortung: "Benedikt Leitner",
+        aufgaben: "Trainingsplan- Erstellung, Hudl managen, Coaches organisieren, ACSL-Sitzungen"
+      },
+      {
+        id: "org-equipment",
+        headOf: "Equipment",
+        verantwortung: "Max Van der Werf",
+        coVerantwortung: "",
+        aufgaben: "Gameday-organisation, Inventur, Bestellungen von Equipment, Jerseyvergabe und -Überwachung, Jersey-Bestellung planen, Equipment überprüfen und pflegen, Equ.Transport planen"
+      },
+      {
+        id: "org-sportliche-leitung",
+        headOf: "Sportliche Leitung",
+        verantwortung: "Max Jeftenic",
+        coVerantwortung: "Benjamin Zitta",
+        aufgaben: "Camps planen & buchen, Tryouts organisieren, Rookie-Leitfaden erstellen/Updaten, Testspiele organisieren, Coaching-Qualitätsmonitoring: Feedbackbögen erstellen und auswerten + rückmelden"
+      },
+      {
+        id: "org-administration",
+        headOf: "Administration",
+        verantwortung: "Arthur Wäscher",
+        coVerantwortung: "",
+        aufgaben: "Förderungen erschließen, Weihnachtsfeier veranstalten, Stadlaukontakt/ Vertragsverlängerung, Raumbuchungen Stadlau, Spielerpässe überprüfen"
+      },
+      {
+        id: "org-social-media",
+        headOf: "Social Media",
+        verantwortung: "Angie",
+        coVerantwortung: "Martin Stockinger",
+        aufgaben: "Posts erstellen, Informationen nach außen transportieren, Insta-Anfragen beantworten, Media-Days planen"
+      }
+    ],
     equipment: []
+  };
+  const CLUBEE_GAMES_SOURCE_URL = "https://clubee.com/afbo/spiele-568998v4/leagues/16957/seasons/218";
+  const EMPERORS_TEAM_NAME = "UNI-Wien Emperors";
+  const CLUBEE_GAMES_SNAPSHOT = [
+    {
+      id: "2805871",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2025-10-11T14:15:00+00:00",
+      venueName: "Hohe Warte Stadion",
+      venueCity: "Wien",
+      info: "2",
+      streamLink: "",
+      homeTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      awayTeam: { name: "BOKU Beez", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/boku-beez-4768_1773399154_small.png" },
+      homeScore: 37,
+      awayScore: 14
+    },
+    {
+      id: "2805869",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2025-10-18T17:30:00+00:00",
+      venueName: "Hohe Warte Stadion",
+      venueCity: "Wien",
+      info: "0",
+      streamLink: "",
+      homeTeam: { name: "WU Tigers", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/wu-tigers-431431_1773399181_small.png" },
+      awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      homeScore: 7,
+      awayScore: 23
+    },
+    {
+      id: "2805889",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2026-04-18T17:30:00+00:00",
+      venueName: "Footballzentrum Ravelin",
+      venueCity: "Wien",
+      info: "5",
+      streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4",
+      homeTeam: { name: "TU Robots", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/tu-robots-2198_1773399105_small.png" },
+      awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      homeScore: 13,
+      awayScore: 20
+    },
+    {
+      id: "2805893",
+      phase: "RegularSeason 2025/26",
+      startsAt: "2026-05-15T19:00:00+00:00",
+      venueName: "ABC ASKÖ Bewegungscenter",
+      venueCity: "Linz",
+      info: "10",
+      streamLink: "",
+      homeTeam: { name: "JKU Astros", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/jku-astros-6632_1773399167_small.png" },
+      awayTeam: { name: "UNI-Wien Emperors", logo: "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png" },
+      homeScore: 25,
+      awayScore: 41
+    }
+  ];
+  const GAMES_FILTER_STORAGE_KEY = "emperors-games-team-filter-v1";
+  const GAMES_VIEW_MODE_KEY = "emperors-games-view-mode-v1";
+  const GAMES_STANDINGS_OPEN_KEY = "emperors-games-standings-open-v1";
+  const TEAM_BUCKET_FILE_MAP = {
+    "BOKU Beez": "69ec923f001234b4a712",
+    "UNI-Wien Emperors": "69ec923f00123235991d",
+    "WU Tigers": "69ec923f001232c476fa",
+    "TU Robots": "69ec923f00123a793a39",
+    "JKU Astros": "69ec923f001233031abb",
+    "Med Uni Wien Serpents": "69ec923f00123c58612b"
+  };
+  const TEAM_LOGO_FALLBACK_URLS = {
+    "BOKU Beez": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/boku-beez-4768_1773399154_small.png",
+    "UNI-Wien Emperors": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/uni-wien-emperors-1590_1773399143_small.png",
+    "WU Tigers": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/wu-tigers-431431_1773399181_small.png",
+    "TU Robots": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/tu-robots-2198_1773399105_small.png",
+    "JKU Astros": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/jku-astros-6632_1773399167_small.png",
+    "Med Uni Wien Serpents": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/med-uni-wien-serpents-7756_1773399129_small.png"
+  };
+  const LEAGUE_GAMES_SNAPSHOT = [
+    { id: "g-2025-10-11-emperors-beez", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T16:15:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "BOKU Beez" }, homeScore: 37, awayScore: 14 },
+    { id: "g-2025-10-11-tigers-robots", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "WU Tigers" }, awayTeam: { name: "TU Robots" }, homeScore: 23, awayScore: 14 },
+    { id: "g-2025-10-18-astros-beez", stage: "Spieltag 2", subtitle: "", startsAt: "2025-10-18T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", homeTeam: { name: "JKU Astros" }, awayTeam: { name: "BOKU Beez" }, homeScore: 7, awayScore: 37 },
+    { id: "g-2025-10-18-tigers-emperors", stage: "Spieltag 2", subtitle: "", startsAt: "2025-10-18T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 7, awayScore: 23 },
+    { id: "g-2025-10-31-astros-robots", stage: "Spieltag 2", subtitle: "", startsAt: "2025-10-31T19:00:00+01:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", homeTeam: { name: "JKU Astros" }, awayTeam: { name: "TU Robots" }, homeScore: 14, awayScore: 19 },
+    { id: "g-2026-04-12-serpents-tigers", stage: "Spieltag 3", subtitle: "", startsAt: "2026-04-12T14:15:00+02:00",venueName: "Footballzentrum Ravelin", venueCity: "Wien",  homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "WU Tigers" }, homeScore: 3, awayScore: 40 },
+    { id: "g-2026-04-18-beez-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-18T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4&t=3s", homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 3, awayScore: 6 },
+    { id: "g-2026-04-18-robots-emperors", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-18T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink: "https://www.youtube.com/watch?v=zdSiCyKyLu4", isReplay: true, homeTeam: { name: "TU Robots" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 13, awayScore: 20 },
+    { id: "g-2026-04-24-astros-serpents", stage: "Spieltag 4", subtitle: "", startsAt: "2026-04-24T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz", streamLink: "https://www.youtube.com/live/WfA_Se67oFo?si=XTe5rlfKrkbKNjoh", isReplay: true, homeTeam: { name: "JKU Astros" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 36, awayScore: 9 },
+    { id: "g-2026-05-09-serpents-robots", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", streamLink:"https://www.youtube.com/watch?v=R0RkR8GwYyw", homeTeam: { name: "Med Uni Wien Serpents" }, awayTeam: { name: "TU Robots" }, homeScore: 3, awayScore: 37 },
+    { id: "g-2026-05-09-tigers-beez", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-09T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=h7Ws4Dh9xK8",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "BOKU Beez" }, homeScore: 28, awayScore: 6 },
+    { id: "g-2026-05-15-astros-emperors", stage: "Spieltag 5", subtitle: "", startsAt: "2026-05-15T19:00:00+02:00", venueName: "ABC ASKÖ Bewegungscenter", venueCity: "Linz",streamLink:"https://www.youtube.com/watch?v=oEgRD5gumuA",  homeTeam: { name: "JKU Astros" }, awayTeam: { name: "UNI-Wien Emperors" }, homeScore: 25, awayScore: 41 },
+    { id: "g-2026-05-23-wildcard-1", stage: "Playoffs", subtitle: "Wildcard ACSL 3. vs. 6.", startsAt: "2026-05-23T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=FEfZXtZ0GzQ",  homeTeam: { name: "TU Robots" }, awayTeam: { name: "Med Uni Wien Serpents" }, homeScore: 44, awayScore: 0 },
+    { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=7VueONQao_U",  homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "JKU Astros" }, homeScore: 13, awayScore: 28 },
+    { id: "g-2026-06-06-semi-1", stage: "Semifinals", subtitle: "UNI-Wien Emperors vs. JKU Astros", startsAt: "2026-06-06T14:15:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=zMOdPBJRYgw",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "JKU Astros" }, homeScore: 14, awayScore: 24 },
+    { id: "g-2026-06-06-semi-2", stage: "Semifinals", subtitle: "TU Robots vs. WU Tigers", startsAt: "2026-06-06T17:30:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=JqxiXr1XeiM",  homeTeam: { name: "TU Robots" }, awayTeam: { name: "WU Tigers" }, homeScore: 6, awayScore: 9 },
+    { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
+    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: null, awayScore: null }
+  ];
+  const LEAGUE_STANDINGS_SNAPSHOT = {
+    label: "RegularSeason 2025/26",
+    updatedAt: "2026-05-16",
+    rows: [
+      { rank: 1, teamName: "UNI-Wien Emperors", wins: 4, losses: 0, draws: 0, pointsFor: 121, pointsAgainst: 59, pct: 1, diff: 62 },
+      { rank: 2, teamName: "WU Tigers", wins: 3, losses: 1, draws: 0, pointsFor: 98, pointsAgainst: 46, pct: 0.75, diff: 52 },
+      { rank: 3, teamName: "TU Robots", wins: 2, losses: 2, draws: 0, pointsFor: 83, pointsAgainst: 60, pct: 0.5, diff: 23 },
+      { rank: 4, teamName: "BOKU Beez", wins: 1, losses: 3, draws: 0, pointsFor: 60, pointsAgainst: 78, pct: 0.25, diff: -18 },
+      { rank: 5, teamName: "JKU Astros", wins: 1, losses: 3, draws: 0, pointsFor: 82, pointsAgainst: 106, pct: 0.25, diff: -24 },
+      { rank: 6, teamName: "Med Uni Wien Serpents", wins: 1, losses: 3, draws: 0, pointsFor: 21, pointsAgainst: 116, pct: 0.25, diff: -95 },
+    ]
   };
 
   const STORAGE_KEY = "emperors-local-state-v3";
+  const DIAGNOSTICS_LOG_KEY = "emperors-diagnostics-log-v1";
   const ACCESS_KEY = "emperors-local-access-role";
   const FEE_FILTER_KEY = "emperors-fee-period-filter";
   const FEE_STATUS_FILTER_KEY = "emperors-fee-status-filter";
   const TABLE_SORT_KEY = "emperors-table-sort-v1";
   const MEMBER_FILTER_KEY = "emperors-member-filters-v1";
+  const ROSTER_FILTER_KEY = "emperors-roster-position-filter-v1";
+  const TRYOUT_REGISTRATIONS_STORAGE_KEY = "emperors-tryout-registrations-local-v1";
+  const TRYOUT_REGISTRATION_FILTER_KEY = "emperors-tryout-registration-filters-v1";
   const PASS_FILTER_KEY = "emperors-pass-filters-v1";
   const EQUIPMENT_STORAGE_KEY = "emperors-equipment-v1";
   const EQUIPMENT_SHEET_KEY = "emperors-equipment-sheet-v1";
-  const EQUIPMENT_SHEETS = [
+  const EQUIPMENT_KIND_FILTER_KEY = "emperors-equipment-kind-filter-v1";
+  const EQUIPMENT_SHEETS_STORAGE_KEY = "emperors-equipment-sheets-v1";
+  const EQUIPMENT_EXPANDED_CONTAINERS_KEY = "emperors-equipment-expanded-containers-v1";
+  const DEFAULT_EQUIPMENT_SHEETS = [
+    { key: "all", label: "All sheets" },
     { key: "training", label: "Training" },
     { key: "gameday", label: "Gameday" },
-    { key: "technik", label: "Technik" },
-    { key: "all", label: "All sheets" }
+    { key: "technik", label: "Technik" }
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
   const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
-  const viewIds = ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
     "QB", "RB", "FB", "WR", "TE", "OL", "DL", "LB", "DB", "CB", "S", "K", "P",
-    "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB"
+    "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB", "Coach", "Staff"
   ];
   const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
   const MAX_AVATAR_DIMENSION = 1280;
-  const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
+  const MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
+  const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
+  const MAX_DIAGNOSTIC_LOG_ENTRIES = 200;
+  const MAX_REMOTE_DIAGNOSTIC_ENTRIES = 150;
+  //const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
+  const INLINE_AVATAR_PLACEHOLDER = "assets/emperors_avatar.png";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
 
   const backendClient =
@@ -72,20 +253,41 @@
   let selectedFeeMemberIds = [];
   let selectedUserMemberId = "";
   let profileRouteMode = "member";
+  let organizationDialogEditingId = "";
   let authInviteRole = "admin";
   let teardownMembersStickyHeader = null;
   let teardownFeesStickyHeader = null;
   let teardownPassesStickyHeader = null;
   let tableSort = loadTableSort();
   let memberFilters = loadMemberFilters();
+  let selectedRosterPosition = loadStoredValue(ROSTER_FILTER_KEY, "all");
+  let publicRosterStatus = "";
+  let publicRosterLoadedAt = 0;
+  let publicRosterLoadAttempted = false;
+  let publicRosterLoadPromise = null;
+  let tryoutSubmissions = [];
+  let tryoutSubmissionsStatus = "";
+  let tryoutSubmissionsLoading = false;
+  let tryoutSubmissionsLoadedAt = 0;
+  let tryoutSubmissionFilters = loadTryoutSubmissionFilters();
   let passFilters = loadPassFilters();
+  let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
+  let selectedEquipmentKindFilter = loadStoredValue(EQUIPMENT_KIND_FILTER_KEY, "all");
+  let selectedGameTeams = loadStoredArray(GAMES_FILTER_STORAGE_KEY);
+  let selectedGamesViewMode = ["schedule", "playoffs"].includes(loadStoredValue(GAMES_VIEW_MODE_KEY, "schedule"))
+    ? loadStoredValue(GAMES_VIEW_MODE_KEY, "schedule")
+    : "schedule";
+  let gamesStandingsExpanded = loadStoredValue(GAMES_STANDINGS_OPEN_KEY, "true") !== "false";
+  let expandedEquipmentContainerIds = loadStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY);
   let equipmentInlineEditId = "";
   let equipmentInlineDraftById = {};
   let equipmentCreateDraft = null;
+  let equipmentPhotoDraftsById = {};
   let passSyncPreview = null;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
+  let sepaExportPreview = null;
   let authState = {
     mode: "local",
     status: "Local development mode active.",
@@ -100,6 +302,13 @@
     status: "",
     loading: false
   };
+  let remoteDiagnosticsEntries = [];
+  let remoteDiagnosticsStatus = "";
+  let remoteDiagnosticsLoading = false;
+  let remoteDiagnosticsLoadedAt = 0;
+  let remoteDiagnosticsDisabledReason = "";
+  let remoteDiagnosticsRetryAfter = 0;
+  const remoteDiagnosticSyncIds = new Set();
   let buttonFeedbackBound = false;
   let equipmentStorageMode = "local";
   let equipmentStatus = "";
@@ -113,6 +322,9 @@
   }
 
   function getCacheWithTTL(key) {
+    if (cacheModule && typeof cacheModule.getCacheWithTTL === "function") {
+      return cacheModule.getCacheWithTTL(key, CACHE_TTL);
+    }
     try {
       const cached = localStorage.getItem(key);
       if (!cached) return null;
@@ -128,6 +340,10 @@
   }
 
   function setCacheWithTTL(key, data) {
+    if (cacheModule && typeof cacheModule.setCacheWithTTL === "function") {
+      cacheModule.setCacheWithTTL(key, data);
+      return;
+    }
     try {
       localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
     } catch (error) {
@@ -136,6 +352,10 @@
   }
 
   function invalidateCache(key) {
+    if (cacheModule && typeof cacheModule.invalidateCache === "function") {
+      cacheModule.invalidateCache(key);
+      return;
+    }
     try {
       localStorage.removeItem(key);
     } catch {
@@ -153,6 +373,18 @@
     return `${sanitizedBase}${normalizedPath}`;
   }
 
+  function hasConfiguredApiBaseUrl() {
+    return Boolean(String(APPWRITE_CONFIG?.apiBaseUrl || window.ClubHubApiBaseUrl || "").trim());
+  }
+
+  function hasSepaExportCapability() {
+    return Boolean(
+      String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim() ||
+      hasConfiguredApiBaseUrl() ||
+      isLocalDevHost()
+    );
+  }
+
   function loadStoredValue(key, fallback) {
     const saved = localStorage.getItem(key);
     return saved || fallback;
@@ -160,6 +392,308 @@
 
   function saveStoredValue(key, value) {
     localStorage.setItem(key, value);
+  }
+
+  function loadStoredArray(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map((entry) => String(entry || "").trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveStoredArray(key, value) {
+    localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+  }
+
+  function loadDiagnosticsLog() {
+    try {
+      const raw = localStorage.getItem(DIAGNOSTICS_LOG_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveDiagnosticsLog(entries) {
+    try {
+      localStorage.setItem(DIAGNOSTICS_LOG_KEY, JSON.stringify(Array.isArray(entries) ? entries.slice(0, MAX_DIAGNOSTIC_LOG_ENTRIES) : []));
+    } catch {
+      // Ignore diagnostics persistence failures.
+    }
+  }
+
+  function summarizeDiagnosticError(error) {
+    if (!error) return "";
+    if (typeof error === "string") return error;
+    if (typeof error?.message === "string") return error.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  function diagnosticsFunctionId() {
+    return String(APPWRITE_CONFIG?.diagnosticsFunctionId || "").trim();
+  }
+
+  function diagnosticsTableId() {
+    return String(APPWRITE_CONFIG?.diagnosticsTableId || "").trim();
+  }
+
+  function diagnosticRouteLabel() {
+    const hash = String(window.location.hash || "").trim();
+    return hash || "#dashboard";
+  }
+
+  function clampDiagnosticText(value, maxLength) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 3))}...` : text;
+  }
+
+  function diagnosticRecordValue(record, fallback) {
+    const normalized = record && typeof record === "object" ? record : {};
+    for (const key of Array.prototype.slice.call(arguments, 2)) {
+      if (Object.prototype.hasOwnProperty.call(normalized, key) && normalized[key] !== undefined && normalized[key] !== null) {
+        return normalized[key];
+      }
+    }
+    return fallback;
+  }
+
+  async function executeAppwriteFunction(functionId, payload, options) {
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+    const normalizedFunctionId = String(functionId || "").trim();
+    if (!normalizedFunctionId) {
+      throw new Error("Appwrite function id is missing.");
+    }
+
+    const functionClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const functionsApi = new appwriteSdk.Functions(functionClient);
+    const execution = await functionsApi.createExecution(
+      normalizedFunctionId,
+      JSON.stringify(payload || {}),
+      false
+    );
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    const maxPolls = Number(options?.maxPolls || 8);
+    const pollDelayMs = Number(options?.pollDelayMs || 300);
+    let finalExecution = execution;
+
+    for (let index = 0; index < maxPolls; index += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(pollDelayMs);
+        finalExecution = await functionsApi.getExecution(normalizedFunctionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    let parsedBody = null;
+    if (responseBodyRaw) {
+      try {
+        parsedBody = JSON.parse(responseBodyRaw);
+      } catch {
+        parsedBody = null;
+      }
+    }
+
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyError = String(parsedBody?.error || parsedBody?.message || responseBodyRaw || "").trim();
+      throw new Error(
+        `${normalizedFunctionId} failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyError || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    if (parsedBody?.error) {
+      throw new Error(String(parsedBody.error || "Appwrite function failed."));
+    }
+
+    return {
+      execution: finalExecution,
+      body: parsedBody
+    };
+  }
+
+  function buildRemoteDiagnosticPayload(entry) {
+    const member = typeof signedInMemberRecord === "function" ? signedInMemberRecord() : null;
+    return {
+      loggedAt: String(entry?.at || new Date().toISOString()).trim(),
+      level: clampDiagnosticText(entry?.level || "info", 32).toLowerCase(),
+      scope: clampDiagnosticText(entry?.scope || "app", 64),
+      message: clampDiagnosticText(entry?.message || "Diagnostic event", 512),
+      details: clampDiagnosticText(entry?.details || "", 4000),
+      route: clampDiagnosticText(diagnosticRouteLabel(), 255),
+      origin: clampDiagnosticText(window.location.origin || "", 255),
+      userId: clampDiagnosticText(authState.user?.id || "", 128),
+      memberId: clampDiagnosticText(member?.id || "", 128),
+      accessRole: clampDiagnosticText(currentAccessRole || "", 64),
+      userEmail: clampDiagnosticText(authState.user?.email || "", 255),
+      userAgent: clampDiagnosticText(window.navigator?.userAgent || "", 1024),
+      sessionLabel: clampDiagnosticText(authDisplayName(), 255)
+    };
+  }
+
+  function queueRemoteDiagnostic(entry) {
+    const functionId = diagnosticsFunctionId();
+    const now = Date.now();
+    if (!functionId || !entry?.id || remoteDiagnosticSyncIds.has(entry.id)) {
+      return;
+    }
+    if (remoteDiagnosticsRetryAfter && now < remoteDiagnosticsRetryAfter) {
+      return;
+    }
+
+    remoteDiagnosticSyncIds.add(entry.id);
+    Promise.resolve().then(async function () {
+      try {
+        await executeAppwriteFunction(functionId, { event: buildRemoteDiagnosticPayload(entry) }, { maxPolls: 6, pollDelayMs: 250 });
+        remoteDiagnosticsDisabledReason = "";
+        remoteDiagnosticsRetryAfter = 0;
+        remoteDiagnosticsStatus = "Remote diagnostics connected.";
+      } catch (error) {
+        const message = summarizeDiagnosticError(error) || "Remote diagnostics failed.";
+        remoteDiagnosticsDisabledReason = message;
+        remoteDiagnosticsRetryAfter = Date.now() + 15000;
+        remoteDiagnosticsStatus = `Remote diagnostics unavailable: ${message}`;
+        console.warn("[Diagnostics]", message);
+      } finally {
+        remoteDiagnosticSyncIds.delete(entry.id);
+      }
+    });
+  }
+
+  function normalizeRemoteDiagnosticEntry(row) {
+    return {
+      id: String(diagnosticRecordValue(row, "", "$id", "id") || "").trim(),
+      at: String(diagnosticRecordValue(row, "", "logged_at", "loggedAt", "$createdAt") || "").trim(),
+      level: String(diagnosticRecordValue(row, "info", "level") || "info").trim().toLowerCase(),
+      scope: String(diagnosticRecordValue(row, "app", "scope") || "app").trim(),
+      message: String(diagnosticRecordValue(row, "", "message") || "").trim(),
+      details: String(diagnosticRecordValue(row, "", "details") || "").trim(),
+      route: String(diagnosticRecordValue(row, "", "route") || "").trim(),
+      origin: String(diagnosticRecordValue(row, "", "origin") || "").trim(),
+      userId: String(diagnosticRecordValue(row, "", "user_id", "userId") || "").trim(),
+      memberId: String(diagnosticRecordValue(row, "", "member_id", "memberId") || "").trim(),
+      accessRole: String(diagnosticRecordValue(row, "", "access_role", "accessRole") || "").trim(),
+      userEmail: String(diagnosticRecordValue(row, "", "user_email", "userEmail") || "").trim()
+    };
+  }
+
+  async function loadRemoteDiagnosticsLog(force) {
+    if (!backendClient || !diagnosticsTableId()) {
+      remoteDiagnosticsStatus = "Remote diagnostics table is not configured.";
+      return [];
+    }
+    if (!force && remoteDiagnosticsLoading) {
+      return remoteDiagnosticsEntries;
+    }
+    if (!force && remoteDiagnosticsLoadedAt && (Date.now() - remoteDiagnosticsLoadedAt) < 30000) {
+      return remoteDiagnosticsEntries;
+    }
+
+    remoteDiagnosticsLoading = true;
+    remoteDiagnosticsStatus = "Loading remote diagnostics...";
+    try {
+      const response = await backendClient.from("diagnostics_logs").select("*");
+      if (response?.error) {
+        throw response.error;
+      }
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      remoteDiagnosticsEntries = rows
+        .map(normalizeRemoteDiagnosticEntry)
+        .sort((left, right) => String(right.at || "").localeCompare(String(left.at || "")))
+        .slice(0, MAX_REMOTE_DIAGNOSTIC_ENTRIES);
+      remoteDiagnosticsLoadedAt = Date.now();
+      remoteDiagnosticsStatus = remoteDiagnosticsEntries.length
+        ? `Loaded ${remoteDiagnosticsEntries.length} remote log entr${remoteDiagnosticsEntries.length === 1 ? "y" : "ies"}.`
+        : "No remote diagnostics recorded yet.";
+    } catch (error) {
+      remoteDiagnosticsStatus = `Could not load remote diagnostics: ${summarizeDiagnosticError(error)}`;
+    } finally {
+      remoteDiagnosticsLoading = false;
+      if (getRouteView() === "settings") {
+        mount();
+      }
+    }
+
+    return remoteDiagnosticsEntries;
+  }
+
+  function recordDiagnostic(level, scope, message, details) {
+    const entry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      at: new Date().toISOString(),
+      level: String(level || "info").trim().toLowerCase(),
+      scope: String(scope || "app").trim(),
+      message: String(message || "").trim() || "Diagnostic event",
+      details: details ? String(details).trim() : ""
+    };
+    const next = [entry, ...loadDiagnosticsLog()].slice(0, MAX_DIAGNOSTIC_LOG_ENTRIES);
+    saveDiagnosticsLog(next);
+    queueRemoteDiagnostic(entry);
+    return entry;
+  }
+
+  function recordActivity(scope, message, metadata) {
+    const payload = {
+      actionScope: String(scope || "app").trim(),
+      actorUserId: String(authState.user?.id || "").trim(),
+      actorEmail: String(authState.user?.email || "").trim(),
+      actorRole: String(currentAccessRole || "").trim(),
+      ...(metadata && typeof metadata === "object" ? metadata : {})
+    };
+    let details = "";
+    try {
+      details = JSON.stringify(payload);
+    } catch {
+      details = String(message || "").trim();
+    }
+    return recordDiagnostic("info", scope, message, details);
+  }
+
+  function clearDiagnosticsLog() {
+    localStorage.removeItem(DIAGNOSTICS_LOG_KEY);
+  }
+
+  function exportDiagnosticsLog() {
+    const blob = new Blob([JSON.stringify(loadDiagnosticsLog(), null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "emperors-diagnostics-log.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function profileAvatarVersionKey(memberId) {
@@ -201,6 +735,201 @@
     return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}/view?${query.toString()}`;
   }
 
+  function storageRosterImageUrl(fileId) {
+    const normalizedReference = String(fileId || "").trim();
+    if (!normalizedReference) return "";
+    if (/^(https?:|data:)/i.test(normalizedReference)) return normalizedReference;
+    const bucketId = String(APPWRITE_CONFIG?.rosterPicturesBucketId || "RosterPictures").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    if (!bucketId || !endpoint || !projectId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const query = new URLSearchParams({ project: projectId });
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedReference)}/view?${query.toString()}`;
+  }
+
+  function resolveRosterImageSrcForMember(member) {
+    const rosterImage = String(member?.rosterImage || member?.roster_image || "").trim();
+    return storageRosterImageUrl(rosterImage);
+  }
+
+  function equipmentPhotoVersionKey(equipmentId) {
+    return `clubhub-equipment-photo-version-${String(equipmentId || "").trim()}`;
+  }
+
+  function equipmentPhotoVersion(equipmentId) {
+    const key = equipmentPhotoVersionKey(equipmentId);
+    return key ? String(localStorage.getItem(key) || "").trim() : "";
+  }
+
+  function bumpEquipmentPhotoVersion(equipmentId) {
+    const key = equipmentPhotoVersionKey(equipmentId);
+    if (!key) return;
+    localStorage.setItem(key, String(Date.now()));
+  }
+
+  function equipmentPhotoFileId(equipmentId) {
+    const normalized = String(equipmentId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const safe = normalized || "unknown";
+    return `equipment-${safe}`.slice(0, 36);
+  }
+
+  function storageEquipmentPhotoUrl(fileId, equipmentId = "") {
+    const bucketId = String(APPWRITE_CONFIG?.equipmentPicturesBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedFileId = String(fileId || "").trim();
+    if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const version = equipmentPhotoVersion(equipmentId || normalizedFileId);
+    const query = new URLSearchParams({ project: projectId });
+    if (version) query.set("v", version);
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
+  function storageTeamLogoUrl(fileId) {
+    const normalizedReference = String(fileId || "").trim();
+    if (!normalizedReference) return "";
+    if (/^https?:\/\//i.test(normalizedReference)) {
+      return normalizedReference.replace(/[?&]mode=admin\b/g, "").replace(/\?$/, "");
+    }
+    const bucketId = String(APPWRITE_CONFIG?.teamsBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedFileId = normalizedReference;
+    if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const query = new URLSearchParams({ project: projectId });
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
+  function teamLogoUrl(teamName) {
+    const normalizedTeamName = String(teamName || "").trim();
+    if (!normalizedTeamName || normalizedTeamName.toUpperCase() === "TBA") return "";
+    const configuredMap = APPWRITE_CONFIG && typeof APPWRITE_CONFIG.teamLogoFiles === "object" && APPWRITE_CONFIG.teamLogoFiles
+      ? APPWRITE_CONFIG.teamLogoFiles
+      : {};
+    const fileId = String(configuredMap[normalizedTeamName] || TEAM_BUCKET_FILE_MAP[normalizedTeamName] || "").trim();
+    const storageUrl = fileId ? storageTeamLogoUrl(fileId) : "";
+    return storageUrl || String(TEAM_LOGO_FALLBACK_URLS[normalizedTeamName] || "").trim();
+  }
+
+  function escapeAttribute(value) {
+    return String(value || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("\"", "&quot;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function renderLazyImage({
+    src,
+    alt = "",
+    className = "",
+    style = "",
+    wrapperClass = "",
+    fallbackSrc = "",
+    eager = false
+  } = {}) {
+    const normalizedSrc = String(src || "").trim();
+    if (!normalizedSrc) return "";
+    const imgClassName = [className, "lazy-media-image"].filter(Boolean).join(" ");
+    const wrapperClassName = ["lazy-media", wrapperClass].filter(Boolean).join(" ");
+    return `
+      <span class="${wrapperClassName}">
+        <span class="lazy-media-spinner" aria-hidden="true"></span>
+        <img
+          data-lazy-src="${escapeAttribute(normalizedSrc)}"
+          ${fallbackSrc ? `data-lazy-error-src="${escapeAttribute(fallbackSrc)}"` : ""}
+          ${eager ? 'data-lazy-priority="eager"' : ""}
+          alt="${escapeAttribute(alt)}"
+          class="${imgClassName}"
+          ${style ? `style="${escapeAttribute(style)}"` : ""}
+          decoding="async"
+          loading="lazy"
+          fetchpriority="low"
+        />
+      </span>
+    `;
+  }
+
+  let lazyImageObserver = null;
+
+  function markLazyImageReady(img, state = "loaded") {
+    if (!img) return;
+    const container = img.closest(".lazy-media");
+    img.classList.add("is-loaded");
+    if (container) {
+      container.classList.add("is-loaded");
+      if (state === "error") container.classList.add("is-error");
+    }
+  }
+
+  function activateLazyImage(img) {
+    if (!img || img.dataset.lazyActivated === "true") return;
+    const nextSrc = String(img.dataset.lazySrc || "").trim();
+    if (!nextSrc) return;
+    img.dataset.lazyActivated = "true";
+    img.addEventListener("load", () => markLazyImageReady(img, "loaded"), { once: true });
+    img.addEventListener("error", () => {
+      const fallbackSrc = String(img.dataset.lazyErrorSrc || "").trim();
+      if (fallbackSrc && img.src !== fallbackSrc) {
+        img.dataset.lazyErrorSrc = "";
+        img.dataset.lazyActivated = "fallback";
+        img.addEventListener("load", () => markLazyImageReady(img, "loaded"), { once: true });
+        img.src = fallbackSrc;
+        return;
+      }
+      markLazyImageReady(img, "error");
+    }, { once: true });
+    img.src = nextSrc;
+  }
+
+  function setupLazyImages(root = document) {
+    const scope = root || document;
+    const images = Array.from(scope.querySelectorAll("img[data-lazy-src]"));
+    if (!images.length) return;
+    if (!("IntersectionObserver" in window)) {
+      images.forEach((img) => activateLazyImage(img));
+      return;
+    }
+    if (!lazyImageObserver) {
+      lazyImageObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const img = entry.target;
+          lazyImageObserver.unobserve(img);
+          activateLazyImage(img);
+        });
+      }, { rootMargin: "240px 0px" });
+    }
+    images.forEach((img) => {
+      if (img.dataset.lazyBound === "true") return;
+      img.dataset.lazyBound = "true";
+      lazyImageObserver.observe(img);
+    });
+  }
+
+  function hydrateVisibleLazyImages(root = document) {
+    const scope = root || document;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    scope.querySelectorAll("img[data-lazy-src]").forEach((img) => {
+      if (img.dataset.lazyActivated === "true" || img.dataset.lazyActivated === "fallback") return;
+      if (img.dataset.lazyPriority === "eager") {
+        activateLazyImage(img);
+        return;
+      }
+      const rect = img.getBoundingClientRect();
+      const isVisible = rect.width > 0 && rect.height > 0 && rect.bottom >= -160 && rect.top <= viewportHeight + 160;
+      if (isVisible) activateLazyImage(img);
+    });
+  }
+
   function avatarFallbackOnErrorAttr() {
     const inlineFallback = INLINE_AVATAR_PLACEHOLDER.replaceAll("\"", "&quot;");
     return `this.src=&quot;${inlineFallback}&quot;;this.onerror=null;`;
@@ -240,6 +969,81 @@
     await storage.createFile(bucketId, fileId, file);
     bumpProfileAvatarVersion(memberId);
     return storageAvatarUrlForMember(memberId);
+  }
+
+  async function uploadEquipmentPhotoToStorage(file, equipmentId) {
+    const bucketId = String(APPWRITE_CONFIG?.equipmentPicturesBucketId || "").trim();
+    if (!bucketId) {
+      throw new Error("Missing equipmentPicturesBucketId in Appwrite config.");
+    }
+    const normalizedEquipmentId = String(equipmentId || "").trim();
+    if (!normalizedEquipmentId) {
+      throw new Error("Equipment item id is missing.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      throw new Error("Appwrite Storage API is unavailable in this browser runtime.");
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    const fileId = equipmentPhotoFileId(normalizedEquipmentId);
+
+    try {
+      if (typeof storage.deleteFile === "function") {
+        await storage.deleteFile(bucketId, fileId);
+      }
+    } catch {
+      // Ignore missing file errors; create below will handle fresh uploads.
+    }
+
+    await storage.createFile(bucketId, fileId, file);
+    bumpEquipmentPhotoVersion(normalizedEquipmentId);
+    return {
+      photoFileId: fileId,
+      photoUrl: storageEquipmentPhotoUrl(fileId, normalizedEquipmentId)
+    };
+  }
+
+  async function deleteEquipmentPhotoFromStorage(equipmentId, photoFileId) {
+    const bucketId = String(APPWRITE_CONFIG?.equipmentPicturesBucketId || "").trim();
+    if (!bucketId) return;
+    const normalizedEquipmentId = String(equipmentId || "").trim();
+    const normalizedFileId = String(photoFileId || equipmentPhotoFileId(normalizedEquipmentId)).trim();
+    if (!normalizedFileId) return;
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      return;
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    try {
+      await storage.deleteFile(bucketId, normalizedFileId);
+    } catch {
+      // Ignore missing file errors so photo removal stays idempotent.
+    }
+    bumpEquipmentPhotoVersion(normalizedEquipmentId);
+  }
+
+  function resolveEquipmentPhotoSrc(item) {
+    const photoUrl = String(item?.photoUrl || item?.photo_url || "").trim();
+    if (photoUrl) return photoUrl;
+    const photoFileId = String(item?.photoFileId || item?.photo_file_id || "").trim();
+    const equipmentId = String(item?.id || "").trim();
+    const draftPhoto = equipmentId ? equipmentPhotoDraftsById[equipmentId] : null;
+    if (draftPhoto?.photoUrl) return String(draftPhoto.photoUrl || "").trim();
+    if (draftPhoto?.photoFileId) return storageEquipmentPhotoUrl(draftPhoto.photoFileId, equipmentId);
+    if (photoFileId) return storageEquipmentPhotoUrl(photoFileId, equipmentId);
+    return "";
   }
 
   function resolveAvatarSrcForMember(member) {
@@ -644,6 +1448,21 @@
     return Boolean(authState.user) && !authState.user?.user_metadata?.password_set;
   }
 
+  function hasRecoveryContext() {
+    const hash = String(window.location.hash || "").replace(/^#/, "").trim();
+    if (/^recovery/i.test(hash)) return true;
+    const params = new URLSearchParams(window.location.search);
+    const hashRaw = String(window.location.hash || "").replace(/^#/, "");
+    const hashQueryPart = hashRaw.includes("?") ? hashRaw.split("?").slice(1).join("?") : hashRaw;
+    const hashParams = new URLSearchParams(hashQueryPart);
+    if ((params.get("type") || "").trim() === "recovery") return true;
+    if ((hashParams.get("type") || "").trim() === "recovery") return true;
+    return Boolean(
+      (params.get("userId") && params.get("secret")) ||
+      (hashParams.get("userId") && hashParams.get("secret"))
+    );
+  }
+
   function syncAuthSession(session) {
     authState.ready = true;
     authState.loading = false;
@@ -659,7 +1478,7 @@
       authState.mode = "remote";
       if (needsPasswordSetup()) {
         authState.status = "Set your password to finish activating this account.";
-        if (!/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
+        if (hasRecoveryContext() && !/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
           window.location.hash = "#recovery";
         }
       } else {
@@ -878,6 +1697,25 @@
       throw new Error("Invite email is missing for this member.");
     }
 
+    const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
+    const sendRecoveryEmailDirectly = async () => {
+      const recoveryResponse = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+      if (recoveryResponse?.error) {
+        throw recoveryResponse.error;
+      }
+    };
+
+    if (resolvedMember?.profileId) {
+      await sendRecoveryEmailDirectly();
+      if (memberId) {
+        const updateResponse = await backendClient.from("members").update({ invite_sent_at: new Date().toISOString() }).eq("id", memberId);
+        if (updateResponse.error) {
+          throw updateResponse.error;
+        }
+      }
+      return { ok: true, bypassedInviteFunction: true };
+    }
+
     const invokeInviteFunction = async ({ sendRecovery = true } = {}) => {
       const functionId = String(APPWRITE_CONFIG?.inviteFunctionId || "").trim();
       if (!functionId) {
@@ -952,7 +1790,6 @@
       return parsedBody;
     };
 
-    const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
     let functionResult = null;
     let functionFailureMessage = "";
     try {
@@ -1008,9 +1845,45 @@
       }),
       false
     );
-    const status = String(execution?.status || "").toLowerCase();
-    if (status && ["failed", "crashed", "timeout", "canceled"].includes(status)) {
-      throw new Error(`Auth provisioning function failed (${status}).`);
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    let finalExecution = execution;
+
+    for (let i = 0; i < 8; i += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(350);
+        finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyText = String(finalExecution?.responseBody || "").trim();
+      throw new Error(
+        `Auth provisioning function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    if (responseBodyRaw) {
+      try {
+        const parsedBody = JSON.parse(responseBodyRaw);
+        if (parsedBody?.error) {
+          throw new Error(String(parsedBody.error));
+        }
+      } catch (parseError) {
+        const parseMessage = String(parseError?.message || "");
+        if (!parseMessage.toLowerCase().includes("json")) {
+          throw parseError;
+        }
+      }
     }
   }
 
@@ -1034,8 +1907,11 @@
       lastName,
       name: fullName,
       email: member.email || "",
+      iban: String(member.iban || "").trim(),
+      memberIban: String(member.memberIban || member.iban || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
+      rosterImage: String(member.rosterImage || member.roster_image || "").trim(),
       jerseyNumber: member.jerseyNumber === null || member.jerseyNumber === undefined || member.jerseyNumber === "" ? null : Number(member.jerseyNumber),
       active: Boolean(member.active),
       rookie: Boolean(member.rookie),
@@ -1046,7 +1922,7 @@
       inviteSentAt: member.inviteSentAt || null,
       activatedAt: member.activatedAt || null,
       passStatus: member.passStatus || "missing",
-      passExpiry: member.passExpiry || "",
+      passExpiry: normalizeToIsoDate(member.passExpiry || member.expires_on || member.expiry_date || ""),
       licenseName: member.licenseName || "",
       feeStatus: member.feeStatus || "pending",
       notes: member.notes || "",
@@ -1077,20 +1953,111 @@
     return normalizeLookupToken(value).replace(/^sheet/, "");
   }
 
-  function availableEquipmentSheetKeys() {
-    const sheetKeys = new Set(EQUIPMENT_SHEETS.map((sheet) => sheet.key));
-    state.equipment.forEach((item) => {
-      const sheetKey = normalizeEquipmentSheetKey(item.group);
-      if (sheetKey && sheetKey !== "all") {
-        sheetKeys.add(sheetKey);
-      }
+  function prettifyEquipmentSheetLabel(value) {
+    const normalized = String(value || "").trim();
+    if (!normalized) return "Custom";
+    return normalized
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  function defaultEquipmentSheetEntries() {
+    return DEFAULT_EQUIPMENT_SHEETS.map((sheet) => ({ key: sheet.key, label: sheet.label }));
+  }
+
+  function equipmentSheetEntries() {
+    return Array.isArray(equipmentSheets) && equipmentSheets.length
+      ? equipmentSheets
+      : defaultEquipmentSheetEntries();
+  }
+
+  function isBuiltinEquipmentSheetKey(sheetKey) {
+    const normalized = normalizeEquipmentSheetKey(sheetKey);
+    return DEFAULT_EQUIPMENT_SHEETS.some((sheet) => sheet.key === normalized);
+  }
+
+  function saveEquipmentSheets() {
+    const custom = equipmentSheetEntries().filter((sheet) => !isBuiltinEquipmentSheetKey(sheet.key));
+    localStorage.setItem(EQUIPMENT_SHEETS_STORAGE_KEY, JSON.stringify(custom));
+  }
+
+  function loadEquipmentSheets() {
+    const byKey = new Map();
+    defaultEquipmentSheetEntries().forEach((sheet) => {
+      byKey.set(sheet.key, { key: sheet.key, label: sheet.label });
     });
-    return Array.from(sheetKeys);
+
+    try {
+      const saved = localStorage.getItem(EQUIPMENT_SHEETS_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) {
+        parsed.forEach((entry) => {
+          const rawLabel = typeof entry === "string" ? entry : String(entry?.label || entry?.key || "").trim();
+          const normalizedKey = normalizeEquipmentSheetKey(typeof entry === "string" ? entry : (entry?.key || rawLabel));
+          if (!normalizedKey || normalizedKey === "all" || isBuiltinEquipmentSheetKey(normalizedKey)) return;
+          const label = String(rawLabel || prettifyEquipmentSheetLabel(normalizedKey)).trim() || prettifyEquipmentSheetLabel(normalizedKey);
+          byKey.set(normalizedKey, { key: normalizedKey, label });
+        });
+      }
+    } catch {
+      // Ignore invalid stored sheet config.
+    }
+
+    const allEntry = byKey.get("all") || { key: "all", label: "All sheets" };
+    byKey.delete("all");
+    const base = DEFAULT_EQUIPMENT_SHEETS
+      .filter((sheet) => sheet.key !== "all")
+      .map((sheet) => byKey.get(sheet.key) || { key: sheet.key, label: sheet.label });
+
+    const custom = Array.from(byKey.values())
+      .filter((sheet) => !isBuiltinEquipmentSheetKey(sheet.key))
+      .sort((left, right) => String(left.label || "").localeCompare(String(right.label || ""), undefined, { sensitivity: "base" }));
+
+    return [allEntry, ...base, ...custom];
+  }
+
+  function addEquipmentSheet(sheetLabel) {
+    const label = String(sheetLabel || "").trim();
+    const key = normalizeEquipmentSheetKey(label);
+    if (!label) {
+      throw new Error("Sheet name is required.");
+    }
+    if (!key || key === "all") {
+      throw new Error("Choose a different sheet name.");
+    }
+    if (equipmentSheetEntries().some((sheet) => sheet.key === key)) {
+      throw new Error("A sheet with that name already exists.");
+    }
+
+    const allEntry = equipmentSheetEntries().find((sheet) => sheet.key === "all") || { key: "all", label: "All sheets" };
+    const withoutAll = equipmentSheetEntries().filter((sheet) => sheet.key !== "all");
+    equipmentSheets = [allEntry, ...withoutAll, { key, label }];
+    saveEquipmentSheets();
+    saveEquipmentSheetKey(key);
+    return key;
+  }
+
+  function removeEquipmentSheet(sheetKey) {
+    const normalized = normalizeEquipmentSheetKey(sheetKey);
+    if (!normalized || normalized === "all" || isBuiltinEquipmentSheetKey(normalized)) {
+      throw new Error("This sheet cannot be removed.");
+    }
+    equipmentSheets = equipmentSheetEntries().filter((sheet) => sheet.key !== normalized);
+    saveEquipmentSheets();
+    if (selectedEquipmentSheet === normalized) {
+      saveEquipmentSheetKey("all");
+    }
+  }
+
+  function availableEquipmentSheetKeys() {
+    return equipmentSheetEntries().map((sheet) => sheet.key);
   }
 
   function resolveEquipmentSheetKey(sheetKey) {
     const normalized = normalizeEquipmentSheetKey(sheetKey);
-    if (EQUIPMENT_SHEETS.some((sheet) => sheet.key === normalized)) {
+    if (equipmentSheetEntries().some((sheet) => sheet.key === normalized)) {
       return normalized;
     }
     return "all";
@@ -1098,18 +2065,24 @@
 
   function equipmentSheetLabel(sheetKey) {
     const normalized = resolveEquipmentSheetKey(sheetKey);
-    const preset = EQUIPMENT_SHEETS.find((sheet) => sheet.key === normalized);
-    return preset?.label || "Training";
+    const preset = equipmentSheetEntries().find((sheet) => sheet.key === normalized);
+    return preset?.label || "General";
   }
 
   function equipmentSheetPromptDefaultGroup(sheetKey) {
     const normalized = resolveEquipmentSheetKey(sheetKey);
-    if (normalized === "all") return "Training";
+    if (normalized === "all") {
+      const first = equipmentSheetEntries().find((sheet) => sheet.key !== "all");
+      return first?.label || "Training";
+    }
     return equipmentSheetLabel(normalized);
   }
 
   function equipmentGroupOptions() {
-    const defaults = ["Training", "Gameday", "Technik"];
+    const defaults = equipmentSheetEntries()
+      .filter((sheet) => sheet.key !== "all")
+      .map((sheet) => String(sheet.label || "").trim())
+      .filter(Boolean);
     const fromRows = Array.from(new Set((state.equipment || []).map((item) => String(item.group || "").trim()).filter(Boolean)));
     const all = Array.from(new Set([...defaults, ...fromRows]));
     return all.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
@@ -1120,13 +2093,17 @@
       {
         id: initial.id || generateEquipmentId(),
         group: initial.group || fallbackGroup,
+        itemKind: initial.itemKind || initial.item_kind || "item",
+        parentItemId: initial.parentItemId || initial.parent_item_id || "",
         category: initial.category || "",
         article: initial.article || "",
         quantity: initial.quantity || "",
         condition: initial.condition || "",
         location: initial.location || "",
         checkedAt: initial.checkedAt ? normalizeToIsoDate(initial.checkedAt) : (initial.id ? "" : getTodayIsoDate()),
-        notes: initial.notes || ""
+        notes: initial.notes || "",
+        photoFileId: initial.photoFileId || initial.photo_file_id || "",
+        photoUrl: initial.photoUrl || initial.photo_url || ""
       },
       0
     );
@@ -1149,7 +2126,7 @@
 
   function equipmentSheetCounts(rows) {
     const normalizedRows = sortEquipmentRows(rows);
-    return EQUIPMENT_SHEETS.map((sheet) => ({
+    return equipmentSheetEntries().map((sheet) => ({
       ...sheet,
       count: sheet.key === "all"
         ? normalizedRows.length
@@ -1157,34 +2134,154 @@
     }));
   }
 
+  function normalizeEquipmentKindFilter(value) {
+    const normalized = String(value || "all").trim().toLowerCase();
+    if (normalized === "containers") return "containers";
+    if (normalized === "items") return "items";
+    return "all";
+  }
+
+  function saveEquipmentKindFilter(value) {
+    const normalized = normalizeEquipmentKindFilter(value);
+    selectedEquipmentKindFilter = normalized;
+    saveStoredValue(EQUIPMENT_KIND_FILTER_KEY, normalized);
+  }
+
+  function filterEquipmentRowsByKind(rows, kindFilter) {
+    const normalized = normalizeEquipmentKindFilter(kindFilter);
+    if (normalized === "containers") {
+      return rows.filter((row) => String(row.itemKind || "").toLowerCase() === "container");
+    }
+    if (normalized === "items") {
+      return rows.filter((row) => String(row.itemKind || "").toLowerCase() !== "container");
+    }
+    return rows;
+  }
+
   function normalizeEquipmentItem(item, index) {
+    const itemKindRaw = String(item?.itemKind ?? item?.item_kind ?? "item").trim().toLowerCase();
+    const itemKind = itemKindRaw === "container" ? "container" : "item";
+    const id = String(item?.id || `equipment-${index + 1}`).trim();
+    const parentItemIdRaw = String(item?.parentItemId ?? item?.parent_item_id ?? "").trim();
+    const parentItemId = itemKind === "container" || parentItemIdRaw === id ? "" : parentItemIdRaw;
     return {
-      id: String(item?.id || `equipment-${index + 1}`).trim(),
+      id,
       group: String(item?.group || "General").trim() || "General",
+      itemKind,
+      parentItemId,
       category: String(item?.category || "").trim(),
       article: String(item?.article || "").trim(),
       quantity: String(item?.quantity || "").trim(),
       condition: String(item?.condition || "").trim(),
       location: String(item?.location || "").trim(),
       checkedAt: normalizeToIsoDate(item?.checkedAt),
-      notes: String(item?.notes || "").trim()
+      notes: String(item?.notes || "").trim(),
+      photoFileId: String(item?.photoFileId ?? item?.photo_file_id ?? "").trim(),
+      photoUrl: String(item?.photoUrl ?? item?.photo_url ?? "").trim()
     };
   }
 
   function normalizeEquipmentRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((item, index) => normalizeEquipmentItem(item, index))
-      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes);
+      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId);
+  }
+
+  function generateOrganizationId() {
+    const randomPart = Math.random().toString(36).slice(2, 8);
+    return `organization-${Date.now()}-${randomPart}`;
+  }
+
+  function organizationRowValue(row, keys) {
+    const list = Array.isArray(keys) ? keys : [keys];
+    for (const key of list) {
+      const direct = row?.[key];
+      if (direct !== undefined) return direct;
+      const camel = String(key || "").replace(/-([a-z])/gi, function (_, letter) {
+        return String(letter || "").toUpperCase();
+      });
+      if (row && Object.prototype.hasOwnProperty.call(row, camel)) return row[camel];
+      const underscore = String(key || "").replace(/-/g, "_");
+      if (row && Object.prototype.hasOwnProperty.call(row, underscore)) return row[underscore];
+    }
+    return undefined;
+  }
+
+  function normalizeOrganizationEntry(row, index) {
+    return {
+      id: String(organizationRowValue(row, ["id", "$id"]) || `organization-${index + 1}`).trim(),
+      headOf: String(organizationRowValue(row, ["Head-of", "head_of", "headOf", "head"]) || "").trim(),
+      verantwortung: String(organizationRowValue(row, ["verantwortung"]) || "").trim(),
+      coVerantwortung: String(organizationRowValue(row, ["co-verantwortung", "co_verantwortung", "coVerantwortung"]) || "").trim(),
+      aufgaben: String(organizationRowValue(row, ["aufgaben"]) || "").trim()
+    };
+  }
+
+  function sortOrganizationRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => normalizeOrganizationEntry(row, index))
+      .filter((row) => row.headOf || row.verantwortung || row.coVerantwortung || row.aufgaben)
+      .sort((left, right) => String(left.headOf || "").localeCompare(String(right.headOf || ""), undefined, { sensitivity: "base" }));
   }
 
   function sortEquipmentRows(rows) {
-    return [...normalizeEquipmentRows(rows)].sort((left, right) => {
+    const sorted = [...normalizeEquipmentRows(rows)].sort((left, right) => {
       const groupCompare = String(left.group || "").localeCompare(String(right.group || ""), undefined, { sensitivity: "base" });
       if (groupCompare !== 0) return groupCompare;
       const categoryCompare = String(left.category || "").localeCompare(String(right.category || ""), undefined, { sensitivity: "base" });
       if (categoryCompare !== 0) return categoryCompare;
       return String(left.article || "").localeCompare(String(right.article || ""), undefined, { sensitivity: "base" });
     });
+    const byParent = new Map();
+    sorted.forEach((item) => {
+      const parentId = String(item.parentItemId || "").trim();
+      if (!parentId) return;
+      const list = byParent.get(parentId) || [];
+      list.push(item);
+      byParent.set(parentId, list);
+    });
+    const roots = [];
+    const seen = new Set();
+    sorted.forEach((item) => {
+      const parentId = String(item.parentItemId || "").trim();
+      const parentExists = parentId && sorted.some((candidate) => String(candidate.id) === parentId);
+      if (!parentId || !parentExists) {
+        roots.push(item);
+      }
+    });
+    const flattened = [];
+    const appendItem = (item) => {
+      const itemId = String(item.id || "");
+      if (!itemId || seen.has(itemId)) return;
+      seen.add(itemId);
+      flattened.push(item);
+      const children = byParent.get(itemId) || [];
+      children.forEach(appendItem);
+    };
+    roots.forEach(appendItem);
+    sorted.forEach(appendItem);
+    return flattened;
+  }
+
+  function equipmentContainerOptions(rows, currentItemId = "", groupHint = "") {
+    return sortEquipmentRows(rows)
+      .filter((item) => item.itemKind === "container")
+      .filter((item) => String(item.id) !== String(currentItemId || ""))
+      .filter((item) => !groupHint || String(item.group || "").trim().toLowerCase() === String(groupHint || "").trim().toLowerCase());
+  }
+
+  function isEquipmentContainerExpanded(containerId) {
+    return expandedEquipmentContainerIds.includes(String(containerId || "").trim());
+  }
+
+  function setEquipmentContainerExpanded(containerId, expanded) {
+    const normalizedId = String(containerId || "").trim();
+    if (!normalizedId) return;
+    const next = new Set(expandedEquipmentContainerIds);
+    if (expanded) next.add(normalizedId);
+    else next.delete(normalizedId);
+    expandedEquipmentContainerIds = Array.from(next);
+    saveStoredArray(EQUIPMENT_EXPANDED_CONTAINERS_KEY, expandedEquipmentContainerIds);
   }
 
   function loadEquipmentFromStorage() {
@@ -1213,6 +2310,7 @@
       fees: Array.isArray(value.fees) ? value.fees.map(normalizeFee) : [],
       events: Array.isArray(value.events) ? value.events : [],
       invites: Array.isArray(value.invites) ? value.invites : [],
+      organization: sortOrganizationRows(value.organization),
       equipment: sortEquipmentRows(value.equipment)
     };
   }
@@ -1268,11 +2366,60 @@
 
   function signedInMemberRecord() {
     if (!authState.user) return null;
+    const explicitMemberId = signedInUserMemberId();
+    if (explicitMemberId) {
+      const explicitMatch = state.members.find((member) => String(member.id || "") === explicitMemberId);
+      if (explicitMatch) return explicitMatch;
+    }
     const profileMatch = state.members.find((member) => String(member.profileId || "") === String(authState.user.id || ""));
     if (profileMatch) return profileMatch;
     const email = signedInUserEmail();
     if (!email) return null;
     return state.members.find((member) => String(member.email || "").trim().toLowerCase() === email) || null;
+  }
+
+  async function repairCurrentUserMemberLink() {
+    if (!backendClient || !authState.user) return;
+
+    const currentUserId = String(authState.user?.id || "").trim();
+    const currentUserEmail = String(authState.user?.email || "").trim().toLowerCase();
+    if (!currentUserId || !currentUserEmail) return;
+
+    const memberRowsResponse = await backendClient
+      .from("members")
+      .select("id, email, profile_id, deleted_at");
+
+    if (memberRowsResponse.error) {
+      throw memberRowsResponse.error;
+    }
+
+    const memberRows = Array.isArray(memberRowsResponse.data) ? memberRowsResponse.data : [];
+    const exactEmailMatches = memberRows.filter((row) => String(row?.email || "").trim().toLowerCase() === currentUserEmail);
+    if (!exactEmailMatches.length) return;
+
+    if (exactEmailMatches.some((row) => String(row?.profile_id || "").trim() === currentUserId)) {
+      return;
+    }
+
+    const nonDeletedMatches = exactEmailMatches.filter((row) => !row?.deleted_at);
+    const preferredPool = nonDeletedMatches.length ? nonDeletedMatches : exactEmailMatches;
+    const candidates = preferredPool.filter((row) => !String(row?.profile_id || "").trim());
+
+    if (candidates.length !== 1) {
+      return;
+    }
+
+    const targetMemberId = String(candidates[0]?.id || "").trim();
+    if (!targetMemberId) return;
+
+    const updateResponse = await backendClient
+      .from("members")
+      .update({ profile_id: currentUserId })
+      .eq("id", targetMemberId);
+
+    if (updateResponse.error) {
+      throw updateResponse.error;
+    }
   }
 
   function canEditMemberProfile(member) {
@@ -1337,6 +2484,9 @@
   }
 
   function memberFeesByPeriod(memberId) {
+    if (profileFinanceModule && typeof profileFinanceModule.memberFeesByPeriod === "function") {
+      return profileFinanceModule.memberFeesByPeriod(state.fees, memberId);
+    }
     const map = new Map();
     state.fees
       .filter((fee) => String(fee.memberId) === String(memberId))
@@ -1347,6 +2497,12 @@
   }
 
   function memberIban(memberId) {
+    const member = memberById(memberId);
+    if (profileFinanceModule && typeof profileFinanceModule.memberIban === "function") {
+      return profileFinanceModule.memberIban(member, state.fees, memberId);
+    }
+    const memberLevelIban = String(member?.iban || "").trim();
+    if (memberLevelIban) return memberLevelIban;
     const fees = state.fees
       .filter((fee) => String(fee.memberId) === String(memberId) && String(fee.iban || "").trim())
       .sort((left, right) => String(right.feePeriod || "").localeCompare(String(left.feePeriod || "")));
@@ -1400,8 +2556,12 @@
   function memberInviteState(member) {
     if (member?.activatedAt) return "activated";
     if (member?.inviteSentAt) return "invited";
-    if (member?.profileId) return "activated"; // Fallback for old records without activatedAt
     return "ready";
+  }
+
+  function memberInviteDateLabel(member) {
+    const inviteDate = String(member?.inviteSentAt || "").trim();
+    return inviteDate ? formatDate(inviteDate) : "";
   }
 
   function renderMemberInviteAction(member) {
@@ -1410,14 +2570,17 @@
     if (!String(member?.email || "").trim()) return "";
     const state = memberInviteState(member);
     if (state === "activated") return "";
-    const label = state === "invited" ? "Invited" : "Invite";
+    const label = state === "invited" ? "Reinvite" : "Invite";
     return `<button class="ghost-button small-button invite-member-button" type="button" data-member-id="${member.id}" data-invite-state="${state}">${label}</button>`;
   }
 
   function memberInviteStateLabel(member) {
     const state = memberInviteState(member);
     if (state === "activated") return "Activated";
-    if (state === "invited") return "Invite pending";
+    if (state === "invited") {
+      const dateLabel = memberInviteDateLabel(member);
+      return dateLabel ? `Invited at ${dateLabel}` : "Invite pending";
+    }
     return "Not invited";
   }
 
@@ -1427,7 +2590,10 @@
     if (!String(member?.email || "").trim()) return `<span class="meta">No email</span>`;
     const state = memberInviteState(member);
     if (state === "activated") return statusPill("activated", "Activated");
-    if (state === "invited") return statusPill("invited", "Invited");
+    if (state === "invited") {
+      const dateLabel = memberInviteDateLabel(member);
+      return statusPill("invited", dateLabel ? `Invited at ${dateLabel}` : "Invited");
+    }
     return statusPill("not_invited", "Not invited");
   }
 
@@ -1436,45 +2602,29 @@
     const profileId = String(authState.user?.id || "").trim();
     if (!profileId) return;
 
-    // Find member(s) by profile_id where invite_sent_at is set
     const memberQueryResponse = await backendClient
       .from("members")
-      .select("id, invite_sent_at")
-      .eq("profile_id", profileId)
-      .not("invite_sent_at", "is", null);
+      .select("id, invite_sent_at, activated_at")
+      .eq("profile_id", profileId);
 
     if (memberQueryResponse.error) {
-      if (!/invite_sent_at/i.test(String(memberQueryResponse.error?.message || ""))) {
-        throw memberQueryResponse.error;
-      }
-      return;
+      throw memberQueryResponse.error;
     }
 
-    const members = memberQueryResponse.data || [];
+    const members = (memberQueryResponse.data || []).filter((member) => member && member.invite_sent_at);
     for (const member of members) {
       const memberId = String(member.id || "").trim();
       if (!memberId) continue;
 
-      // Mark member as activated
-      try {
-        await fetch(apiUrl(`/api/members/${encodeURIComponent(memberId)}/activate`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
-      } catch (error) {
-        console.error("Could not mark member as activated:", error);
-      }
-    }
+      const updateResponse = await backendClient
+        .from("members")
+        .update({
+          invite_sent_at: null,
+          activated_at: member.activated_at || new Date().toISOString()
+        })
+        .eq("id", memberId);
 
-    // Clear invite_sent_at for this profile
-    const updateResponse = await backendClient
-      .from("members")
-      .update({ invite_sent_at: null })
-      .eq("profile_id", profileId)
-      .not("invite_sent_at", "is", null);
-
-    if (updateResponse.error) {
-      if (!/invite_sent_at/i.test(String(updateResponse.error?.message || ""))) {
+      if (updateResponse.error) {
         throw updateResponse.error;
       }
     }
@@ -1504,6 +2654,22 @@
 
   function formatMoney(amount) {
     return new Intl.NumberFormat("de-AT", { style: "currency", currency: "EUR" }).format(Number(amount || 0));
+  }
+
+  function normalizeIbanText(value) {
+    if (ibanModule && typeof ibanModule.normalizeIbanText === "function") {
+      return ibanModule.normalizeIbanText(value);
+    }
+    return String(value || "").replace(/\s+/g, "").toUpperCase().trim();
+  }
+
+  function formatIbanDisplay(value) {
+    if (ibanModule && typeof ibanModule.formatIbanDisplay === "function") {
+      return ibanModule.formatIbanDisplay(value);
+    }
+    const normalized = normalizeIbanText(value);
+    if (!normalized) return "";
+    return normalized.replace(/(.{4})/g, "$1 ").trim();
   }
 
   function formatDate(dateText) {
@@ -1618,6 +2784,21 @@
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function decodeBase64Unicode(base64Value) {
+    const normalized = String(base64Value || "").trim();
+    if (!normalized) return "";
+    const binary = window.atob(normalized);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    if (typeof TextDecoder === "function") {
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+    let escaped = "";
+    bytes.forEach((value) => {
+      escaped += `%${value.toString(16).padStart(2, "0")}`;
+    });
+    return decodeURIComponent(escaped);
   }
 
   function downloadCsv(columns, rows, fileName) {
@@ -1973,9 +3154,11 @@
   }
 
   function applyBootstrap(bootstrap) {
+    const previousOrganization = Array.isArray(state?.organization) ? state.organization : [];
     const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
     state = normalizeState({
       ...bootstrap,
+      organization: Array.isArray(bootstrap?.organization) ? bootstrap.organization : previousOrganization,
       equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment
     });
     bootstrapMeta = {
@@ -2017,6 +3200,114 @@
       return normalized;
     }
 
+  function publicRosterField(row, ...keys) {
+    for (const key of keys) {
+      const normalizedKey = String(key || "");
+      if (Object.prototype.hasOwnProperty.call(row || {}, normalizedKey)) return row[normalizedKey];
+      const camelKey = normalizedKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      if (Object.prototype.hasOwnProperty.call(row || {}, camelKey)) return row[camelKey];
+    }
+    return undefined;
+  }
+
+  function publicRosterDisplayName(row) {
+    const firstName = String(publicRosterField(row, "first_name", "firstName") || "").trim();
+    const lastName = String(publicRosterField(row, "last_name", "lastName") || "").trim();
+    const displayName = String(publicRosterField(row, "display_name", "displayName", "name") || "").trim();
+    return {
+      firstName,
+      lastName,
+      displayName: `${firstName} ${lastName}`.trim() || displayName || "Unknown player"
+    };
+  }
+
+  function mapPublicRosterMemberRow(row, index) {
+    const { firstName, lastName, displayName } = publicRosterDisplayName(row);
+    const jerseyRaw = publicRosterField(row, "jersey_number", "jerseyNumber");
+    const membershipStatus = String(publicRosterField(row, "membership_status", "membershipStatus") || "pending").trim() || "pending";
+    const roles = capabilitySet(parseJsonArrayField(publicRosterField(row, "roles_json", "rolesJson"), []));
+    return normalizeMember({
+      id: String(publicRosterField(row, "id", "$id") || `roster-${index + 1}`),
+      firstName,
+      lastName,
+      name: displayName,
+      email: "",
+      positions: parseJsonArrayField(publicRosterField(row, "positions_json", "positionsJson"), []),
+      roles,
+      rosterImage: String(publicRosterField(row, "rosterImage", "roster_image") || "").trim(),
+      jerseyNumber: jerseyRaw === null || jerseyRaw === undefined || jerseyRaw === "" ? null : Number(jerseyRaw),
+      active: membershipStatus === "active",
+      membershipStatus,
+      deletedAt: publicRosterField(row, "deleted_at", "deletedAt") || null,
+      passStatus: "missing",
+      feeStatus: "pending",
+      notes: ""
+    }, index);
+  }
+
+  async function loadPublicRosterBootstrap() {
+    if (!backendClient) return;
+    let response = await backendClient
+      .from("members")
+      .select("id, first_name, last_name, display_name, positions_json, roles_json, rosterImage, jersey_number, membership_status, deleted_at");
+    if (response.error && /rosterImage/i.test(String(response.error?.message || ""))) {
+      response = await backendClient
+        .from("members")
+        .select("id, first_name, last_name, display_name, positions_json, roles_json, jersey_number, membership_status, deleted_at");
+    }
+    if (response.error) {
+      throw response.error;
+    }
+
+    const publicMembers = (response.data || []).map(mapPublicRosterMemberRow);
+    state = normalizeState({
+      ...state,
+      source: "appwrite-public",
+      permissionsModel: bootstrapMeta.permissionsModel || demoData.permissionsModel,
+      members: publicMembers
+    });
+    bootstrapMeta = {
+      source: "appwrite-public",
+      permissionsModel: bootstrapMeta.permissionsModel || demoData.permissionsModel
+    };
+    publicRosterStatus = publicMembers.length
+      ? ""
+      : "No public roster players were returned from Appwrite.";
+    publicRosterLoadedAt = Date.now();
+    saveState();
+  }
+
+  function publicRosterErrorMessage(error) {
+    const message = String(error?.message || error || "Could not load the public roster.").trim();
+    if (/permission|unauthorized|missing scope|read/i.test(message)) {
+      return "The roster page is public, but Appwrite is not allowing guest reads for the members collection yet.";
+    }
+    return message;
+  }
+
+  function ensurePublicRosterLoaded() {
+    if (!backendClient || authState.user || publicRosterLoadPromise || publicRosterLoadAttempted) return;
+    publicRosterLoadAttempted = true;
+    publicRosterStatus = publicRosterStatus || "Loading roster...";
+    publicRosterLoadPromise = loadPublicRosterBootstrap()
+      .then(() => {
+        publicRosterStatus = publicRosterStatus || "";
+        mount();
+        switchView("roster");
+      })
+      .catch((error) => {
+        publicRosterStatus = publicRosterErrorMessage(error);
+        authState.status = publicRosterStatus;
+        mount();
+        switchView("roster");
+      })
+      .finally(() => {
+        publicRosterLoadPromise = null;
+      });
+    mount();
+    switchView("roster");
+  }
+
   async function loadRemoteBootstrap() {
     if (!backendClient) {
       authState.status = "Appwrite client not ready yet. Please refresh the page and try again.";
@@ -2027,19 +3318,10 @@
       return;
     }
 
-    const currentUserId = String(authState.user?.id || "").trim();
-    const currentUserEmail = String(authState.user?.email || "").trim();
-    if (currentUserId && currentUserEmail) {
-      // Link member rows to current Appwrite auth user by exact email match.
-      // This also repairs rows migrated from legacy systems where profile_id references a non-Appwrite UUID.
-      await backendClient
-        .from("members")
-        .update({ profile_id: currentUserId })
-        .ilike("email", currentUserEmail);
-    }
+    await repairCurrentUserMemberLink();
 
-    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin" || currentAccessRole === "player";
-    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin" || currentAccessRole === "player";
+    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
 
     const queryWarnings = [];
@@ -2055,9 +3337,21 @@
       return response.data || [];
     };
 
-    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    }
     if (memberRowsResponse.error && /(invite_sent_at|activated_at)/i.test(String(memberRowsResponse.error?.message || ""))) {
-      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at");
+      if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
+        memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      }
+    }
+    if (memberRowsResponse.error && /iban/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at");
+      if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
+        memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at");
+      }
     }
     if (memberRowsResponse.error) {
       throw memberRowsResponse.error;
@@ -2072,6 +3366,7 @@
     const feeRows = canReadFeesOnline
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
+    const organizationRows = await selectMaybe("organization", "*", true);
     const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
     const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
     const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
@@ -2086,14 +3381,29 @@
       rolesByProfile.set(profileId, roles);
     });
 
+    const canonicalMemberIdByAnyId = new Map();
+    (memberRows || []).forEach((row) => {
+      const canonicalMemberId = String(row.id || "").trim();
+      const legacyMemberId = String(row.legacy_id || "").trim();
+      if (canonicalMemberId) {
+        canonicalMemberIdByAnyId.set(canonicalMemberId, canonicalMemberId);
+      }
+      if (legacyMemberId && canonicalMemberId) {
+        canonicalMemberIdByAnyId.set(legacyMemberId, canonicalMemberId);
+      }
+    });
+
     const passesByMember = new Map();
     (passRows || []).forEach((row) => {
-      passesByMember.set(String(row.member_id || ""), row);
+      const rawMemberId = String(row.member_id || "").trim();
+      const canonicalMemberId = canonicalMemberIdByAnyId.get(rawMemberId) || rawMemberId;
+      passesByMember.set(canonicalMemberId, row);
     });
 
     const feesByMember = new Map();
     (feeRows || []).forEach((row) => {
-      const memberId = String(row.member_id || "");
+      const rawMemberId = String(row.member_id || "").trim();
+      const memberId = canonicalMemberIdByAnyId.get(rawMemberId) || rawMemberId;
       const list = feesByMember.get(memberId) || [];
       list.push(row);
       feesByMember.set(memberId, list);
@@ -2122,7 +3432,7 @@
       const { firstName, lastName, displayName } = normalizeDisplayName(row);
       const memberId = String(row.id || "");
       const pass = passesByMember.get(memberId) || null;
-      const passExpiry = String(pass?.expires_on || "");
+      const passExpiry = normalizeToIsoDate(pass?.expires_on || pass?.expiry_date || "");
       const licenseName = String(pass?.federation_reference || "");
       const rawPassStatus = String(pass?.pass_status || "");
       const memberFees = feesByMember.get(memberId) || [];
@@ -2133,8 +3443,11 @@
         lastName,
         name: displayName,
         email: String(row.email || ""),
+        iban: String(row.iban || latestFee?.iban || "").trim(),
+        memberIban: String(row.iban || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
+        rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
         jerseyNumber: row.jersey_number === null || row.jersey_number === undefined ? null : Number(row.jersey_number),
         active: String(row.membership_status || "") === "active",
         rookie: false,
@@ -2161,7 +3474,7 @@
 
     const fees = (feeRows || []).map((row) => ({
       id: String(row.id || ""),
-      memberId: String(row.member_id || ""),
+      memberId: canonicalMemberIdByAnyId.get(String(row.member_id || "").trim()) || String(row.member_id || "").trim(),
       season: String(row.season_label || ""),
       feePeriod: String(row.fee_period || row.season_label || ""),
       amount: Number(row.amount_cents || 0) / 100,
@@ -2203,6 +3516,12 @@
       opens: 0,
       confirmations: 0
     }));
+    const organization = sortOrganizationRows(organizationRows || []);
+    const previousMembers = Array.isArray(state?.members) ? state.members : [];
+    const previousFees = Array.isArray(state?.fees) ? state.fees : [];
+    const previousEvents = Array.isArray(state?.events) ? state.events : [];
+    const previousInvites = Array.isArray(state?.invites) ? state.invites : [];
+    const shouldUseCachedBootstrap = !members.length && previousMembers.length;
 
     const currentUserRoles = (memberRoleRows || [])
       .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
@@ -2222,12 +3541,15 @@
     applyBootstrap({
       source: "appwrite",
       permissionsModel: demoData.permissionsModel,
-      members,
-      fees,
-      events,
-      invites
+      members: shouldUseCachedBootstrap ? previousMembers : members,
+      fees: shouldUseCachedBootstrap && !fees.length ? previousFees : fees,
+      organization: organization.length ? organization : state.organization,
+      events: shouldUseCachedBootstrap && !events.length ? previousEvents : events,
+      invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites
     });
-    authState.status = `Appwrite data loaded for ${authDisplayName() || authState.user.email}.`;
+    authState.status = shouldUseCachedBootstrap
+      ? `Appwrite session restored for ${authDisplayName() || authState.user.email}. Showing cached data while remote records refresh.`
+      : `Appwrite data loaded for ${authDisplayName() || authState.user.email}.`;
     if (queryWarnings.length) {
       authState.status += ` Some data may be hidden by permissions (${queryWarnings.join(" | ")}).`;
     }
@@ -2238,7 +3560,27 @@
     const cached = getCacheWithTTL(BOOTSTRAP_CACHE_KEY);
     if (cached) {
       applyBootstrap(cached);
-      return;
+      if (!(backendClient && authState.user)) {
+        if (backendClient && getRouteView() === "roster") {
+          try {
+            publicRosterLoadAttempted = true;
+            await loadPublicRosterBootstrap();
+            setCacheWithTTL(BOOTSTRAP_CACHE_KEY, {
+              members: state.members,
+              fees: state.fees,
+              events: state.events,
+              invites: state.invites,
+              equipment: state.equipment,
+              source: bootstrapMeta.source,
+              permissionsModel: bootstrapMeta.permissionsModel
+            });
+          } catch (error) {
+            publicRosterStatus = publicRosterErrorMessage(error);
+            authState.status = publicRosterStatus;
+          }
+        }
+        return;
+      }
     }
 
     // Load from source and cache
@@ -2261,7 +3603,9 @@
     const cached = getCacheWithTTL(EQUIPMENT_CACHE_KEY);
     if (cached) {
       state.equipment = cached;
-      return;
+      if (!(backendClient && authState.user)) {
+        return;
+      }
     }
 
     // Load from source and cache
@@ -2291,6 +3635,20 @@
     // Pure Appwrite only
     if (backendClient && authState.user) {
       await loadRemoteBootstrap();
+    } else if (backendClient && getRouteView() === "roster") {
+      try {
+        publicRosterLoadAttempted = true;
+        await loadPublicRosterBootstrap();
+      } catch (error) {
+        publicRosterStatus = publicRosterErrorMessage(error);
+        authState.status = publicRosterStatus;
+      }
+    } else if (backendClient && isPublicView(getRouteView())) {
+      bootstrapMeta = {
+        source: state.source || "demo",
+        permissionsModel: state.permissionsModel || demoData.permissionsModel
+      };
+      ensureValidFeeFilter();
     } else {
       await loadLocalBootstrap();
     }
@@ -2327,13 +3685,17 @@
       {
         id: row?.id,
         group: row?.group_name,
+        itemKind: row?.item_kind,
+        parentItemId: row?.parent_item_id,
         category: row?.category,
         article: row?.article,
         quantity: row?.quantity,
         condition: row?.condition,
         location: row?.location,
         checkedAt,
-        notes: row?.notes
+        notes: row?.notes,
+        photoFileId: row?.photo_file_id ?? row?.photoFileId,
+        photoUrl: row?.photo_url ?? row?.photoUrl
       },
       index
     );
@@ -2343,39 +3705,60 @@
     return {
       id: String(row?.id || generateEquipmentId()).trim(),
       group_name: String(row?.group || "General").trim() || "General",
+      item_kind: String(row?.itemKind || "item").trim() || "item",
+      parent_item_id: String(row?.parentItemId || "").trim() || null,
       category: String(row?.category || "").trim() || null,
       article: String(row?.article || "").trim() || null,
       quantity: String(row?.quantity || "").trim() || null,
       condition: String(row?.condition || "").trim() || null,
       location: String(row?.location || "").trim() || null,
       checked_at: String(row?.checkedAt || "").trim() || null,
-      notes: String(row?.notes || "").trim() || null
+      notes: String(row?.notes || "").trim() || null,
+      photo_file_id: String(row?.photoFileId || "").trim() || null,
+      photo_url: String(row?.photoUrl || "").trim() || null
     };
   }
 
   async function loadEquipmentData() {
     const localRows = loadEquipmentFromStorage();
+    const existingRows = sortEquipmentRows(state.equipment || []);
 
     if (backendClient && authState.user) {
       try {
         const remoteResponse = await backendClient
           .from("equipment_inventory")
-          .select("id, group_name, category, article, quantity, condition, location, checked_at, notes");
+          .select("id, group_name, item_kind, parent_item_id, category, article, quantity, condition, location, checked_at, notes, photo_file_id, photo_url");
 
-        if (remoteResponse.error) {
+        let remoteData = remoteResponse.data || [];
+        if (remoteResponse.error && /(item_kind|parent_item_id|photo_file_id|photo_url)/i.test(String(remoteResponse.error?.message || ""))) {
+          const legacyResponse = await backendClient
+            .from("equipment_inventory")
+            .select("id, group_name, category, article, quantity, condition, location, checked_at, notes");
+          if (legacyResponse.error) {
+            throw legacyResponse.error;
+          }
+          remoteData = legacyResponse.data || [];
+          equipmentStatus = "Some equipment table attributes are not on the remote table yet. Photo and subgroup fields may only work locally until the table is updated.";
+        } else if (remoteResponse.error) {
           throw remoteResponse.error;
         }
-
-        const remoteRows = sortEquipmentRows((remoteResponse.data || []).map(mapEquipmentRowFromRemote));
+        const remoteRows = sortEquipmentRows(remoteData.map(mapEquipmentRowFromRemote));
+        const fallbackRows = localRows.length ? localRows : existingRows;
         equipmentStorageMode = "remote";
-        equipmentStatus = remoteRows.length
+        if (!remoteRows.length && fallbackRows.length) {
+          equipmentStatus = "Remote equipment temporarily returned no rows. Showing cached equipment while the session refreshes.";
+          saveEquipmentToStorage(fallbackRows);
+          return;
+        }
+        equipmentStatus = equipmentStatus || (remoteRows.length
           ? ""
-          : "No equipment entries found in database yet. Admins can add items now.";
+          : "No equipment entries found in database yet. Admins can add items now.");
         saveEquipmentToStorage(remoteRows);
         return;
       } catch (error) {
         equipmentStorageMode = "local";
         equipmentStatus = `Equipment remote table unavailable. Using local storage (${String(error?.message || "unknown error")}).`;
+        recordDiagnostic("error", "equipment", "Remote equipment load failed.", summarizeDiagnosticError(error));
       }
     } else {
       equipmentStorageMode = "local";
@@ -2387,6 +3770,12 @@
       return;
     }
 
+    if (existingRows.length) {
+      equipmentStatus = equipmentStatus || "Showing cached equipment.";
+      saveEquipmentToStorage(existingRows);
+      return;
+    }
+
     saveEquipmentToStorage([]);
   }
 
@@ -2395,16 +3784,35 @@
       throw new Error("Only admins can edit equipment.");
     }
 
-    const normalizedRow = normalizeEquipmentItem({ ...row, id: row?.id || generateEquipmentId() }, 0);
+    const normalizedId = String(row?.id || generateEquipmentId()).trim();
+    const draftPhoto = equipmentPhotoDraftsById[normalizedId] || null;
+    const isUpdate = (Array.isArray(state.equipment) ? state.equipment : []).some((item) => String(item.id) === normalizedId);
+    const normalizedRow = normalizeEquipmentItem({
+      ...row,
+      id: normalizedId,
+      photoFileId: row?.photoFileId || draftPhoto?.photoFileId || "",
+      photoUrl: row?.photoUrl || draftPhoto?.photoUrl || ""
+    }, 0);
 
     if (backendClient && authState.user) {
       const remotePayload = mapEquipmentRowToRemote(normalizedRow);
-      const response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
+      let response = await backendClient.from("equipment_inventory").upsert(remotePayload, { onConflict: "id" });
+      if (response.error && /(item_kind|parent_item_id|photo_file_id|photo_url)/i.test(String(response.error?.message || ""))) {
+        const fallbackPayload = Object.assign({}, remotePayload);
+        delete fallbackPayload.item_kind;
+        delete fallbackPayload.parent_item_id;
+        delete fallbackPayload.photo_file_id;
+        delete fallbackPayload.photo_url;
+        response = await backendClient.from("equipment_inventory").upsert(fallbackPayload, { onConflict: "id" });
+        if (!response.error) {
+          equipmentStatus = "Some equipment table attributes are not on the remote table yet. Photo and subgroup fields are only stored locally until the table is updated.";
+        }
+      }
       if (response.error) {
         throw response.error;
       }
       equipmentStorageMode = "remote";
-      equipmentStatus = "";
+      equipmentStatus = equipmentStatus || "";
     }
 
     const currentRows = Array.isArray(state.equipment) ? state.equipment : [];
@@ -2413,6 +3821,23 @@
       ? currentRows.map((item, index) => (index === existingIndex ? normalizedRow : item))
       : [...currentRows, normalizedRow];
     saveEquipmentToStorage(nextRows);
+    if (normalizedRow.photoFileId || normalizedRow.photoUrl) {
+      equipmentPhotoDraftsById[normalizedId] = {
+        photoFileId: normalizedRow.photoFileId || "",
+        photoUrl: normalizedRow.photoUrl || ""
+      };
+    } else {
+      delete equipmentPhotoDraftsById[normalizedId];
+    }
+    recordActivity("equipment", isUpdate ? "Equipment item updated." : "Equipment item created.", {
+      action: isUpdate ? "equipment_updated" : "equipment_created",
+      equipmentId: normalizedRow.id,
+      article: normalizedRow.article,
+      itemKind: normalizedRow.itemKind,
+      group: normalizedRow.group,
+      quantity: normalizedRow.quantity,
+      hasPhoto: Boolean(normalizedRow.photoFileId || normalizedRow.photoUrl)
+    });
   }
 
   async function deleteEquipmentRow(equipmentId) {
@@ -2422,6 +3847,11 @@
 
     const normalizedId = String(equipmentId || "").trim();
     if (!normalizedId) return;
+    const children = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.parentItemId || "") === normalizedId);
+    if (children.length) {
+      throw new Error("Delete or move the contained items first.");
+    }
+    const currentRow = (Array.isArray(state.equipment) ? state.equipment : []).find((item) => String(item.id) === normalizedId);
 
     if (backendClient && authState.user) {
       const response = await backendClient.from("equipment_inventory").delete().eq("id", normalizedId);
@@ -2432,8 +3862,20 @@
       equipmentStatus = "";
     }
 
+    if (currentRow?.photoFileId || currentRow?.photoUrl) {
+      await deleteEquipmentPhotoFromStorage(normalizedId, currentRow.photoFileId);
+    }
+    delete equipmentPhotoDraftsById[normalizedId];
+
     const nextRows = (Array.isArray(state.equipment) ? state.equipment : []).filter((item) => String(item.id) !== normalizedId);
     saveEquipmentToStorage(nextRows);
+    recordActivity("equipment", "Equipment item deleted.", {
+      action: "equipment_deleted",
+      equipmentId: normalizedId,
+      article: currentRow?.article || "",
+      itemKind: currentRow?.itemKind || "",
+      group: currentRow?.group || ""
+    });
   }
 
   function normalizeFeeStatusValue(value) {
@@ -2467,6 +3909,13 @@
   // Permission error fallback removed - trusting Appwrite permissions
 
   // Removed server admin fallback functions - now using pure Appwrite
+  async function updateFeeStatusesBulkViaServerAdmin() {
+    throw new Error("Fee bulk update fallback is disabled. Grant the current Appwrite admin role direct write access to membership_fees.");
+  }
+
+  async function updateFeeRowViaServerAdmin() {
+    throw new Error("Fee update fallback is disabled. Grant the current Appwrite admin role direct write access to membership_fees.");
+  }
 
   async function saveMemberViaRemote(memberPayload) {
     if (!backendClient) {
@@ -2496,7 +3945,7 @@
       })();
       const normalizedPassExpiry = normalizedPassStatus === "missing"
         ? ""
-        : String(memberPayload.passExpiry || "").trim();
+        : normalizeToIsoDate(memberPayload.passExpiry || "");
 
       const patch = {
         first_name: firstName || null,
@@ -2510,6 +3959,9 @@
         notes: String(memberPayload.notes || "").trim(),
         deleted_at: null
       };
+      if (Object.prototype.hasOwnProperty.call(memberPayload, "iban")) {
+        patch.iban = String(memberPayload.iban || "").trim() || null;
+      }
 
       let savedMemberId = memberId;
 
@@ -2580,7 +4032,19 @@
 
       invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
+      recordActivity("members", memberId ? "Member updated." : "Member created.", {
+        action: memberId ? "member_updated" : "member_created",
+        memberId: savedMemberId || memberId,
+        displayName,
+        email: String(memberPayload.email || "").trim(),
+        roles,
+        positions,
+        membershipStatus: patch.membership_status,
+        jerseyNumber: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+        passStatus: passFieldsProvided ? normalizedPassStatus : ""
+      });
     } catch (error) {
+      recordDiagnostic("error", "members", "Member save failed.", summarizeDiagnosticError(error));
       console.error("[Appwrite Save Failed]", error);
       throw error;
     }
@@ -2588,6 +4052,7 @@
 
   async function removeMemberViaRemote(memberId) {
     if (!backendClient) throw new Error("Appwrite client not available.");
+    const member = state.members.find((entry) => String(entry.id) === String(memberId || ""));
     const response = await backendClient
       .from("members")
       .update({ deleted_at: new Date().toISOString() })
@@ -2595,14 +4060,27 @@
     if (response.error) throw response.error;
     invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
+    recordActivity("members", "Member deleted.", {
+      action: "member_deleted",
+      memberId: String(memberId || "").trim(),
+      displayName: member?.name || "",
+      email: member?.email || ""
+    });
   }
 
   async function undeleteMemberViaRemote(memberId) {
     if (!backendClient) throw new Error("Appwrite client not available.");
+    const member = state.members.find((entry) => String(entry.id) === String(memberId || ""));
     const response = await backendClient.from("members").update({ deleted_at: null }).eq("id", memberId);
     if (response.error) throw response.error;
     invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
+    recordActivity("members", "Member restored.", {
+      action: "member_restored",
+      memberId: String(memberId || "").trim(),
+      displayName: member?.name || "",
+      email: member?.email || ""
+    });
   }
 
   async function mergeMembersViaRemote({ keepMemberId, removeMemberId }) {
@@ -2610,6 +4088,8 @@
 
     const keepId = String(keepMemberId || "").trim();
     const removeId = String(removeMemberId || "").trim();
+    const keepMember = state.members.find((entry) => String(entry.id) === keepId);
+    const removeMember = state.members.find((entry) => String(entry.id) === removeId);
     if (!keepId || !removeId || keepId === removeId) {
       throw new Error("Keep and remove member must be different.");
     }
@@ -2636,6 +4116,13 @@
 
     invalidateCache(BOOTSTRAP_CACHE_KEY);
     await loadBootstrapData();
+    recordActivity("members", "Members merged.", {
+      action: "member_merged",
+      keepMemberId: keepId,
+      keepDisplayName: keepMember?.name || "",
+      removeMemberId: removeId,
+      removeDisplayName: removeMember?.name || ""
+    });
   }
 
   async function updateFeeStatusesBulkViaRemote({ feePeriod, status, memberIds }) {
@@ -2670,7 +4157,15 @@
 
       invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
+      recordActivity("fees", "Fee statuses updated in bulk.", {
+        action: "fee_bulk_status_updated",
+        feePeriod: String(feePeriod || "").trim(),
+        status: normalizedStatus,
+        memberIds: ids,
+        rowCount: rows.length
+      });
     } catch (error) {
+      recordDiagnostic("error", "fees", "Bulk fee update failed.", summarizeDiagnosticError(error));
       if (isPermissionDeniedError(error)) {
         await updateFeeStatusesBulkViaServerAdmin({ feePeriod, status, memberIds });
         return;
@@ -2704,7 +4199,18 @@
 
       invalidateCache(BOOTSTRAP_CACHE_KEY);
       await loadBootstrapData();
+      const currentRow = state.fees.find((fee) => String(fee.id) === String(feeId || ""));
+      recordActivity("fees", "Fee row updated.", {
+        action: "fee_updated",
+        feeId: String(feeId || "").trim(),
+        memberId: currentRow?.memberId || "",
+        feePeriod: currentRow?.feePeriod || "",
+        status: normalizedStatus,
+        amount: Number(amount || 0),
+        paidAmount: Number(paidAmount || 0)
+      });
     } catch (error) {
+      recordDiagnostic("error", "fees", "Fee row update failed.", summarizeDiagnosticError(error));
       if (isPermissionDeniedError(error)) {
         await updateFeeRowViaServerAdmin({ feeId, status, amount, paidAmount, note, iban });
         return;
@@ -2950,6 +4456,116 @@
     return payload.passSyncApply || null;
   }
 
+  async function exportSepaXmlViaFunction(periodToken) {
+    const functionId = String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim();
+    if (!functionId) {
+      throw new Error("SEPA export function is not configured.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+
+    const functionClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+    const functionsApi = new appwriteSdk.Functions(functionClient);
+
+    const membersPayload = state.members.map((member) => ({
+      id: String(member.id || "").trim(),
+      firstName: String(member.firstName || "").trim(),
+      lastName: String(member.lastName || "").trim(),
+      name: String(member.name || "").trim(),
+      iban: String(memberIban(member.id) || "").trim()
+    }));
+    const feesPayload = state.fees.map((fee) => ({
+      id: String(fee.id || "").trim(),
+      memberId: String(fee.memberId || "").trim(),
+      feePeriod: String(fee.feePeriod || "").trim(),
+      amount: Number(fee.amount || 0),
+      paidAmount: Number(fee.paidAmount || 0),
+      status: String(fee.status || "").trim(),
+      iban: String(fee.iban || "").trim()
+    }));
+
+    const execution = await functionsApi.createExecution(
+      functionId,
+      JSON.stringify({
+        feePeriod: periodToken,
+        members: membersPayload,
+        fees: feesPayload
+      }),
+      false
+    );
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    let finalExecution = execution;
+
+    for (let index = 0; index < 12; index += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(350);
+        finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyText = String(finalExecution?.responseBody || "").trim();
+      throw new Error(
+        `SEPA export function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    if (!responseBodyRaw) {
+      throw new Error("SEPA export function returned an empty response body.");
+    }
+
+    let parsedBody = null;
+    try {
+      parsedBody = JSON.parse(responseBodyRaw);
+    } catch {
+      throw new Error("SEPA export function returned invalid JSON.");
+    }
+
+    if (!parsedBody?.ok) {
+      throw new Error(String(parsedBody?.error || "SEPA export did not return a file."));
+    }
+
+    const xmlText = decodeBase64Unicode(parsedBody.xmlBase64 || "");
+    if (!xmlText) {
+      throw new Error("SEPA export function returned no XML content.");
+    }
+
+    downloadBlobFile(
+      xmlText,
+      "application/xml;charset=utf-8",
+      String(parsedBody.fileName || `SEPA_Lastschrift_${periodToken}.xml`).trim()
+    );
+
+    sepaExportPreview = parsedBody.preview || null;
+    return parsedBody;
+  }
+
+  function formatSepaSkipReason(reason) {
+    const normalized = String(reason || "").trim().toLowerCase();
+    if (!normalized) return "unknown";
+    if (normalized === "missing_iban") return "Missing IBAN";
+    if (normalized === "missing_member") return "Missing member";
+    if (normalized === "missing_mandate_id") return "Missing mandate ID";
+    if (normalized === "no_outstanding_amount") return "No outstanding amount";
+    if (normalized.startsWith("status_")) return `Status: ${statusLabel(normalized.replace(/^status_/, ""))}`;
+    return normalized.replaceAll("_", " ");
+  }
+
   function passSyncFieldLabel(field) {
     const labels = {
       in_clubee: "In Clubee",
@@ -2966,11 +4582,33 @@
   }
 
   async function updateMemberSensitiveFinance({ memberId, iban, statusByFeeId }) {
+    if (profileFinanceModule && typeof profileFinanceModule.updateMemberSensitiveFinance === "function") {
+      await profileFinanceModule.updateMemberSensitiveFinance({
+        currentAccessRole,
+        backendClient,
+        memberId,
+        iban,
+        statusByFeeId,
+        fees: state.fees,
+        updateFeeRow
+      });
+      return;
+    }
     if (currentAccessRole !== "admin") {
       throw new Error("Only admins can change IBAN or quarter payment statuses.");
     }
+    const normalizedIban = normalizeIbanText(iban);
+    if (backendClient) {
+      const memberUpdate = await backendClient
+        .from("members")
+        .update({ iban: normalizedIban || null })
+        .eq("id", String(memberId || ""));
+      if (memberUpdate.error && !/column|attribute|unknown|schema/i.test(String(memberUpdate.error?.message || ""))) {
+        throw memberUpdate.error;
+      }
+    }
     const memberFees = state.fees.filter((fee) => String(fee.memberId) === String(memberId));
-    const ibanValue = String(iban || "").trim();
+    const ibanValue = normalizedIban;
     for (const fee of memberFees) {
       await updateFeeRow({
         feeId: fee.id,
@@ -2981,6 +4619,12 @@
         iban: ibanValue
       });
     }
+    recordActivity("members", "Member finance updated.", {
+      action: "member_finance_updated",
+      memberId: String(memberId || "").trim(),
+      ibanUpdated: Boolean(ibanValue),
+      affectedFeeIds: Object.keys(statusByFeeId || {})
+    });
   }
 
   function computeDashboardStats() {
@@ -3046,7 +4690,14 @@
       <article class="setup-card">
         <p class="eyebrow">Your Profile</p>
         <div style="display:flex; align-items:center; gap: 12px;">
-          <img src="${resolveAvatarSrcForMember(userMember)}" onerror="${avatarFallbackOnErrorAttr()}" alt="Profile picture" style="width:56px; height:56px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+          ${renderLazyImage({
+            src: resolveAvatarSrcForMember(userMember),
+            fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+            alt: "Profile picture",
+            style: "width:56px; height:56px; border-radius:999px; object-fit:cover; border:1px solid var(--line);",
+            wrapperClass: "avatar-lazy-media",
+            eager: true
+          })}
           <h3 style="margin:0;">${userMember.name}</h3>
         </div>
         <div style="display: grid; gap: 12px;">
@@ -3090,6 +4741,902 @@
       <div style="max-width: 760px; display: grid; gap: 12px;">
         ${athleteStatsHtml}
       </div>
+    `;
+  }
+
+  function rosterPositionLabel(position) {
+    const normalized = String(position || "").trim().toUpperCase();
+    const labels = {
+      QB: "Quarterback",
+      RB: "Running Back",
+      FB: "Fullback",
+      WR: "Wide Receiver",
+      TE: "Tight End",
+      OL: "Offensive Line",
+      OT: "Offensive Tackle",
+      OG: "Offensive Guard",
+      C: "Center",
+      DL: "Defensive Line",
+      DT: "Defensive Tackle",
+      DE: "Defensive End",
+      NT: "Nose Tackle",
+      LB: "Linebacker",
+      ILB: "Inside Linebacker",
+      OLB: "Outside Linebacker",
+      DB: "Defensive Back",
+      CB: "Cornerback",
+      S: "Safety",
+      K: "Kicker",
+      P: "Punter",
+      COACH: "Coach",
+      STAFF: "Staff"
+    };
+    return labels[normalized] || normalized || "Position open";
+  }
+
+  function rosterPositionSummary(member) {
+    const positions = Array.isArray(member?.positions) ? member.positions.filter(Boolean) : [];
+    if (!positions.length) return "Position open";
+    return positions.map(rosterPositionLabel).join(" / ");
+  }
+
+  function rosterMemberRoles(member) {
+    return (member?.roles || [])
+      .map((role) => String(role || "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  function rosterMemberPositions(member) {
+    return (member?.positions || [])
+      .map((position) => String(position || "").trim().toUpperCase())
+      .filter(Boolean);
+  }
+
+  function hasAthleteRosterPosition(member) {
+    return rosterMemberPositions(member).some((position) => position && position !== "COACH" && position !== "STAFF");
+  }
+
+  function isRosterAthlete(member) {
+    const roles = rosterMemberRoles(member);
+    if (roles.includes("player")) return true;
+    if (roles.includes("coach") || roles.includes("staff")) return false;
+    return hasAthleteRosterPosition(member) || member?.jerseyNumber !== null && member?.jerseyNumber !== undefined;
+  }
+
+  function isRosterCoach(member) {
+    return rosterMemberRoles(member).includes("coach") || rosterMemberPositions(member).includes("COACH");
+  }
+
+  function isRosterStaff(member) {
+    return rosterMemberRoles(member).includes("staff") || rosterMemberPositions(member).includes("STAFF");
+  }
+
+  function isRosterMember(member) {
+    if (!member || member.deletedAt) return false;
+    if (String(member.membershipStatus || "").trim().toLowerCase() !== "active") return false;
+    return isRosterAthlete(member) || isRosterCoach(member) || isRosterStaff(member);
+  }
+
+  function rosterPositionOptions() {
+    const rosterMembers = state.members.filter(isRosterMember);
+    const available = new Set(rosterMembers.flatMap(rosterMemberPositions));
+    if (rosterMembers.some(isRosterCoach)) available.add("COACH");
+    if (rosterMembers.some(isRosterStaff)) available.add("STAFF");
+    const ordered = memberPositionOptions
+      .map((position) => String(position || "").trim().toUpperCase())
+      .filter((position, index, list) => position && available.has(position) && list.indexOf(position) === index);
+    const extras = Array.from(available).filter((position) => !ordered.includes(position)).sort();
+    return [...ordered, ...extras];
+  }
+
+  function rosterPositionFilterLabel(position) {
+    const normalized = String(position || "").trim().toUpperCase();
+    if (normalized === "COACH" || normalized === "STAFF") return rosterPositionLabel(normalized);
+    return normalized;
+  }
+
+  function rosterMemberMatchesSelectedPosition(member, selected) {
+    const normalized = String(selected || "ALL").trim().toUpperCase();
+    if (normalized === "ALL") return true;
+    if (normalized === "COACH") return isRosterCoach(member);
+    if (normalized === "STAFF") return isRosterStaff(member);
+    return rosterMemberPositions(member).includes(normalized);
+  }
+
+  function sortedRosterMembers() {
+    const selected = String(selectedRosterPosition || "all").trim().toUpperCase();
+    return state.members
+      .filter(isRosterMember)
+      .filter((member) => rosterMemberMatchesSelectedPosition(member, selected))
+      .sort((left, right) => {
+        const leftNumber = left.jerseyNumber === null || left.jerseyNumber === undefined ? 999 : Number(left.jerseyNumber);
+        const rightNumber = right.jerseyNumber === null || right.jerseyNumber === undefined ? 999 : Number(right.jerseyNumber);
+        if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+        return String(left.lastName || left.name || "").localeCompare(String(right.lastName || right.name || ""), undefined, { sensitivity: "base" });
+      });
+  }
+
+  function rosterCardBadge(member, sectionKey) {
+    if (sectionKey === "coaches") return "Coach";
+    if (sectionKey === "staff") return "Staff";
+    return rosterMemberPositions(member).find((position) => position !== "COACH" && position !== "STAFF") || "";
+  }
+
+  function rosterCardSummary(member, sectionKey) {
+    const summary = rosterPositionSummary(member);
+    if (summary !== "Position open") return summary;
+    if (sectionKey === "coaches") return "Coach";
+    if (sectionKey === "staff") return "Staff";
+    return summary;
+  }
+
+  function renderRosterCard(member, sectionKey, index) {
+    const numberLabel = member.jerseyNumber === null || member.jerseyNumber === undefined ? "--" : String(member.jerseyNumber);
+    const positionBadge = rosterCardBadge(member, sectionKey);
+    //const rosterImageSrc = resolveRosterImageSrcForMember(member) || INLINE_AVATAR_PLACEHOLDER;
+    const showNumberBadge = sectionKey === "athletes" || numberLabel !== "--";
+    return `
+      <article class="roster-card">
+        <div class="roster-card-media-shell">
+          ${renderLazyImage({
+            src: INLINE_AVATAR_PLACEHOLDER,//ToDo: Add as soon as enough pictures are available: rosterImageSrc, Keep inlive placeholder for now to avoid broken images
+            fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+            alt: `${member.name} roster portrait`,
+            className: "roster-player-image",
+            wrapperClass: "roster-player-media",
+            eager: index < 8
+          })}
+          ${showNumberBadge ? `<div class="roster-number-badge">#${escapeHtml(numberLabel)}</div>` : ""}
+          ${positionBadge ? `<div class="roster-position-badge">${escapeHtml(positionBadge)}</div>` : ""}
+        </div>
+        <div class="roster-card-body">
+          <h3>${escapeHtml(member.name)}</h3>
+          <p>${escapeHtml(rosterCardSummary(member, sectionKey))}</p>
+        </div>
+      </article>
+    `;
+  }
+
+  function rosterSectionsForRows(rows) {
+    return [
+      {
+        key: "athletes",
+        eyebrow: "Players",
+        title: "Athletes",
+        emptyTitle: "No athletes found",
+        emptyCopy: "No active athlete records match the selected filter.",
+        rows: rows.filter(isRosterAthlete)
+      },
+      {
+        key: "coaches",
+        eyebrow: "Sideline",
+        title: "Coaches",
+        emptyTitle: "No coaches found",
+        emptyCopy: "No active coach records match the selected filter.",
+        rows: rows.filter(isRosterCoach)
+      },
+      {
+        key: "staff",
+        eyebrow: "Operations",
+        title: "Staff",
+        emptyTitle: "No staff found",
+        emptyCopy: "No active staff records match the selected filter.",
+        rows: rows.filter(isRosterStaff)
+      }
+    ];
+  }
+
+  function renderRosterSection(section, showEmptySections) {
+    if (!section.rows.length && !showEmptySections) return "";
+    return `
+      <section class="roster-section roster-section-${section.key}">
+        <div class="roster-section-head">
+          <div>
+            <p class="eyebrow">${escapeHtml(section.eyebrow)}</p>
+            <h3>${escapeHtml(section.title)}</h3>
+          </div>
+          <span class="roster-section-count">${section.rows.length}</span>
+        </div>
+        <div class="roster-grid">
+          ${section.rows.map((member, index) => renderRosterCard(member, section.key, index)).join("") || `
+            <article class="setup-card roster-empty-card">
+              <p class="eyebrow">Roster</p>
+              <h3>${escapeHtml(section.emptyTitle)}</h3>
+              <p class="muted">${escapeHtml(section.emptyCopy)}</p>
+            </article>
+          `}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderRoster() {
+    const positions = rosterPositionOptions();
+    let selected = String(selectedRosterPosition || "all").trim().toUpperCase();
+    if (selected !== "ALL" && !positions.includes(selected)) {
+      selectedRosterPosition = "all";
+      selected = "ALL";
+      saveStoredValue(ROSTER_FILTER_KEY, selectedRosterPosition);
+    }
+    const rows = sortedRosterMembers();
+    const totalRosterMembers = state.members.filter(isRosterMember).length;
+    const loadingMessage = publicRosterLoadPromise ? "Loading roster..." : publicRosterStatus;
+    const showEmptySections = selected === "ALL";
+    const sections = rosterSectionsForRows(rows);
+    const sectionsHtml = sections.map((section) => renderRosterSection(section, showEmptySections)).join("") || `
+      <div class="roster-grid">
+        <article class="setup-card roster-empty-card">
+          <p class="eyebrow">Roster</p>
+          <h3>No roster records found</h3>
+          <p class="muted">No active roster records match the selected filter.</p>
+        </article>
+      </div>
+    `;
+    return `
+      <section class="roster-page">
+        <div class="roster-page-head">
+          <div>
+            <p class="eyebrow">Team</p>
+            <h2>Roster</h2>
+            <p class="roster-page-copy">Active Emperors athletes, coaches and staff from the member database.</p>
+          </div>
+          <div class="roster-count">
+            <strong>${totalRosterMembers}</strong>
+            <span>Roster</span>
+          </div>
+        </div>
+        <div class="roster-filter-bar" aria-label="Roster position filter">
+          <button type="button" class="roster-filter-chip ${selectedRosterPosition === "all" ? "is-active" : ""}" data-roster-position="all" data-no-toast="true">All</button>
+          ${positions.map((position) => `
+            <button type="button" class="roster-filter-chip ${selectedRosterPosition.toUpperCase() === position ? "is-active" : ""}" data-roster-position="${escapeAttribute(position)}" data-no-toast="true">${escapeHtml(rosterPositionFilterLabel(position))}</button>
+          `).join("")}
+        </div>
+        ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
+        <div class="roster-sections">${sectionsHtml}</div>
+      </section>
+    `;
+  }
+
+  const HALL_OF_FAME_CLASSES = [
+    {
+      year: 2022,
+      members: [
+        { name: "Thaddeus \"Thunderfoot\" Kowalski", position: "Kicker" },
+        { name: "Biggus Blockus Huber", position: "Offensive Tackle" },
+        { name: "Werner \"The Vienna Wall\" Steinberger", position: "Defensive Tackle" },
+        { name: "Scrambling Sam Novak", position: "Quarterback" },
+        { name: "Gruber \"Hands of Glue\" Aigner", position: "Wide Receiver" }
+      ]
+    },
+    {
+      year: 2023,
+      members: [
+        { name: "Bianca \"Blitzkrieg\" Steiner", position: "Linebacker" },
+        { name: "Marco \"The Mongoose\" Falkner", position: "Cornerback" },
+        { name: "Sir Fumbles-a-Lot Fischer", position: "Running Back" },
+        { name: "Gunnar \"Gronk of Grinzing\" Wagner", position: "Tight End" },
+        { name: "Ilse \"Iron Lung\" Brandstätter", position: "Middle Linebacker" },
+        { name: "Dominik \"Touchdown Dance\" Divjak", position: "Wide Receiver" }
+      ]
+    },
+    {
+      year: 2024,
+      members: [
+        { name: "Sepp \"The Sandwich\" Moser", position: "Center" },
+        { name: "Nikolaus \"Ice Cold Niki\" Berger", position: "Kicker" },
+        { name: "Franzi \"Freight Train\" Reisinger", position: "Fullback" },
+        { name: "Alexander \"The Filing Cabinet\" Pichler", position: "Offensive Guard" }
+      ]
+    },
+    {
+      year: 2025,
+      members: [
+        { name: "Katharina \"Sackmaster\" Lechner", position: "Defensive End" },
+        { name: "Rudi \"Rocket\" Hofer", position: "Running Back" },
+        { name: "Fabian \"The Professor\" Gruber", position: "Quarterback" },
+        { name: "Lena \"Lockdown\" Winkler", position: "Cornerback" },
+        { name: "Tobias \"Big Toby\" Kranzl", position: "Nose Tackle" },
+        { name: "Manuel \"Mad Hands\" Ortner", position: "Wide Receiver" },
+        { name: "Sophie \"The Wrecking Ball\" Zach", position: "Strong Safety" }
+      ]
+    }
+  ];
+
+  function renderHallOfFameCard(member, index) {
+    return `
+      <article class="hof-card">
+        <div class="hof-card-media-shell">
+          ${renderLazyImage({
+            src: INLINE_AVATAR_PLACEHOLDER,
+            fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+            alt: `${member.name} portrait`,
+            className: "hof-player-image",
+            wrapperClass: "hof-player-media",
+            eager: index < 8
+          })}
+          <div class="hof-position-badge">${escapeHtml(member.position)}</div>
+        </div>
+        <div class="hof-card-body">
+          <h3>${escapeHtml(member.name)}</h3>
+          <p>${escapeHtml(member.position)}</p>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderHallOfFameYearSection(yearClass) {
+    return `
+      <section class="hof-year-section">
+        <div class="hof-year-head">
+          <p class="eyebrow">Class of</p>
+          <h3>${escapeHtml(String(yearClass.year))}</h3>
+        </div>
+        <div class="hof-grid">
+          ${yearClass.members.map((member, index) => renderHallOfFameCard(member, index)).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderHallOfFame() {
+    const classes = HALL_OF_FAME_CLASSES.slice().sort((left, right) => right.year - left.year);
+    const totalInductees = classes.reduce((sum, yearClass) => sum + yearClass.members.length, 0);
+    return `
+      <section class="hof-page">
+        <div class="hof-page-head roster-page-head">
+          <div>
+            <p class="eyebrow">Legacy</p>
+            <h2>Hall of Fame</h2>
+            <p class="roster-page-copy">Honoring the Emperors who left it all on the field since 2022.</p>
+          </div>
+          <div class="roster-count">
+            <strong>${totalInductees}</strong>
+            <span>Inductees</span>
+          </div>
+        </div>
+        <div class="hof-years">${classes.map(renderHallOfFameYearSection).join("")}</div>
+      </section>
+    `;
+  }
+
+  function tryoutRegistrationStatusMessage(message, tone = "info") {
+    const status = document.getElementById("tryout-form-status");
+    if (!status) return;
+    status.textContent = message;
+    status.className = `tryout-form-status ${tone}`;
+  }
+
+  function loadTryoutSubmissionFilters() {
+    try {
+      const raw = sessionStorage.getItem(TRYOUT_REGISTRATION_FILTER_KEY);
+      if (!raw) return { search: "", uniWien: "all", experience: "all", status: "all" };
+      const parsed = JSON.parse(raw);
+      return {
+        search: String(parsed?.search || ""),
+        uniWien: String(parsed?.uniWien || "all"),
+        experience: String(parsed?.experience || "all"),
+        status: String(parsed?.status || "all")
+      };
+    } catch {
+      return { search: "", uniWien: "all", experience: "all", status: "all" };
+    }
+  }
+
+  function saveTryoutSubmissionFilters() {
+    sessionStorage.setItem(TRYOUT_REGISTRATION_FILTER_KEY, JSON.stringify(tryoutSubmissionFilters));
+  }
+
+  function canManageTryoutSubmissions() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    const role = String(currentAccessRole || "").trim().toLowerCase();
+    return role === "admin" || role === "coach";
+  }
+
+  function tryoutValue(row, ...keys) {
+    return publicRosterField(row, ...keys);
+  }
+
+  function normalizeTryoutSubmissionRow(row) {
+    return {
+      id: String(tryoutValue(row, "id", "$id") || ""),
+      firstName: String(tryoutValue(row, "first_name", "firstName") || "").trim(),
+      lastName: String(tryoutValue(row, "last_name", "lastName") || "").trim(),
+      email: String(tryoutValue(row, "email") || "").trim(),
+      phone: String(tryoutValue(row, "phone") || "").trim(),
+      uniWienStudent: String(tryoutValue(row, "uni_wien_student", "uniWienStudent") || "").trim(),
+      studyProgram: String(tryoutValue(row, "study_program", "studyProgram") || "").trim(),
+      footballExperience: String(tryoutValue(row, "previous_football_experience", "previousFootballExperience") || "").trim(),
+      footballExperienceDetails: String(tryoutValue(row, "football_experience_details", "footballExperienceDetails") || "").trim(),
+      otherSports: String(tryoutValue(row, "other_sports", "otherSports") || "").trim(),
+      preferredPosition: String(tryoutValue(row, "preferred_position", "preferredPosition") || "").trim(),
+      heightCm: tryoutValue(row, "height_cm", "heightCm") ?? "",
+      weightKg: tryoutValue(row, "weight_kg", "weightKg") ?? "",
+      availabilityNotes: String(tryoutValue(row, "availability_notes", "availabilityNotes") || "").trim(),
+      contactConsent: Boolean(tryoutValue(row, "contact_consent", "contactConsent")),
+      tryoutCycle: String(tryoutValue(row, "tryout_cycle", "tryoutCycle") || "next").trim(),
+      status: String(tryoutValue(row, "status") || "new").trim(),
+      source: String(tryoutValue(row, "source") || "").trim(),
+      submittedAt: String(tryoutValue(row, "submitted_at", "submittedAt", "$createdAt") || "").trim()
+    };
+  }
+
+  function tryoutLabel(kind, value) {
+    const normalized = String(value || "").trim();
+    const labels = {
+      uniWienStudent: {
+        yes: "Uni Wien student",
+        accepted_or_starting: "Accepted / starting soon",
+        no: "No",
+        prefer_to_discuss: "Not sure"
+      },
+      footballExperience: {
+        none: "No football experience",
+        flag_football: "Flag Football",
+        tackle_training: "Tackle training",
+        tackle_team: "Tackle team",
+        coaching_or_staff: "Coaching / staff",
+        other: "Other"
+      },
+      preferredPosition: {
+        offense: "Offense",
+        defense: "Defense",
+        special_teams: "Special Teams",
+        line: "Line",
+        skill_position: "Skill position",
+        coach_or_staff: "Coach / staff"
+      },
+      status: {
+        new: "New",
+        contacted: "Contacted",
+        invited: "Invited",
+        archived: "Archived"
+      }
+    };
+    return labels[kind]?.[normalized] || normalized || "-";
+  }
+
+  function localTryoutSubmissionRows() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.map(normalizeTryoutSubmissionRow) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadTryoutSubmissions() {
+    if (!canManageTryoutSubmissions()) return;
+    tryoutSubmissionsLoading = true;
+    tryoutSubmissionsStatus = "Loading tryout submissions...";
+    mount();
+    switchView("tryout");
+    try {
+      if (!backendClient || !authState.user) {
+        tryoutSubmissions = localTryoutSubmissionRows();
+      } else {
+        const response = await backendClient
+          .from("tryout_registrations")
+          .select("*");
+        if (response.error) throw response.error;
+        tryoutSubmissions = (response.data || []).map(normalizeTryoutSubmissionRow);
+      }
+      tryoutSubmissionsLoadedAt = Date.now();
+      tryoutSubmissionsStatus = tryoutSubmissions.length
+        ? `Loaded ${tryoutSubmissions.length} tryout submission${tryoutSubmissions.length === 1 ? "" : "s"}.`
+        : "No tryout submissions found yet.";
+    } catch (error) {
+      tryoutSubmissionsStatus = error?.message || "Could not load tryout submissions.";
+      showToast(tryoutSubmissionsStatus, "error");
+    } finally {
+      tryoutSubmissionsLoading = false;
+      mount();
+      switchView("tryout");
+    }
+  }
+
+  function sortedTryoutSubmissions(rows = tryoutSubmissions) {
+    return [...rows].sort((left, right) => String(right.submittedAt || "").localeCompare(String(left.submittedAt || "")));
+  }
+
+  function filteredTryoutSubmissions() {
+    const search = String(tryoutSubmissionFilters.search || "").trim().toLowerCase();
+    const uniWien = String(tryoutSubmissionFilters.uniWien || "all").trim();
+    const experience = String(tryoutSubmissionFilters.experience || "all").trim();
+    const status = String(tryoutSubmissionFilters.status || "all").trim();
+    return sortedTryoutSubmissions().filter((row) => {
+      if (uniWien !== "all" && row.uniWienStudent !== uniWien) return false;
+      if (experience !== "all" && row.footballExperience !== experience) return false;
+      if (status !== "all" && row.status !== status) return false;
+      if (!search) return true;
+      const haystack = [
+        row.firstName,
+        row.lastName,
+        row.email,
+        row.phone,
+        row.studyProgram,
+        row.footballExperienceDetails,
+        row.otherSports,
+        row.availabilityNotes
+      ].join(" ").toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+
+  function tryoutSubmissionFilterOptions(key) {
+    const values = Array.from(new Set(tryoutSubmissions.map((row) => String(row[key] || "").trim()).filter(Boolean))).sort();
+    return values;
+  }
+
+  function tryoutSubmissionExportColumns() {
+    return [
+      { key: "submittedAt", label: "Submitted at" },
+      { key: "firstName", label: "First name" },
+      { key: "lastName", label: "Last name" },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Phone" },
+      { key: "uniWienStudent", label: "Uni Wien status" },
+      { key: "studyProgram", label: "Study program" },
+      { key: "footballExperience", label: "Football experience" },
+      { key: "preferredPosition", label: "Preferred position" },
+      { key: "heightCm", label: "Height cm" },
+      { key: "weightKg", label: "Weight kg" },
+      { key: "footballExperienceDetails", label: "Football background details" },
+      { key: "otherSports", label: "Other sports" },
+      { key: "availabilityNotes", label: "Availability / notes" },
+      { key: "status", label: "Status" },
+      { key: "tryoutCycle", label: "Tryout cycle" },
+      { key: "source", label: "Source" }
+    ];
+  }
+
+  function tryoutSubmissionExportRows(rows = filteredTryoutSubmissions()) {
+    return rows.map((row) => ({
+      ...row,
+      submittedAt: row.submittedAt ? formatDate(row.submittedAt) : "",
+      uniWienStudent: tryoutLabel("uniWienStudent", row.uniWienStudent),
+      footballExperience: tryoutLabel("footballExperience", row.footballExperience),
+      preferredPosition: tryoutLabel("preferredPosition", row.preferredPosition),
+      status: tryoutLabel("status", row.status)
+    }));
+  }
+
+  function optionalInteger(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+  }
+
+  function compactPayload(payload) {
+    return Object.fromEntries(
+      Object.entries(payload || {}).filter(([, value]) => value !== "" && value !== null && value !== undefined)
+    );
+  }
+
+  function collectTryoutRegistrationPayload(form) {
+    const formData = new FormData(form);
+    const heightCm = optionalInteger(formData.get("heightCm"));
+    const weightKg = optionalInteger(formData.get("weightKg"));
+    return compactPayload({
+      first_name: String(formData.get("firstName") || "").trim(),
+      last_name: String(formData.get("lastName") || "").trim(),
+      email: String(formData.get("email") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
+      uni_wien_student: String(formData.get("uniWienStudent") || "").trim(),
+      study_program: String(formData.get("studyProgram") || "").trim(),
+      previous_football_experience: String(formData.get("footballExperience") || "").trim(),
+      football_experience_details: String(formData.get("footballExperienceDetails") || "").trim(),
+      other_sports: String(formData.get("otherSports") || "").trim(),
+      preferred_position: String(formData.get("preferredPosition") || "").trim(),
+      height_cm: heightCm,
+      weight_kg: weightKg,
+      availability_notes: String(formData.get("availabilityNotes") || "").trim(),
+      contact_consent: formData.get("contactConsent") === "yes",
+      tryout_cycle: "next",
+      status: "new",
+      source: "website",
+      submitted_at: new Date().toISOString()
+    });
+  }
+
+  function validateTryoutRegistration(payload) {
+    if (!payload.first_name || !payload.last_name) return "Please enter your first and last name.";
+    if (!payload.email) return "Please enter your email address.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return "Please enter a valid email address.";
+    if (!payload.uni_wien_student) return "Please tell us whether you are a student at the University of Vienna.";
+    if (!payload.previous_football_experience) return "Please select your American Football experience level.";
+    if (!payload.contact_consent) return "Please confirm that we may contact you about tryouts.";
+    return "";
+  }
+
+  function saveTryoutRegistrationLocally(payload) {
+    const current = (() => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    })();
+    const record = { id: `tryout-${Date.now()}`, ...payload };
+    current.push(record);
+    localStorage.setItem(TRYOUT_REGISTRATIONS_STORAGE_KEY, JSON.stringify(current));
+    return record;
+  }
+
+  async function saveTryoutRegistration(payload) {
+    if (!backendClient) {
+      return { localOnly: true, data: saveTryoutRegistrationLocally(payload) };
+    }
+    const response = await backendClient.from("tryout_registrations").insert([payload]);
+    if (response.error) throw response.error;
+    return { localOnly: false, data: Array.isArray(response.data) ? response.data[0] : response.data };
+  }
+
+  function renderTryoutFilterSelect({ id, label, value, options, kind }) {
+    return `
+      <label>${escapeHtml(label)}
+        <select id="${escapeAttribute(id)}" class="tryout-submission-filter">
+          <option value="all" ${value === "all" ? "selected" : ""}>All</option>
+          ${options.map((option) => `
+            <option value="${escapeAttribute(option)}" ${value === option ? "selected" : ""}>${escapeHtml(kind ? tryoutLabel(kind, option) : option)}</option>
+          `).join("")}
+        </select>
+      </label>
+    `;
+  }
+
+  function renderTryoutSubmissionsPanel() {
+    if (!canManageTryoutSubmissions()) return "";
+    const filteredRows = filteredTryoutSubmissions();
+    const loaded = Boolean(tryoutSubmissionsLoadedAt);
+    const exportDisabled = filteredRows.length ? "" : "disabled";
+    const loadedLabel = loaded
+      ? `Last loaded ${new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(tryoutSubmissionsLoadedAt))}`
+      : "Not loaded yet";
+    const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
+    const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
+    const statusOptions = Array.from(new Set(["new", "contacted", "invited", "archived", ...tryoutSubmissionFilterOptions("status")]));
+
+    return `
+      <section class="tryout-admin-panel setup-card">
+        <div class="tryout-admin-head">
+          <div>
+            <p class="eyebrow">Coach desk</p>
+            <h3>Tryout submissions</h3>
+            <p class="muted">${escapeHtml(tryoutSubmissionsStatus || loadedLabel)}</p>
+          </div>
+          <div class="tryout-admin-actions">
+            <button type="button" class="ghost-button" id="tryout-load-submissions" data-no-toast="true" ${tryoutSubmissionsLoading ? "disabled" : ""}>${loaded ? "Refresh submissions" : "Load submissions"}</button>
+            <button type="button" class="ghost-button" id="tryout-export-csv" data-no-toast="true" ${exportDisabled}>CSV for Sheets</button>
+            <button type="button" class="ghost-button" id="tryout-export-excel" data-no-toast="true" ${exportDisabled}>Excel</button>
+          </div>
+        </div>
+
+        <div class="tryout-admin-filters">
+          <label>Search
+            <input id="tryout-submission-search" value="${escapeAttribute(tryoutSubmissionFilters.search || "")}" placeholder="Name, email, sport, notes" />
+          </label>
+          ${renderTryoutFilterSelect({
+            id: "tryout-filter-uni-wien",
+            label: "Uni Wien",
+            value: tryoutSubmissionFilters.uniWien || "all",
+            options: uniOptions,
+            kind: "uniWienStudent"
+          })}
+          ${renderTryoutFilterSelect({
+            id: "tryout-filter-experience",
+            label: "Experience",
+            value: tryoutSubmissionFilters.experience || "all",
+            options: experienceOptions,
+            kind: "footballExperience"
+          })}
+          ${renderTryoutFilterSelect({
+            id: "tryout-filter-status",
+            label: "Status",
+            value: tryoutSubmissionFilters.status || "all",
+            options: statusOptions,
+            kind: "status"
+          })}
+        </div>
+
+        <div class="tryout-admin-summary">
+          <span>${filteredRows.length} shown</span>
+          <span>${tryoutSubmissions.length} total</span>
+          <span>${tryoutSubmissions.filter((row) => row.uniWienStudent === "yes").length} Uni Wien students</span>
+        </div>
+
+        <div class="table-wrap tryout-submissions-table-wrap">
+          <table class="tryout-submissions-table">
+            <thead>
+              <tr>
+                <th>Submitted</th>
+                <th>Name</th>
+                <th>Uni Wien</th>
+                <th>Football</th>
+                <th>Metrics</th>
+                <th>Notes</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${loaded ? (filteredRows.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row.submittedAt ? formatDate(row.submittedAt) : "-")}</td>
+                  <td>
+                    <strong>${escapeHtml(`${row.firstName} ${row.lastName}`.trim() || "-")}</strong>
+                    <div class="meta">${escapeHtml(row.email || "-")}</div>
+                    ${row.phone ? `<div class="meta">${escapeHtml(row.phone)}</div>` : ""}
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(tryoutLabel("uniWienStudent", row.uniWienStudent))}</strong>
+                    ${row.studyProgram ? `<div class="meta">${escapeHtml(row.studyProgram)}</div>` : ""}
+                  </td>
+                  <td>
+                    <strong>${escapeHtml(tryoutLabel("footballExperience", row.footballExperience))}</strong>
+                    ${row.preferredPosition ? `<div class="meta">${escapeHtml(tryoutLabel("preferredPosition", row.preferredPosition))}</div>` : ""}
+                  </td>
+                  <td>
+                    ${row.heightCm ? `<div>${escapeHtml(row.heightCm)} cm</div>` : `<div class="meta">Height -</div>`}
+                    ${row.weightKg ? `<div>${escapeHtml(row.weightKg)} kg</div>` : `<div class="meta">Weight -</div>`}
+                  </td>
+                  <td>
+                    <details class="tryout-submission-details">
+                      <summary>Details</summary>
+                      ${row.footballExperienceDetails ? `<p><strong>Football:</strong> ${escapeHtml(row.footballExperienceDetails)}</p>` : ""}
+                      ${row.otherSports ? `<p><strong>Other sports:</strong> ${escapeHtml(row.otherSports)}</p>` : ""}
+                      ${row.availabilityNotes ? `<p><strong>Availability:</strong> ${escapeHtml(row.availabilityNotes)}</p>` : ""}
+                      ${!row.footballExperienceDetails && !row.otherSports && !row.availabilityNotes ? `<p class="meta">No notes</p>` : ""}
+                    </details>
+                  </td>
+                  <td>${statusPill(row.status || "new", tryoutLabel("status", row.status || "new"))}</td>
+                </tr>
+              `).join("") || `
+                <tr><td colspan="7" class="meta">No submissions match the current filters.</td></tr>
+              `) : `
+                <tr><td colspan="7" class="meta">Load submissions to review tryout registrations.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTryout() {
+    return `
+      <section class="tryout-page">
+        <div class="tryout-hero">
+          <div>
+            <p class="eyebrow">Tryout</p>
+            <h2>Join the Emperors</h2>
+            <p>We hold American Football tryouts twice per year. The next date is still to be announced, but you can already register and we will contact you when details are confirmed.</p>
+          </div>
+          <div class="tryout-date-panel" aria-label="Next tryout date">
+            <span>Next tryout</span>
+            <strong>Date TBA</strong>
+            <p>Spring or autumn window, depending on field and coaching availability.</p>
+          </div>
+        </div>
+
+        <div class="tryout-layout">
+          <form id="tryout-form" class="tryout-form setup-card" novalidate>
+            <div>
+              <p class="eyebrow">Signup</p>
+              <h3>Tryout registration</h3>
+              <p class="muted">Tell us a bit about your background so the coaches can plan the session and follow up with the right information.</p>
+            </div>
+
+            <div class="form-grid">
+              <label>First name
+                <input name="firstName" autocomplete="given-name" required />
+              </label>
+              <label>Last name
+                <input name="lastName" autocomplete="family-name" required />
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <label>Email
+                <input name="email" type="email" autocomplete="email" required />
+              </label>
+              <label>Phone
+                <input name="phone" type="tel" autocomplete="tel" placeholder="Optional" />
+              </label>
+            </div>
+
+            <fieldset class="tryout-fieldset">
+              <legend>Are you a student at the University of Vienna?</legend>
+              <div class="tryout-choice-grid">
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="yes" required /><span>Yes, Uni Wien student</span></label>
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="accepted_or_starting" /><span>Accepted / starting soon</span></label>
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="no" /><span>No</span></label>
+                <label class="status-check"><input type="radio" name="uniWienStudent" value="prefer_to_discuss" /><span>Not sure yet</span></label>
+              </div>
+            </fieldset>
+
+            <label>Study program at Uni Wien
+              <input name="studyProgram" placeholder="Optional" />
+            </label>
+
+            <div class="form-grid">
+              <label>American Football experience
+                <select name="footballExperience" required>
+                  <option value="">Select one</option>
+                  <option value="none">No American Football experience yet</option>
+                  <option value="flag_football">Flag Football</option>
+                  <option value="tackle_training">Tackle Football training</option>
+                  <option value="tackle_team">Played on a tackle team</option>
+                  <option value="coaching_or_staff">Coaching / staff background</option>
+                  <option value="other">Other football experience</option>
+                </select>
+              </label>
+              <label>Preferred position or role
+                <select name="preferredPosition">
+                  <option value="">Undecided</option>
+                  <option value="offense">Offense</option>
+                  <option value="defense">Defense</option>
+                  <option value="special_teams">Special Teams</option>
+                  <option value="line">Line</option>
+                  <option value="skill_position">Skill position</option>
+                  <option value="coach_or_staff">Coach / staff</option>
+                </select>
+              </label>
+            </div>
+
+            <label>Football background details
+              <textarea name="footballExperienceDetails" rows="3" placeholder="Teams, leagues, positions, years played, or what you want to learn"></textarea>
+            </label>
+
+            <label>Other sports background
+              <textarea name="otherSports" rows="3" placeholder="Tell us about other sports, gym training, martial arts, athletics, ball sports, etc."></textarea>
+            </label>
+
+            <div class="form-grid">
+              <label>Height in cm
+                <input name="heightCm" type="number" min="120" max="230" placeholder="Optional" />
+              </label>
+              <label>Weight in kg
+                <input name="weightKg" type="number" min="35" max="220" placeholder="Optional" />
+              </label>
+            </div>
+
+            <label>Availability or notes
+              <textarea name="availabilityNotes" rows="3" placeholder="Training availability, injuries we should know before the tryout, questions, etc."></textarea>
+            </label>
+
+            <label class="status-check tryout-consent">
+              <input type="checkbox" name="contactConsent" value="yes" required />
+              <span>I agree that the Uni Wien Emperors may contact me about tryouts and team onboarding.</span>
+            </label>
+            <p class="meta tryout-privacy-note">Your information is used for tryout coordination. See <a href="./datenschutz.html">Datenschutz</a>.</p>
+
+            <div class="tryout-form-actions">
+              <button type="submit" class="primary-button" id="tryout-submit-button">Register interest</button>
+              <p id="tryout-form-status" class="tryout-form-status" aria-live="polite"></p>
+            </div>
+          </form>
+
+          <aside class="tryout-info">
+            <article class="setup-card">
+              <p class="eyebrow">Eligibility</p>
+              <h3>Uni Wien team</h3>
+              <p class="muted">Because this is a university team, student status at the University of Vienna matters. Register anyway if you are unsure and we will clarify the next step.</p>
+            </article>
+            <article class="setup-card">
+              <p class="eyebrow">Experience</p>
+              <h3>Rookies welcome</h3>
+              <p class="muted">No football experience is required. Coaches use your answers to group drills and understand your athletic background.</p>
+            </article>
+            <article class="setup-card">
+              <p class="eyebrow">After signup</p>
+              <h3>We will follow up</h3>
+              <p class="muted">Once the date, time and location are set, the team will send you the tryout details and what to bring.</p>
+            </article>
+          </aside>
+        </div>
+        ${renderTryoutSubmissionsPanel()}
+      </section>
     `;
   }
 
@@ -3248,7 +5795,7 @@
                   </td>
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${member.passExpiry || ""}" /></div>`
+                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${normalizeToIsoDate(member.passExpiry) || ""}" /></div>`
                       : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : member.licenseName || "No pass data"}</div></div>`}
                   </td>
                 ` : ""}
@@ -3305,7 +5852,8 @@
     const canViewProfileEmail = currentAccessRole === "admin" || isOwnProfile(member);
     const feeMap = memberFeesByPeriod(member.id);
     const periods = profileQuarterWindowTokens();
-    const firstIban = memberIban(member.id);
+    const firstIban = String(member.memberIban || "").trim();
+    const firstIbanDisplay = formatIbanDisplay(firstIban);
     const sensitiveSection = canViewSensitive
       ? `
       <article class="card compact-card" style="display:grid; gap: 10px;">
@@ -3314,8 +5862,8 @@
           <h3 style="margin-top: 4px;">IBAN and quarter payment statuses</h3>
         </div>
         ${canEditSensitive
-          ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIban}" ${sensitiveDisabled} /></label>`
-          : `<div><p class="muted" style="margin-bottom: 4px;">IBAN</p><p>${firstIban || "No IBAN on file"}</p></div>`}
+          ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIbanDisplay}" ${sensitiveDisabled} /></label>`
+          : `<div><p class="muted" style="margin-bottom: 4px;">IBAN</p><p>${firstIbanDisplay || "No IBAN on file"}</p></div>`}
         <div class="table-wrap">
           <table>
             <thead><tr><th>Quarter</th><th>Status</th></tr></thead>
@@ -3415,7 +5963,14 @@
         <article class="card profile-main-card" style="display:grid; gap: 12px;">
         <div style="display:flex; align-items:center; gap: 14px;">
           <button type="button" id="user-upload-profile-image-trigger" style="padding:0; border:0; background:none; cursor:${isOwnProfile(member) ? "pointer" : "default"};" ${isOwnProfile(member) ? "title=\"Change profile image\"" : "disabled"}>
-            <img src="${resolveAvatarSrcForMember(member)}" onerror="${avatarFallbackOnErrorAttr()}" alt="Profile picture" style="width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);" />
+            ${renderLazyImage({
+              src: resolveAvatarSrcForMember(member),
+              fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+              alt: "Profile picture",
+              style: "width:64px; height:64px; border-radius:999px; object-fit:cover; border:1px solid var(--line);",
+              wrapperClass: "avatar-lazy-media",
+              eager: true
+            })}
           </button>
           ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
@@ -3468,6 +6023,20 @@
     const visibleMemberIds = Array.from(new Set(visibleFees.map((fee) => String(fee.memberId))));
     const selectedVisibleCount = visibleMemberIds.filter((memberId) => selectedSet.has(memberId)).length;
     const editableStatuses = FEE_STATUSES;
+    const sepaExportAvailable = hasSepaExportCapability();
+    const sepaIncluded = Array.isArray(sepaExportPreview?.included) ? sepaExportPreview.included : [];
+    const sepaSkipped = Array.isArray(sepaExportPreview?.skipped) ? sepaExportPreview.skipped : [];
+    const sepaSummaryCard = sepaExportPreview
+      ? `
+        <article class="card" style="margin-bottom: 14px;">
+          <p class="eyebrow">SEPA Preview</p>
+          <h3>Last export summary</h3>
+          <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
+          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${item.name} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
+          ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${item.name || "Unknown"}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
+        </article>
+      `
+      : "";
 
     return `
       <div class="section-head">
@@ -3478,7 +6047,7 @@
             <div class="export-menu-list">
               <button id="export-fees-csv-option" class="ghost-button small-button" type="button">CSV</button>
               <button id="export-fees-excel-option" class="ghost-button small-button" type="button">Excel</button>
-              <button id="export-fees-sepa-xml-option" class="ghost-button small-button" type="button">SEPA XML</button>
+              <button id="export-fees-sepa-xml-option" class="ghost-button small-button" type="button" ${sepaExportAvailable ? "" : "disabled title=\"Configure a SEPA Appwrite Function or backend endpoint first.\""}>SEPA XML</button>
             </div>
           </details>
           <button id="toggle-fee-edit-mode" class="ghost-button" type="button">${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
@@ -3512,6 +6081,7 @@
           </div>
         </details>
       </article>
+      ${sepaSummaryCard}
       ${feeEditMode ? `
         <article class="card filter-card" style="margin-bottom: 12px;">
           <p class="eyebrow">Bulk edit</p>
@@ -3681,12 +6251,26 @@
     }
 
     const rows = sortEquipmentRows(state.equipment || []);
-    const activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
+    let activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
+    let activeKindFilter = normalizeEquipmentKindFilter(selectedEquipmentKindFilter);
     if (selectedEquipmentSheet !== activeSheet) {
       saveEquipmentSheetKey(activeSheet);
     }
-    const visibleRows = equipmentSheetRows(rows, activeSheet);
-    const sortedRows = sortRows(visibleRows, "equipment", (item, key) => {
+    let visibleRows = equipmentSheetRows(rows, activeSheet);
+    if (!visibleRows.length && rows.length && activeSheet !== "all") {
+      activeSheet = "all";
+      saveEquipmentSheetKey(activeSheet);
+      visibleRows = equipmentSheetRows(rows, activeSheet);
+      equipmentStatus = equipmentStatus || "Your previous equipment sheet filter did not contain any items, so the view was reset to All sheets.";
+    }
+    let filteredRows = filterEquipmentRowsByKind(visibleRows, activeKindFilter);
+    if (!filteredRows.length && visibleRows.length && activeKindFilter !== "all") {
+      activeKindFilter = "all";
+      saveEquipmentKindFilter(activeKindFilter);
+      filteredRows = filterEquipmentRowsByKind(visibleRows, activeKindFilter);
+      equipmentStatus = equipmentStatus || "Your previous equipment type filter did not match any rows, so the view was reset to All.";
+    }
+    const sortedRows = sortRows(filteredRows, "equipment", (item, key) => {
       if (key === "group") return String(item.group || "");
       if (key === "article") return String(item.article || "");
       if (key === "condition") return String(item.condition || "");
@@ -3700,10 +6284,17 @@
       return String(item.article || "");
     });
     const showGroupColumn = activeSheet === "all";
+    const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
+    const visibleColumnCount = canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6);
     const sheetTabs = equipmentSheetCounts(rows)
       .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
       .join("");
-    const canEdit = currentAccessRole === "admin";
+    const kindFilterButtons = [
+      { key: "all", label: "All" },
+      { key: "containers", label: "Containers" },
+      { key: "items", label: "Items" }
+    ].map((filter) => `<button type="button" class="sort-button equipment-sheet-tab ${filter.key === activeKindFilter ? "is-active" : ""}" data-no-toast="true" data-equipment-kind-filter="${filter.key}">${filter.label}</button>`).join("");
+    const canRemoveActiveSheet = canEdit && activeSheet !== "all" && !isBuiltinEquipmentSheetKey(activeSheet);
     const groupOptions = equipmentGroupOptions();
     const createDraft = equipmentCreateDraft
       ? createEquipmentDraft(equipmentCreateDraft, equipmentSheetPromptDefaultGroup(activeSheet))
@@ -3717,31 +6308,102 @@
 
     const renderEditCell = (itemId, field, value, type = "text", placeholder = "") => `<input class="equipment-inline-input" data-mode="edit" data-equipment-id="${itemId}" data-field="${field}" type="${type}" value="${String(value || "").replaceAll('"', '&quot;')}" placeholder="${placeholder}" />`;
     const renderCreateCell = (field, value, type = "text", placeholder = "") => `<input class="equipment-inline-input" data-mode="create" data-field="${field}" type="${type}" value="${String(value || "").replaceAll('"', '&quot;')}" placeholder="${placeholder}" />`;
+    const renderKindSelect = (selectedKind, mode, itemId = "") => `
+      <select class="equipment-inline-input" data-mode="${mode}" data-field="itemKind" ${itemId ? `data-equipment-id="${itemId}"` : ""}>
+        <option value="item" ${String(selectedKind || "item").toLowerCase() !== "container" ? "selected" : ""}>Item</option>
+        <option value="container" ${String(selectedKind || "").toLowerCase() === "container" ? "selected" : ""}>Container</option>
+      </select>
+    `;
+    const renderParentSelect = (selectedParentId, selectedGroup, mode, itemId = "") => {
+      const options = equipmentContainerOptions(rows, itemId, selectedGroup);
+      return `
+        <select class="equipment-inline-input" data-mode="${mode}" data-field="parentItemId" ${itemId ? `data-equipment-id="${itemId}"` : ""}>
+          <option value="">No parent</option>
+          ${options.map((container) => `<option value="${String(container.id || "").replaceAll('"', '&quot;')}" ${String(selectedParentId || "") === String(container.id || "") ? "selected" : ""}>${String(container.article || "Unnamed container").replaceAll('"', "&quot;")}</option>`).join("")}
+        </select>
+      `;
+    };
+    const renderPhotoField = (item, mode, itemId = "") => {
+      const photoSrc = resolveEquipmentPhotoSrc(item);
+      const inputId = mode === "edit" ? `equipment-photo-input-${itemId}` : "equipment-photo-input-create";
+      return `
+        <div style="display:grid; gap:8px;">
+          ${photoSrc
+            ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item?.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:88px; height:88px; object-fit:cover; border-radius:14px; border:1px solid var(--line);", wrapperClass: "equipment-photo-lazy-media" })}</button>`
+            : `<div class="meta" style="display:flex; align-items:center; justify-content:center; width:88px; height:88px; border-radius:14px; border:1px dashed var(--line); background:rgba(15,23,42,0.03);">No photo</div>`}
+          <div class="button-row" style="gap:8px;">
+            <button type="button" class="ghost-button small-button equipment-photo-trigger" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} data-input-id="${inputId}" data-no-toast="true">Upload photo</button>
+            ${photoSrc ? `<button type="button" class="ghost-button small-button danger-button equipment-photo-remove" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} data-no-toast="true">Remove</button>` : ""}
+          </div>
+          <input id="${inputId}" class="equipment-photo-input" data-mode="${mode}" ${itemId ? `data-equipment-id="${itemId}"` : ""} type="file" accept="image/*" hidden />
+        </div>
+      `;
+    };
 
     const rowsHtml = sortedRows.map((item) => {
       const isEditing = canEdit && String(equipmentInlineEditId || "") === String(item.id || "");
       const draft = isEditing ? createEquipmentDraft(equipmentInlineDraftById[item.id] || item, item.group || equipmentSheetPromptDefaultGroup(activeSheet)) : item;
+      const parent = String(item.parentItemId || "").trim()
+        ? rows.find((candidate) => String(candidate.id || "") === String(item.parentItemId || ""))
+        : null;
+      const children = rows.filter((candidate) => String(candidate.parentItemId || "") === String(item.id || ""));
+      const childCount = children.length;
+      const isExpanded = item.itemKind === "container" && isEquipmentContainerExpanded(item.id);
+      const articlePrefix = item.parentItemId ? `<span class="meta" style="margin-right:6px;">↳</span>` : "";
+      const typeMeta = item.itemKind === "container"
+        ? `<span class="meta">Container${childCount ? ` · ${childCount} item${childCount === 1 ? "" : "s"}` : ""}</span>`
+        : (parent ? `<span class="meta">In ${parent.article || "container"}</span>` : `<span class="meta">Item</span>`);
+      const photoSrc = resolveEquipmentPhotoSrc(item);
+      const toggleContentsButton = item.itemKind === "container"
+        ? `<button type="button" class="ghost-button small-button equipment-toggle-contents-button" data-container-id="${item.id}" data-no-toast="true">${isExpanded ? "Hide contents" : "Show contents"}</button>`
+        : "";
+      const contentsRow = item.itemKind === "container" && isExpanded
+        ? `
+          <tr class="equipment-container-contents-row">
+            <td colspan="${visibleColumnCount}">
+              <div class="card" style="margin: 6px 0 0; padding: 14px 16px;">
+                <div class="button-row" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <strong>Contents of ${item.article || "container"}</strong>
+                  <span class="meta">${childCount} item${childCount === 1 ? "" : "s"}</span>
+                </div>
+                ${children.length
+                  ? `<div style="display:grid; gap:8px;">${children.map((child) => `
+                      <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:8px 0; border-top:1px solid rgba(15,23,42,0.08);">
+                        <div>
+                          <strong>${child.article || "Unnamed item"}</strong>
+                          <div class="meta">${child.category || "No category"}${child.quantity ? ` · Qty ${child.quantity}` : ""}${child.location ? ` · ${child.location}` : ""}</div>
+                        </div>
+                        <div class="meta">${child.condition || "No condition"}</div>
+                      </div>
+                    `).join("")}</div>`
+                  : `<p class="meta" style="margin:0;">This container does not contain any items yet.</p>`}
+              </div>
+            </td>
+          </tr>
+        `
+        : "";
       if (!isEditing) {
         return `
           <tr>
             ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><strong>${item.article || "-"}</strong></td>
+            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;", wrapperClass: "equipment-photo-lazy-media" })}</button>` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
             <td>${item.quantity || "-"}</td>
             <td>${item.condition || "-"}</td>
             <td>${item.location || "-"}</td>
             <td>${formatDate(item.checkedAt)}</td>
             <td>${item.notes || "-"}</td>
             ${canEdit
-              ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
+              ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button>${item.itemKind === "container" ? `<button type="button" class="ghost-button small-button equipment-add-child-button" data-parent-id="${item.id}" data-no-toast="true">Add content</button>` : ""}<button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
               : ""}
           </tr>
+          ${contentsRow}
         `;
       }
 
       return `
         <tr class="equipment-inline-edit-row">
           ${showGroupColumn ? `<td>${renderGroupSelect(draft.group, "edit", item.id)}</td>` : ""}
-          <td>${renderEditCell(item.id, "article", draft.article, "text", "Required")}</td>
+          <td><div style="display:grid; gap:8px;">${renderEditCell(item.id, "article", draft.article, "text", "Required")}${renderKindSelect(draft.itemKind, "edit", item.id)}${renderParentSelect(draft.parentItemId, draft.group, "edit", item.id)}${renderPhotoField(draft, "edit", item.id)}</div></td>
           <td>${renderEditCell(item.id, "quantity", draft.quantity)}</td>
           <td>${renderEditCell(item.id, "condition", draft.condition)}</td>
           <td>${renderEditCell(item.id, "location", draft.location)}</td>
@@ -3765,6 +6427,8 @@
           <p class="meta">Visible for all users${canEdit ? ", editable by admins" : "."}</p>
         </div>
         <div class="button-row">
+          ${canEdit ? `<button id="equipment-add-sheet" type="button" class="ghost-button" data-no-toast="true">Add sheet</button>` : ""}
+          ${canRemoveActiveSheet ? `<button id="equipment-remove-sheet" type="button" class="ghost-button danger-button" data-no-toast="true" data-sheet-key="${activeSheet}">Remove current sheet</button>` : ""}
           ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${equipmentSheetLabel(activeSheet)}`}</button>` : ""}
         </div>
       </div>
@@ -3775,6 +6439,9 @@
           <div class="form-grid" style="margin-bottom: 10px;">
             <label>Group ${renderGroupSelect(createDraft.group, "create")}</label>
             <label>Article ${renderCreateCell("article", createDraft.article, "text", "Required")}</label>
+            <label>Type ${renderKindSelect(createDraft.itemKind, "create")}</label>
+            <label>Parent container ${renderParentSelect(createDraft.parentItemId, createDraft.group, "create")}</label>
+            <label>Photo ${renderPhotoField(createDraft, "create")}</label>
             <label>Quantity ${renderCreateCell("quantity", createDraft.quantity)}</label>
             <label>Condition ${renderCreateCell("condition", createDraft.condition)}</label>
             <label>Location ${renderCreateCell("location", createDraft.location)}</label>
@@ -3788,8 +6455,11 @@
         </article>
       ` : ""}
       <div class="card" style="margin-bottom: 12px;">
-        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 0;">
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 10px;">
           ${sheetTabs}
+        </div>
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 0;">
+          ${kindFilterButtons}
         </div>
       </div>
       <div class="table-wrap">
@@ -3807,7 +6477,7 @@
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || `<tr><td colspan="${canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6)}" class="meta">No equipment rows yet for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No ${activeKindFilter === "containers" ? "containers" : activeKindFilter === "items" ? "items" : "equipment rows"} found for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -3885,12 +6555,619 @@
     `;
   }
 
+  function formatDateTime(dateText) {
+    if (!dateText) return "-";
+    const date = new Date(String(dateText || "").trim());
+    if (Number.isNaN(date.getTime())) return String(dateText || "-");
+    return new Intl.DateTimeFormat("de-AT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  function clubeeGamesViewModel() {
+    return CLUBEE_GAMES_SNAPSHOT.map((game) => {
+      const homeTeam = game.homeTeam || {};
+      const awayTeam = game.awayTeam || {};
+      const emperorsHome = String(homeTeam.name || "").trim().toLowerCase() === EMPERORS_TEAM_NAME.toLowerCase();
+      const opponent = emperorsHome ? awayTeam : homeTeam;
+      const emperorsScore = emperorsHome ? game.homeScore : game.awayScore;
+      const opponentScore = emperorsHome ? game.awayScore : game.homeScore;
+      const hasScore = Number.isFinite(emperorsScore) && Number.isFinite(opponentScore);
+      const venueParts = [game.venueName, game.venueCity].map((value) => String(value || "").trim()).filter(Boolean);
+      let resultTone = "pending";
+      let resultLabel = "Scheduled";
+      if (hasScore) {
+        if (emperorsScore > opponentScore) {
+          resultTone = "paid";
+          resultLabel = "Win";
+        } else if (emperorsScore < opponentScore) {
+          resultTone = "expired";
+          resultLabel = "Loss";
+        } else {
+          resultTone = "pending";
+          resultLabel = "Draw";
+        }
+      }
+      return {
+        id: String(game.id || ""),
+        startsAt: String(game.startsAt || ""),
+        displayDateTime: formatDateTime(game.startsAt),
+        phase: String(game.phase || "").trim() || "Game",
+        opponentName: String(opponent?.name || "Opponent").trim(),
+        opponentLogo: String(opponent?.logo || "").trim(),
+        emperorsHome,
+        homeTeamName: String(homeTeam.name || "").trim(),
+        awayTeamName: String(awayTeam.name || "").trim(),
+        homeTeamLogo: String(homeTeam.logo || "").trim(),
+        awayTeamLogo: String(awayTeam.logo || "").trim(),
+        emperorsScore,
+        opponentScore,
+        hasScore,
+        resultTone,
+        resultLabel,
+        venue: venueParts.join(" · "),
+        info: String(game.info || "").trim(),
+        streamLink: String(game.streamLink || "").trim()
+      };
+    }).sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+  }
+
   function renderEvents() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
-    if (!state.events.length) return emptyState("No practices or games yet", "Practices will be added here in the future");
-    return `...`;
+    const games = clubeeGamesViewModel();
+    if (!games.length) {
+      return emptyState("No games found", "Once we have game data connected, the season schedule and scores will show up here.");
+    }
+    const completedGames = games.filter((game) => game.hasScore);
+    const upcomingGames = games.filter((game) => !game.hasScore);
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Season Games</p>
+          <h3>Uni Wien Emperors</h3>
+          <p class="meta">Games snapshot from the Austrian College Sports League season page.</p>
+        </div>
+        <div class="pill-row" style="margin-top:0;">
+          ${plainPill(`${games.length} games shown`)}
+          ${plainPill(`${completedGames.length} with score`)}
+          ${plainPill(`${upcomingGames.length} upcoming`)}
+        </div>
+      </div>
+      <article class="setup-card" style="margin-bottom: 14px;">
+        <p class="meta" style="margin:0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+      </article>
+      <div class="grid">
+        ${games.map((game) => `
+          <article class="setup-card game-card">
+            <div class="game-card-top">
+              <div>
+                <p class="eyebrow">${game.phase}</p>
+                <h3 style="margin-bottom: 4px;">${game.emperorsHome ? "vs" : "at"} ${game.opponentName}</h3>
+                <p class="meta" style="margin:0;">${game.displayDateTime}</p>
+              </div>
+              <div>${statusPill(game.resultTone, game.resultLabel)}</div>
+            </div>
+            <div class="game-scoreboard">
+              <div class="game-team ${game.emperorsHome ? "is-emperors" : ""}">
+                ${game.homeTeamLogo ? renderLazyImage({ src: game.homeTeamLogo, alt: game.homeTeamName, className: "game-team-logo", wrapperClass: "game-logo-lazy-media" }) : ""}
+                <strong>${game.homeTeamName}</strong>
+              </div>
+              <div class="game-score">
+                ${game.hasScore
+                  ? `<span>${game.emperorsHome ? game.homeScore : game.opponentScore}</span><span class="meta">:</span><span>${game.emperorsHome ? game.awayScore : game.emperorsScore}</span>`
+                  : `<span class="meta">Kickoff</span>`}
+              </div>
+              <div class="game-team ${!game.emperorsHome ? "is-emperors" : ""}">
+                ${game.awayTeamLogo ? renderLazyImage({ src: game.awayTeamLogo, alt: game.awayTeamName, className: "game-team-logo", wrapperClass: "game-logo-lazy-media" }) : ""}
+                <strong>${game.awayTeamName}</strong>
+              </div>
+            </div>
+            <div class="pill-row">
+              ${game.venue ? plainPill(game.venue) : ""}
+              ${game.info ? plainPill(`Game day ${game.info}`) : ""}
+              ${game.emperorsHome ? plainPill("Home") : plainPill("Away")}
+            </div>
+            ${game.streamLink ? `<div style="margin-top: 12px;"><a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button">Open stream</a></div>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function normalizeGameTeamFilter(values) {
+    const allowed = new Set(Object.keys(TEAM_BUCKET_FILE_MAP));
+    return (Array.isArray(values) ? values : [])
+      .map((entry) => String(entry || "").trim())
+      .filter((entry) => allowed.has(entry));
+  }
+
+  function saveSelectedGameTeams() {
+    saveStoredArray(GAMES_FILTER_STORAGE_KEY, selectedGameTeams);
+  }
+
+  function saveSelectedGamesViewMode(mode) {
+    const normalized = mode === "playoffs" ? "playoffs" : "schedule";
+    selectedGamesViewMode = normalized;
+    saveStoredValue(GAMES_VIEW_MODE_KEY, normalized);
+  }
+
+  function saveGamesStandingsExpanded(value) {
+    gamesStandingsExpanded = Boolean(value);
+    saveStoredValue(GAMES_STANDINGS_OPEN_KEY, gamesStandingsExpanded ? "true" : "false");
+  }
+
+  function gameFilterTeamOptions() {
+    return Object.keys(TEAM_BUCKET_FILE_MAP);
+  }
+
+  function buildLeagueGamesViewModel() {
+    const activeFilters = new Set(normalizeGameTeamFilter(selectedGameTeams));
+    return LEAGUE_GAMES_SNAPSHOT
+      .filter((game) => {
+        if (!activeFilters.size) return true;
+        const homeName = String(game?.homeTeam?.name || "").trim();
+        const awayName = String(game?.awayTeam?.name || "").trim();
+        if (homeName === "TBA" || awayName === "TBA") return false;
+        return activeFilters.has(homeName) || activeFilters.has(awayName);
+      })
+      .map((game) => {
+        const homeTeamName = String(game?.homeTeam?.name || "TBA").trim();
+        const awayTeamName = String(game?.awayTeam?.name || "TBA").trim();
+        const hasScore = Number.isFinite(game.homeScore) && Number.isFinite(game.awayScore);
+        const venueParts = [game.venueName, game.venueCity].map((value) => String(value || "").trim()).filter(Boolean);
+        return {
+          id: String(game.id || ""),
+          stage: String(game.stage || "Games").trim(),
+          subtitle: String(game.subtitle || "").trim(),
+          startsAt: String(game.startsAt || ""),
+          displayDateTime: formatDateTime(game.startsAt),
+          homeTeamName,
+          awayTeamName,
+          homeTeamLogo: teamLogoUrl(homeTeamName),
+          awayTeamLogo: teamLogoUrl(awayTeamName),
+          homeScore: Number.isFinite(game.homeScore) ? game.homeScore : null,
+          awayScore: Number.isFinite(game.awayScore) ? game.awayScore : null,
+          hasScore,
+          statusTone: hasScore ? "paid" : "pending",
+          statusLabel: hasScore ? "Result" : "Scheduled",
+          venue: venueParts.join(" · "),
+          streamLink: String(game.streamLink || "").trim(),
+          isReplay: Boolean(game.isReplay)
+        };
+      })
+      .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+  }
+
+  function buildLeagueStandingsViewModel() {
+    const activeFilters = new Set(normalizeGameTeamFilter(selectedGameTeams));
+    return (LEAGUE_STANDINGS_SNAPSHOT.rows || [])
+      .filter((row) => !activeFilters.size || activeFilters.has(String(row.teamName || "").trim()))
+      .sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0))
+      .map((row) => ({
+        rank: Number(row.rank || 0),
+        teamName: String(row.teamName || "").trim(),
+        teamLogo: teamLogoUrl(row.teamName),
+        wins: Number(row.wins || 0),
+        losses: Number(row.losses || 0),
+        draws: Number(row.draws || 0),
+        pointsFor: Number(row.pointsFor || 0),
+        pointsAgainst: Number(row.pointsAgainst || 0),
+        pct: Number(row.pct || 0),
+        diff: Number(row.diff || 0)
+      }));
+  }
+
+  function buildRankedStandingsViewModel() {
+    return (LEAGUE_STANDINGS_SNAPSHOT.rows || [])
+      .slice()
+      .sort((left, right) => Number(left.rank || 0) - Number(right.rank || 0))
+      .map((row) => ({
+        rank: Number(row.rank || 0),
+        teamName: String(row.teamName || "").trim(),
+        teamLogo: teamLogoUrl(row.teamName),
+        wins: Number(row.wins || 0),
+        losses: Number(row.losses || 0),
+        draws: Number(row.draws || 0),
+        pointsFor: Number(row.pointsFor || 0),
+        pointsAgainst: Number(row.pointsAgainst || 0),
+        pct: Number(row.pct || 0),
+        diff: Number(row.diff || 0)
+      }));
+  }
+
+  function renderBracketTeamSlot({ teamName = "", teamLogo = "", seedLabel = "", note = "", isWinnerSlot = false } = {}) {
+    const normalizedName = String(teamName || "").trim();
+    const normalizedSeed = String(seedLabel || "").trim();
+    const label = normalizedName || "TBD";
+    return `
+      <div class="playoff-team-slot ${isWinnerSlot ? "is-winner-slot" : ""}">
+        <div class="playoff-team-slot-main">
+          ${teamLogo
+            ? renderLazyImage({ src: teamLogo, alt: label, className: "playoff-team-logo", wrapperClass: "game-logo-lazy-media" })
+            : `<div class="playoff-team-logo playoff-team-logo-fallback">${escapeHtml((normalizedName || normalizedSeed || "?").slice(0, 1))}</div>`}
+          <div>
+            <strong>${escapeHtml(label)}</strong>
+            <div class="meta">${escapeHtml(normalizedSeed || (isWinnerSlot ? "Winner slot" : "Team"))}</div>
+          </div>
+        </div>
+        ${note ? `<div class="meta playoff-team-slot-note">${escapeHtml(note)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function buildPlayoffBracketViewModel() {
+    const ranked = buildRankedStandingsViewModel();
+    const byRank = (rank) => ranked.find((row) => row.rank === rank) || null;
+    const byId = (id) => LEAGUE_GAMES_SNAPSHOT.find((game) => String(game.id || "") === id) || null;
+    const wildcardOne = byId("g-2026-05-23-wildcard-1");
+    const wildcardTwo = byId("g-2026-05-23-wildcard-2");
+    const semiOne = byId("g-2026-06-06-semi-1");
+    const semiTwo = byId("g-2026-06-06-semi-2");
+    const thirdPlace = byId("g-2026-06-27-third-place");
+    const final = byId("g-2026-06-27-final");
+    const venueLabel = (game) => [game?.venueName, game?.venueCity].map((value) => String(value || "").trim()).filter(Boolean).join(" Â· ");
+
+    return {
+      wildcardGames: [
+        {
+          title: "Wildcard 1",
+          subtitle: wildcardOne?.subtitle || "ACSL #3 vs #6",
+          displayDateTime: formatDateTime(wildcardOne?.startsAt || ""),
+          venue: venueLabel(wildcardOne),
+          streamLink: String(wildcardOne?.streamLink || "").trim(),
+          topSeed: byRank(3),
+          bottomSeed: byRank(6)
+        },
+        {
+          title: "Wildcard 2",
+          subtitle: wildcardTwo?.subtitle || "ACSL #4 vs #5",
+          displayDateTime: formatDateTime(wildcardTwo?.startsAt || ""),
+          venue: venueLabel(wildcardTwo),
+          streamLink: String(wildcardTwo?.streamLink || "").trim(),
+          topSeed: byRank(4),
+          bottomSeed: byRank(5)
+        }
+      ],
+      semifinalGames: [
+        {
+          title: "Semifinal 1",
+          subtitle: semiOne?.subtitle || "ACSL #1 vs lowest remaining seed",
+          displayDateTime: formatDateTime(semiOne?.startsAt || ""),
+          venue: venueLabel(semiOne),
+          streamLink: String(semiOne?.streamLink || "").trim(),
+          lockedSeed: byRank(1),
+        },
+        {
+          title: "Semifinal 2",
+          subtitle: semiTwo?.subtitle || "ACSL #2 vs highest remaining seed",
+          displayDateTime: formatDateTime(semiTwo?.startsAt || ""),
+          venue: venueLabel(semiTwo),
+          streamLink: String(semiTwo?.streamLink || "").trim(),
+          lockedSeed: byRank(2),
+        }
+      ],
+      finalGame: {
+        title: "Final",
+        subtitle: final?.subtitle || "ACSL Summer Bowl",
+        displayDateTime: formatDateTime(final?.startsAt || ""),
+        venue: venueLabel(final),
+        streamLink: String(final?.streamLink || "").trim()
+      },
+      thirdPlaceGame: {
+        title: "3rd Place",
+        subtitle: thirdPlace?.subtitle || "ACSL Spiel um Platz 3",
+        displayDateTime: formatDateTime(thirdPlace?.startsAt || ""),
+        venue: venueLabel(thirdPlace),
+        streamLink: String(thirdPlace?.streamLink || "").trim()
+      }
+    };
+  }
+
+  function renderGamesStandingsPanel(standings) {
+    return `
+      <details class="setup-card standings-shell" id="games-standings-details" ${gamesStandingsExpanded ? "open" : ""}>
+        <summary class="games-standings-summary" data-no-toast="true">
+          <div>
+            <p class="eyebrow">Standings</p>
+            <h3>${escapeHtml(LEAGUE_STANDINGS_SNAPSHOT.label)}</h3>
+          </div>
+          <div class="games-standings-summary-meta">
+            ${plainPill(`${standings.length} teams`)}
+            <span class="games-standings-chevron" aria-hidden="true">⌄</span>
+          </div>
+        </summary>
+        <div class="table-wrap standings-table-wrap">
+          <table class="standings-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team</th>
+                <th>W</th>
+                <th>L</th>
+                <th>D</th>
+                <th>PF</th>
+                <th>PA</th>
+                <th>Pct</th>
+                <th>+/-</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${standings.map((row) => `
+                <tr class="${row.teamName === EMPERORS_TEAM_NAME ? "standings-row-emperors" : ""}">
+                  <td><strong>${row.rank}</strong></td>
+                  <td>
+                    <div class="standings-team-cell">
+                      ${row.teamLogo ? renderLazyImage({ src: row.teamLogo, alt: row.teamName, className: "standings-team-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="standings-team-logo standings-team-logo-fallback">${escapeHtml(row.teamName.slice(0, 1) || "?")}</div>`}
+                      <div>
+                        <strong>${escapeHtml(row.teamName)}</strong>
+                      </div>
+                    </div>
+                  </td>
+                  <td>${row.wins}</td>
+                  <td>${row.losses}</td>
+                  <td>${row.draws}</td>
+                  <td>${row.pointsFor}</td>
+                  <td>${row.pointsAgainst}</td>
+                  <td>${row.pct.toFixed(3)}</td>
+                  <td>${row.diff > 0 ? `+${row.diff}` : row.diff}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    `;
+  }
+
+  function renderPlayoffBracket(bracket) {
+    return `
+      <section class="playoff-bracket-shell">
+        <div class="playoff-bracket-columns">
+          <article class="setup-card playoff-round-card">
+            <div class="playoff-round-head">
+              <p class="eyebrow">Playoffs</p>
+              <h3>Wildcard</h3>
+            </div>
+            <div class="playoff-round-list">
+              ${bracket.wildcardGames.map((game) => `
+                <article class="playoff-match-card">
+                  <div class="playoff-match-head">
+                    <div>
+                      <strong>${escapeHtml(game.title)}</strong>
+                      <p class="meta">${escapeHtml(game.subtitle)}</p>
+                    </div>
+                    <div class="meta">${escapeHtml(game.displayDateTime)}</div>
+                  </div>
+                  <div class="playoff-team-stack">
+                    ${renderBracketTeamSlot({ teamName: game.topSeed?.teamName || "", teamLogo: game.topSeed?.teamLogo || "", seedLabel: game.topSeed ? `Seed #${game.topSeed.rank}` : "Seed #3" })}
+                    ${renderBracketTeamSlot({ teamName: game.bottomSeed?.teamName || "", teamLogo: game.bottomSeed?.teamLogo || "", seedLabel: game.bottomSeed ? `Seed #${game.bottomSeed.rank}` : "Seed #6" })}
+                  </div>
+                  <div class="pill-row">
+                    ${game.venue ? plainPill(game.venue) : ""}
+                    ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </article>
+          <article class="setup-card playoff-round-card">
+            <div class="playoff-round-head">
+              <p class="eyebrow">Playoffs</p>
+              <h3>Semifinals</h3>
+            </div>
+            <div class="playoff-round-list">
+              ${bracket.semifinalGames.map((game) => `
+                <article class="playoff-match-card">
+                  <div class="playoff-match-head">
+                    <div>
+                      <strong>${escapeHtml(game.title)}</strong>
+                      <p class="meta">${escapeHtml(game.subtitle)}</p>
+                    </div>
+                    <div class="meta">${escapeHtml(game.displayDateTime)}</div>
+                  </div>
+                  <div class="playoff-team-stack">
+                    ${renderBracketTeamSlot({ teamName: game.lockedSeed?.teamName || "", teamLogo: game.lockedSeed?.teamLogo || "", seedLabel: game.lockedSeed ? `Seed #${game.lockedSeed.rank}` : "" })}
+                    ${renderBracketTeamSlot({ teamName: "Wildcard Winner", seedLabel: "Seed decided after Wildcard", note: game.winnerNote, isWinnerSlot: true })}
+                  </div>
+                  <div class="pill-row">
+                    ${game.venue ? plainPill(game.venue) : ""}
+                    ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </article>
+          <article class="setup-card playoff-round-card playoff-finals-card">
+            <div class="playoff-round-head">
+              <p class="eyebrow">Finals Day</p>
+              <h3>Final & 3rd Place</h3>
+            </div>
+            <div class="playoff-round-list">
+              <article class="playoff-match-card is-accented">
+                <div class="playoff-match-head">
+                  <div>
+                    <strong>${escapeHtml(bracket.finalGame.title)}</strong>
+                    <p class="meta">${escapeHtml(bracket.finalGame.subtitle)}</p>
+                  </div>
+                  <div class="meta">${escapeHtml(bracket.finalGame.displayDateTime)}</div>
+                </div>
+                <div class="playoff-team-stack">
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Winner", seedLabel: "Winner SF1", isWinnerSlot: true })}
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Winner", seedLabel: "Winner SF2", isWinnerSlot: true })}
+                </div>
+                <div class="pill-row">
+                  ${bracket.finalGame.venue ? plainPill(bracket.finalGame.venue) : ""}
+                  ${bracket.finalGame.streamLink ? `<a href="${bracket.finalGame.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                </div>
+              </article>
+              <article class="playoff-match-card">
+                <div class="playoff-match-head">
+                  <div>
+                    <strong>${escapeHtml(bracket.thirdPlaceGame.title)}</strong>
+                    <p class="meta">${escapeHtml(bracket.thirdPlaceGame.subtitle)}</p>
+                  </div>
+                  <div class="meta">${escapeHtml(bracket.thirdPlaceGame.displayDateTime)}</div>
+                </div>
+                <div class="playoff-team-stack">
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Loser", seedLabel: "Loser SF1", isWinnerSlot: true })}
+                  ${renderBracketTeamSlot({ teamName: "Semifinal Loser", seedLabel: "Loser SF2", isWinnerSlot: true })}
+                </div>
+                <div class="pill-row">
+                  ${bracket.thirdPlaceGame.venue ? plainPill(bracket.thirdPlaceGame.venue) : ""}
+                  ${bracket.thirdPlaceGame.streamLink ? `<a href="${bracket.thirdPlaceGame.streamLink}" target="_blank" rel="noreferrer" class="ghost-button small-button">Stream</a>` : ""}
+                </div>
+              </article>
+            </div>
+          </article>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderGamesBoard() {
+    const games = buildLeagueGamesViewModel();
+    const standings = buildRankedStandingsViewModel();
+    const filterOptions = gameFilterTeamOptions();
+    const bracket = buildPlayoffBracketViewModel();
+    if (!games.length) {
+      return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
+    }
+    const completedGames = games.filter((game) => game.hasScore);
+    const upcomingGames = games.filter((game) => !game.hasScore);
+    const stageOrder = [];
+    const gamesByStage = new Map();
+    games.forEach((game) => {
+      if (!gamesByStage.has(game.stage)) {
+        stageOrder.push(game.stage);
+        gamesByStage.set(game.stage, []);
+      }
+      gamesByStage.get(game.stage).push(game);
+    });
+    return `
+      <div class="section-head">
+      <div>
+        <p class="eyebrow">Austrian College Sports League</p>
+        <h3>Games & results</h3>
+      </div>
+      <div class="pill-row" style="margin-top:0;">
+        ${plainPill(`${games.length} games shown`)}
+        ${plainPill(`${completedGames.length} finished`)}
+        ${plainPill(`${upcomingGames.length} upcoming`)}
+      </div>
+      </div>
+      ${renderGamesStandingsPanel(standings)}
+      <article class="setup-card" style="margin-bottom: 14px;">
+        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 12px;">
+          <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" data-games-view-mode="schedule" data-no-toast="true">Regular season</button>
+          <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "playoffs" ? "is-active" : ""}" data-games-view-mode="playoffs" data-no-toast="true">Playoff picture</button>
+        </div>
+        ${selectedGamesViewMode === "schedule" ? `
+        <div class="game-filter-bar">
+          <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
+        ${filterOptions.map((teamName) => `
+        <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>
+        `).join("")}
+        </div>
+        ` : `
+        <p class="meta" style="margin:0;">Wildcard pairings are prefilled from the current standings, and semifinal slots already follow the current seeding logic.</p>
+        `}
+        <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+      </article>
+      ${selectedGamesViewMode === "playoffs" ? renderPlayoffBracket(bracket) : ""}
+      ${selectedGamesViewMode === "schedule" ? `
+      <div class="games-stage-stack">
+      ${stageOrder.map((stage) => `
+        <section class="setup-card games-stage">
+        <div class="games-stage-head">
+          <div>
+          <p class="eyebrow">${escapeHtml(stage)}</p>
+          <h3>${escapeHtml(stage)}</h3>
+          </div>
+          <div>${plainPill(`${gamesByStage.get(stage).length} fixtures`)}</div>
+        </div>
+        <div class="games-stage-list">
+          ${gamesByStage.get(stage).map((game) => `
+          <article class="game-match">
+            <div class="game-match-meta">
+            <div>
+              <strong>${escapeHtml(game.subtitle || game.displayDateTime)}</strong>
+              <p class="meta">${escapeHtml(game.subtitle ? game.displayDateTime : (game.venue || "Venue TBA"))}</p>
+            </div>
+            <div class="game-match-status-row">
+              ${statusPill(game.statusTone, game.statusLabel)}
+              ${game.isReplay ? plainPill("Replay") : ""}
+            </div>
+            </div>
+            <div class="game-match-body">
+            <div class="game-match-team game-match-team-home">
+              ${game.homeTeamLogo ? renderLazyImage({ src: game.homeTeamLogo, alt: game.homeTeamName, className: "game-match-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.homeTeamName.slice(0, 1) || "?")}</div>`}
+              <div>
+              <strong>${escapeHtml(game.homeTeamName)}</strong>
+              <p class="meta">${game.homeTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
+              </div>
+            </div>
+            <div class="game-match-center">
+              ${game.hasScore
+              ? `<div class="game-match-score"><span>${game.homeScore}</span><span class="game-match-score-separator">:</span><span>${game.awayScore}</span></div>`
+              : `<div class="game-match-kickoff">${escapeHtml(game.displayDateTime)}</div>`}
+              <p class="meta">${escapeHtml(game.venue || "Venue TBA")}</p>
+              ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button">${new Date(game.startsAt).getTime() > Date.now() ? "Watch live" : "Watch replay"}</a>` : ""}
+            </div>
+            <div class="game-match-team game-match-team-away">
+              <div>
+              <strong>${escapeHtml(game.awayTeamName)}</strong>
+              <p class="meta">${game.awayTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
+              </div>
+              ${game.awayTeamLogo ? renderLazyImage({ src: game.awayTeamLogo, alt: game.awayTeamName, className: "game-match-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.awayTeamName.slice(0, 1) || "?")}</div>`}
+            </div>
+            </div>
+          </article>
+          `).join("")}
+        </div>
+        </section>
+      `).join("")}
+      </div>
+      ` : ""}
+    `;
+  }
+
+  function bindGamesActions() {
+    document.querySelectorAll("[data-games-view-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        saveSelectedGamesViewMode(String(button.dataset.gamesViewMode || "schedule"));
+        mount();
+      });
+    });
+    const standingsDetails = document.getElementById("games-standings-details");
+    if (standingsDetails) {
+      standingsDetails.addEventListener("toggle", () => {
+        saveGamesStandingsExpanded(standingsDetails.open);
+      });
+    }
+    document.querySelectorAll("[data-game-team]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const value = String(button.dataset.gameTeam || "").trim();
+        if (value === "__all__") {
+          selectedGameTeams = [];
+        } else if (value) {
+          const next = new Set(normalizeGameTeamFilter(selectedGameTeams));
+          if (next.has(value)) {
+            next.delete(value);
+          } else {
+            next.add(value);
+          }
+          selectedGameTeams = Array.from(next);
+        }
+        saveSelectedGameTeams();
+        mount();
+      });
+    });
   }
 
   function renderInvites() {
@@ -3906,6 +7183,8 @@
       return renderAuthGate();
     }
     const restrictions = bootstrapMeta.permissionsModel?.restrictedAreas || {};
+    const diagnosticEntries = loadDiagnosticsLog();
+    const remoteRows = remoteDiagnosticsEntries;
     return `
       <div class="grid two-up">
         ${currentAccessRole === "admin" ? `
@@ -3920,21 +7199,293 @@
           <div class="button-row"><button type="button" class="primary-button" id="send-admin-invite">Send invite</button></div>
         </article>
         ` : ""}
+        ${currentAccessRole === "admin" ? `
+        <article class="setup-card">
+          <p class="eyebrow">Diagnostics</p>
+          <h3>Recent logs</h3>
+          <p class="meta">Important auth events, load failures, and app errors are stored locally in this browser and can also be forwarded to Appwrite for cross-device troubleshooting.</p>
+          <div class="stack" style="gap: 10px; margin-bottom: 14px;">
+            <div class="meta"><strong>Remote logs:</strong> ${escapeHtml(remoteDiagnosticsStatus || (diagnosticsFunctionId() ? "Not loaded yet." : "Diagnostics function not configured."))}${remoteDiagnosticsRetryAfter && remoteDiagnosticsRetryAfter > Date.now() ? ` (retrying after ${escapeHtml(new Date(remoteDiagnosticsRetryAfter).toLocaleTimeString())})` : ""}</div>
+            <div class="button-row">
+              <button type="button" class="ghost-button" id="refresh-remote-diagnostics-log">Refresh remote logs</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="margin-bottom: 14px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Level</th>
+                  <th>Scope</th>
+                  <th>Message</th>
+                  <th>User</th>
+                  <th>Route</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${remoteRows.map((entry) => `
+                  <tr>
+                    <td>${formatDateTime(entry.at)}</td>
+                    <td>${statusPill(entry.level === "error" ? "expired" : entry.level === "warn" ? "pending" : "paid", entry.level)}</td>
+                    <td>${escapeHtml(entry.scope || "-")}</td>
+                    <td>${escapeHtml(entry.message || "-")}</td>
+                    <td class="meta">${escapeHtml(entry.userEmail || entry.accessRole || "-")}</td>
+                    <td class="meta">${escapeHtml(entry.route || "-")}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="6" class="meta">No remote diagnostics loaded yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <p class="meta">Local browser fallback</p>
+          <div class="button-row" style="margin-bottom: 10px;">
+            <button type="button" class="ghost-button" id="export-diagnostics-log">Export logs</button>
+            <button type="button" class="ghost-button danger-button" id="clear-diagnostics-log">Clear logs</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Level</th>
+                  <th>Scope</th>
+                  <th>Message</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${diagnosticEntries.map((entry) => `
+                  <tr>
+                    <td>${formatDateTime(entry.at)}</td>
+                    <td>${statusPill(entry.level === "error" ? "expired" : entry.level === "warn" ? "pending" : "paid", entry.level)}</td>
+                    <td>${escapeHtml(entry.scope || "-")}</td>
+                    <td>${escapeHtml(entry.message || "-")}</td>
+                    <td class="meta">${escapeHtml(entry.details || "-")}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="5" class="meta">No diagnostics recorded yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </article>
+        ` : ""}
       </div>
     `;
   }
 
+  function organizationTaskList(value) {
+    return String(value || "")
+      .split(/\s*(?:,|\n)\s*/)
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean);
+  }
+
+  function organizationMemberMatch(name) {
+    const needle = String(name || "").trim().toLowerCase();
+    if (!needle) return null;
+    return state.members.find((member) => {
+      const fullName = String(member.name || `${member.firstName || ""} ${member.lastName || ""}`).trim().toLowerCase();
+      return fullName === needle;
+    }) || null;
+  }
+
+  function renderOrganizationPerson(label, name) {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) return "";
+    const matchedMember = organizationMemberMatch(normalizedName);
+    const personMarkup = matchedMember
+      ? `<button type="button" class="organization-person-link open-user-page-button" data-member-id="${matchedMember.id}">${normalizedName}</button>`
+      : `<strong>${normalizedName}</strong>`;
+    return `
+      <div class="organization-person-block">
+        <p class="muted" style="margin:0 0 4px;">${label}</p>
+        ${personMarkup}
+      </div>
+    `;
+  }
+
+  function renderOrganization() {
+    const rows = sortOrganizationRows(state.organization || []);
+    const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
+    const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
+    const branchRows = rootEntry ? rows.filter((entry) => String(entry.id) !== String(rootEntry.id)) : rows;
+    const renderTaskItems = (tasks) => tasks.length
+      ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${task}</div>`).join("")}</div>`
+      : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`;
+    const renderTaskDetails = (tasks) => tasks.length
+      ? `<details class="organization-task-details"><summary class="organization-task-summary">Aufgaben (${tasks.length})</summary>${renderTaskItems(tasks)}</details>`
+      : "";
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Club Structure</p>
+          <h3>Organization</h3>
+          <p class="meta">Visible for everyone. Only admins can change responsibilities.</p>
+        </div>
+        <div class="button-row">
+          ${canEdit ? `<button type="button" class="primary-button" id="organization-add-entry">Add section</button>` : ""}
+        </div>
+      </div>
+      <article class="card" style="margin-bottom: 16px; overflow: visible;">
+        <div class="organization-chart">
+          ${rootEntry ? `
+            <article class="organization-root">
+              <div class="organization-root-header">Head of Emperors</div>
+              <div class="organization-root-body">
+                <div class="organization-people">
+                  ${renderOrganizationPerson("Verantwortlicher", rootEntry.verantwortung)}
+                  ${renderOrganizationPerson("Co-Verantwortlicher", rootEntry.coVerantwortung)}
+                </div>
+                ${renderTaskDetails(organizationTaskList(rootEntry.aufgaben))}
+                ${canEdit ? `<div class="action-row"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${rootEntry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${rootEntry.id}" data-no-toast="true">Delete</button></div>` : ""}
+              </div>
+            </article>
+            <div class="organization-root-connector"></div>
+          ` : ""}
+          <div class="organization-branches">
+            ${branchRows.map((entry) => {
+              const tasks = organizationTaskList(entry.aufgaben);
+              return `
+                <article class="organization-branch">
+                  <div class="organization-branch-header">${entry.headOf || "Section"}</div>
+                  <div class="organization-branch-body">
+                    <div class="organization-people">
+                      ${renderOrganizationPerson("Verantwortlicher", entry.verantwortung)}
+                      ${renderOrganizationPerson("Co-Verantwortlicher", entry.coVerantwortung)}
+                    </div>
+                    ${renderTaskDetails(tasks)}
+                    ${canEdit ? `<div class="action-row" style="margin-top:8px;"><button type="button" class="ghost-button small-button organization-edit-button" data-organization-id="${entry.id}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button organization-delete-button" data-organization-id="${entry.id}" data-no-toast="true">Delete</button></div>` : ""}
+                  </div>
+                </article>
+              `;
+            }).join("") || `<article class="organization-branch"><div class="organization-branch-header">No sections</div><div class="organization-branch-body"><p class="meta">Add your first section once the Appwrite table is ready.</p></div></article>`}
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  async function saveOrganizationEntry(entry) {
+    if (!authState.user || currentAccessRole !== "admin") {
+      throw new Error("Only admins can update organization entries.");
+    }
+    const normalized = normalizeOrganizationEntry({
+      id: entry?.id || generateOrganizationId(),
+      headOf: entry?.headOf,
+      verantwortung: entry?.verantwortung,
+      "co-verantwortung": entry?.coVerantwortung,
+      aufgaben: entry?.aufgaben
+    }, 0);
+    const remotePayload = {
+      id: normalized.id,
+      head_of: normalized.headOf || null,
+      verantwortung: normalized.verantwortung || null,
+      co_verantwortung: normalized.coVerantwortung || null,
+      aufgaben: normalized.aufgaben || null
+    };
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("organization").upsert(remotePayload, { onConflict: "id" });
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the write. Please grant create/update/delete permissions on the 'organization' table to authenticated users, then rely on the app's admin-only UI for editing.");
+        }
+        throw response.error;
+      }
+    }
+    const existingIndex = (state.organization || []).findIndex((row) => String(row.id) === String(normalized.id));
+    const nextRows = existingIndex >= 0
+      ? state.organization.map((row, index) => (index === existingIndex ? normalized : row))
+      : [...(state.organization || []), normalized];
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: nextRows,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment
+    });
+    recordActivity("organization", existingIndex >= 0 ? "Organization section updated." : "Organization section created.", {
+      action: existingIndex >= 0 ? "organization_updated" : "organization_created",
+      organizationId: normalized.id,
+      headOf: normalized.headOf,
+      verantwortung: normalized.verantwortung,
+      coVerantwortung: normalized.coVerantwortung
+    });
+  }
+
+  async function deleteOrganizationEntry(organizationId) {
+    if (!authState.user || currentAccessRole !== "admin") {
+      throw new Error("Only admins can update organization entries.");
+    }
+    const normalizedId = String(organizationId || "").trim();
+    if (!normalizedId) return;
+    const currentRow = (state.organization || []).find((row) => String(row.id) === normalizedId);
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("organization").delete().eq("id", normalizedId);
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the delete. Please grant delete permissions on the 'organization' table to authenticated users.");
+        }
+        throw response.error;
+      }
+    }
+    const nextRows = (state.organization || []).filter((row) => String(row.id) !== normalizedId);
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: nextRows,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment
+    });
+    recordActivity("organization", "Organization section deleted.", {
+      action: "organization_deleted",
+      organizationId: normalizedId,
+      headOf: currentRow?.headOf || "",
+      verantwortung: currentRow?.verantwortung || ""
+    });
+  }
+
+  function openOrganizationDialog(entry) {
+    const dialog = document.getElementById("organization-dialog");
+    const form = document.getElementById("organization-form");
+    const title = document.getElementById("organization-dialog-title");
+    const submit = document.getElementById("organization-submit-button");
+    if (!dialog || !form) return;
+    organizationDialogEditingId = String(entry?.id || "").trim();
+    form.reset();
+    form.elements.organizationId.value = organizationDialogEditingId;
+    form.elements.headOf.value = entry?.headOf || "";
+    form.elements.verantwortung.value = entry?.verantwortung || "";
+    form.elements.coVerantwortung.value = entry?.coVerantwortung || "";
+    form.elements.aufgaben.value = String(entry?.aufgaben || "").replace(/\s*,\s*/g, "\n");
+    title.textContent = entry ? `Edit ${entry.headOf || "section"}` : "Add organization section";
+    submit.textContent = entry ? "Save changes" : "Save section";
+    dialog.showModal();
+  }
+
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
-    if (normalizedRole === "admin") return ["dashboard", "members", "fees", "user", "passes", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "members", "fees", "user", "equipment", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "coach") return ["dashboard", "members", "user", "passes", "equipment", "events", "invites", "recovery"];
-    if (normalizedRole === "tech_admin") return ["dashboard", "members", "user", "passes", "equipment", "events", "invites", "recovery"];
-    return ["dashboard", "members", "user", "equipment", "events", "recovery"];
+    if (normalizedRole === "admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "coach") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    if (normalizedRole === "tech_admin") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
+    return ["dashboard", "roster", "tryout", "members", "user", "organization", "equipment", "events", "recovery"];
+  }
+
+  function isPublicView(viewId) {
+    const normalizedViewId = String(viewId || "").trim();
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events" || normalizedViewId === "organization";
   }
 
   function canAccessView(viewId) {
-    return viewsAllowedForRole(currentAccessRole).includes(String(viewId || "").trim());
+    const normalizedViewId = String(viewId || "").trim();
+    if (isPublicView(normalizedViewId)) return true;
+    return viewsAllowedForRole(currentAccessRole).includes(normalizedViewId);
   }
 
   function resolveAllowedView(nextViewId) {
@@ -3949,14 +7500,14 @@
     const signedIn = Boolean(authState.user) || isLocalPreviewMode();
     document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
       const viewId = String(link.dataset.view || "").trim();
-      const visible = signedIn && canAccessView(viewId);
+      const visible = isPublicView(viewId) || (signedIn && canAccessView(viewId));
       link.style.display = visible ? "" : "none";
       if (!visible) link.classList.remove("active");
     });
 
     const navDivider = document.querySelector(".nav hr");
     if (navDivider) {
-      navDivider.style.display = signedIn ? "" : "none";
+      navDivider.style.display = signedIn || isPublicView("events") ? "" : "none";
     }
 
     const profileNavButton = document.getElementById("profile-nav-button");
@@ -4089,6 +7640,9 @@
 
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
+    if (finalView === "roster") {
+      ensurePublicRosterLoaded();
+    }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
       if (section) section.classList.toggle("active", viewId === finalView);
@@ -4096,6 +7650,11 @@
     document.querySelectorAll(".nav-link").forEach((link) => {
       link.classList.toggle("active", link.dataset.view === finalView);
     });
+    const activeSection = document.getElementById(finalView);
+    if (activeSection) {
+      setupLazyImages(activeSection);
+      window.requestAnimationFrame(() => hydrateVisibleLazyImages(activeSection));
+    }
   }
 
   function getRouteView() {
@@ -4139,7 +7698,7 @@
     form.elements.jerseyNumber.value = member?.jerseyNumber ?? "";
     form.elements.membershipStatus.value = member?.membershipStatus || "active";
     form.elements.passStatus.value = displayPassStatus(member?.passStatus || "valid");
-    form.elements.passExpiry.value = member?.passExpiry || (!member ? defaultPassExpiryDate() : "");
+    form.elements.passExpiry.value = normalizeToIsoDate(member?.passExpiry || "") || (!member ? defaultPassExpiryDate() : "");
     form.elements.notes.value = member?.notes || "";
     title.textContent = member ? `Edit ${member.name}` : "Add a club member";
     submit.textContent = member ? "Save changes" : "Save member";
@@ -4271,7 +7830,7 @@
         const normalizedPassStatus = String(passStatusInput.value || "missing").trim().toLowerCase();
         const normalizedPassExpiry = normalizedPassStatus === "missing"
           ? ""
-          : String(passExpiryInput.value || "").trim();
+          : normalizeToIsoDate(passExpiryInput.value || member.passExpiry || "");
         try {
           await saveMember({
             memberId,
@@ -4433,8 +7992,11 @@
         if (!member || !member.email) return;
         const inviteState = memberInviteState(member);
         if (inviteState === "invited") {
-          window.alert("You already invited this person. Wait until they activate their account.");
-          return;
+          const dateLabel = memberInviteDateLabel(member);
+          const confirmed = window.confirm(
+            `You already invited ${member.name || member.email}${dateLabel ? ` on ${dateLabel}` : ""}. Send a new invite email?`
+          );
+          if (!confirmed) return;
         }
         if (inviteState === "activated") {
           window.alert("This person already activated their account. No invite is needed.");
@@ -4442,12 +8004,15 @@
         }
         const originalButtonHTML = button.innerHTML;
         button.disabled = true;
-        button.innerHTML = `<span class="auth-spinner"></span> Inviting...`;
+        button.innerHTML = `<span class="auth-spinner"></span> ${inviteState === "invited" ? "Reinviting..." : "Inviting..."}`;
         try {
           button.blur();
           await inviteMember(member.id);
-          authState.status = `Invite sent to ${member.email}.`;
-          showToast(`Invite sent to ${member.email}.`, "success");
+          const successMessage = inviteState === "invited"
+            ? `Invite resent to ${member.email}.`
+            : `Invite sent to ${member.email}.`;
+          authState.status = successMessage;
+          showToast(successMessage, "success");
           if (shouldUseRemoteData()) {
             await loadBootstrapData();
           } else {
@@ -4506,6 +8071,12 @@
           passExpiry: String(formData.get("passExpiry") || "").trim(),
           notes: String(formData.get("notes") || "").trim()
         };
+        const existingMember = payload.memberId ? memberById(payload.memberId) : null;
+        const normalizedPassStatus = displayPassStatus(payload.passStatus);
+        payload.passStatus = normalizedPassStatus;
+        payload.passExpiry = normalizedPassStatus === "missing"
+          ? ""
+          : normalizeToIsoDate(payload.passExpiry || existingMember?.passExpiry || "");
         if (!payload.firstName && !payload.lastName) {
           authState.status = "Please enter at least a first name or a last name.";
           authState.pendingAction = "";
@@ -4799,16 +8370,27 @@
 
   function handleEquipmentSheetTabClick(event) {
     const equipmentSection = document.getElementById("equipment");
-    const button = event.target.closest("[data-equipment-sheet]");
-    if (!equipmentSection || !button || !equipmentSection.contains(button)) return;
+    if (!equipmentSection || !equipmentSection.contains(event.target)) return;
 
-    const sheetKey = String(button.dataset.equipmentSheet || "").trim();
-    if (!sheetKey) return;
+    const sheetButton = event.target.closest("[data-equipment-sheet]");
+    if (sheetButton && equipmentSection.contains(sheetButton)) {
+      const sheetKey = String(sheetButton.dataset.equipmentSheet || "").trim();
+      if (!sheetKey) return;
+      equipmentInlineEditId = "";
+      saveEquipmentSheetKey(sheetKey);
+      mount();
+      switchView("equipment");
+      return;
+    }
 
-    equipmentInlineEditId = "";
-    saveEquipmentSheetKey(sheetKey);
-    mount();
-    switchView("equipment");
+    const filterButton = event.target.closest("[data-equipment-kind-filter]");
+    if (filterButton && equipmentSection.contains(filterButton)) {
+      const kindFilter = String(filterButton.dataset.equipmentKindFilter || "").trim();
+      equipmentInlineEditId = "";
+      saveEquipmentKindFilter(kindFilter);
+      mount();
+      switchView("equipment");
+    }
   }
 
   function bindEquipmentActions() {
@@ -4827,6 +8409,49 @@
         equipmentCreateDraft = createEquipmentDraft({}, equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
         mount();
         switchView("equipment");
+      };
+    }
+
+    const addSheetButton = document.getElementById("equipment-add-sheet");
+    if (addSheetButton) {
+      addSheetButton.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const suggested = equipmentSheetPromptDefaultGroup("all");
+        const raw = window.prompt("New sheet name", suggested);
+        if (raw === null) return;
+        try {
+          const newKey = addEquipmentSheet(raw);
+          equipmentInlineEditId = "";
+          equipmentCreateDraft = null;
+          showToast("Sheet added.", "success");
+          saveEquipmentSheetKey(newKey);
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not add sheet.", "error");
+        }
+      };
+    }
+
+    const removeSheetButton = document.getElementById("equipment-remove-sheet");
+    if (removeSheetButton) {
+      removeSheetButton.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const sheetKey = String(removeSheetButton.dataset.sheetKey || "").trim();
+        if (!sheetKey) return;
+        const label = equipmentSheetLabel(sheetKey);
+        const confirmed = window.confirm(`Remove sheet \"${label}\"? This only removes the tab, not equipment rows.`);
+        if (!confirmed) return;
+        try {
+          removeEquipmentSheet(sheetKey);
+          equipmentInlineEditId = "";
+          equipmentCreateDraft = null;
+          showToast("Sheet removed.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not remove sheet.", "error");
+        }
       };
     }
 
@@ -4902,6 +8527,34 @@
       };
     });
 
+    document.querySelectorAll(".equipment-add-child-button").forEach((button) => {
+      button.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const parentId = String(button.dataset.parentId || "").trim();
+        const parentRow = (state.equipment || []).find((item) => String(item.id) === parentId);
+        if (!parentRow) return;
+        equipmentInlineEditId = "";
+        equipmentCreateDraft = createEquipmentDraft({
+          group: parentRow.group,
+          parentItemId: parentId,
+          itemKind: "item",
+          location: parentRow.location || ""
+        }, parentRow.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+        mount();
+        switchView("equipment");
+      };
+    });
+
+    document.querySelectorAll(".equipment-toggle-contents-button").forEach((button) => {
+      button.onclick = function () {
+        const containerId = String(button.dataset.containerId || "").trim();
+        if (!containerId) return;
+        setEquipmentContainerExpanded(containerId, !isEquipmentContainerExpanded(containerId));
+        mount();
+        switchView("equipment");
+      };
+    });
+
     document.querySelectorAll(".equipment-save-inline-button").forEach((button) => {
       button.onclick = async function () {
         if (currentAccessRole !== "admin") return;
@@ -4959,6 +8612,95 @@
           switchView("equipment");
         } catch (error) {
           showToast(error?.message || "Could not delete equipment item.", "error");
+        }
+      };
+    });
+
+    document.querySelectorAll(".equipment-photo-trigger").forEach((button) => {
+      button.onclick = function () {
+        const inputId = String(button.dataset.inputId || "").trim();
+        if (!inputId) return;
+        const input = document.getElementById(inputId);
+        if (input) input.click();
+      };
+    });
+
+    document.querySelectorAll(".equipment-photo-input").forEach((input) => {
+      input.onchange = async function () {
+        if (currentAccessRole !== "admin") return;
+        const originalFile = input.files && input.files[0];
+        if (!originalFile) return;
+        const mode = String(input.dataset.mode || "").trim();
+        const rowId = String(input.dataset.equipmentId || "").trim();
+        const baseDraft = mode === "edit"
+          ? (equipmentInlineDraftById[rowId] || (state.equipment || []).find((item) => String(item.id || "") === rowId))
+          : equipmentCreateDraft;
+        if (!baseDraft) return;
+
+        try {
+          let uploadFile = originalFile;
+          if (Number(uploadFile.size || 0) > MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES) {
+            uploadFile = await compressImageForAvatar(uploadFile, {
+              maxBytes: MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES,
+              maxDimension: MAX_EQUIPMENT_PHOTO_DIMENSION
+            });
+          }
+          if (Number(uploadFile.size || 0) > MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES) {
+            throw new Error("Photo is still too large after compression. Please choose a smaller image.");
+          }
+
+          const uploaded = await uploadEquipmentPhotoToStorage(uploadFile, baseDraft.id);
+          equipmentPhotoDraftsById[baseDraft.id] = {
+            photoFileId: uploaded.photoFileId || equipmentPhotoFileId(baseDraft.id),
+            photoUrl: uploaded.photoUrl || storageEquipmentPhotoUrl(uploaded.photoFileId || equipmentPhotoFileId(baseDraft.id), baseDraft.id)
+          };
+          const nextDraft = createEquipmentDraft({ ...baseDraft, ...uploaded }, baseDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+          if (mode === "edit" && rowId) {
+            equipmentInlineDraftById = {
+              ...equipmentInlineDraftById,
+              [rowId]: nextDraft
+            };
+          } else {
+            equipmentCreateDraft = nextDraft;
+          }
+          showToast("Equipment photo uploaded.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not upload equipment photo.", "error");
+        } finally {
+          input.value = "";
+        }
+      };
+    });
+
+    document.querySelectorAll(".equipment-photo-remove").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const mode = String(button.dataset.mode || "").trim();
+        const rowId = String(button.dataset.equipmentId || "").trim();
+        const baseDraft = mode === "edit"
+          ? (equipmentInlineDraftById[rowId] || (state.equipment || []).find((item) => String(item.id || "") === rowId))
+          : equipmentCreateDraft;
+        if (!baseDraft) return;
+
+        try {
+          await deleteEquipmentPhotoFromStorage(baseDraft.id, baseDraft.photoFileId);
+          delete equipmentPhotoDraftsById[baseDraft.id];
+          const nextDraft = createEquipmentDraft({ ...baseDraft, photoFileId: "", photoUrl: "" }, baseDraft.group || equipmentSheetPromptDefaultGroup(selectedEquipmentSheet));
+          if (mode === "edit" && rowId) {
+            equipmentInlineDraftById = {
+              ...equipmentInlineDraftById,
+              [rowId]: nextDraft
+            };
+          } else {
+            equipmentCreateDraft = nextDraft;
+          }
+          showToast("Equipment photo removed.", "success");
+          mount();
+          switchView("equipment");
+        } catch (error) {
+          showToast(error?.message || "Could not remove equipment photo.", "error");
         }
       };
     });
@@ -5077,15 +8819,20 @@
           if (!period) {
             throw new Error("Please select a quarter first.");
           }
-          await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
+          if (String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim()) {
+            await exportSepaXmlViaFunction(period);
+          } else {
+            await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
+          }
           authState.status = "SEPA XML exported.";
           mount();
           switchView("fees");
         } catch (error) {
-          const isGithubPages = /\.github\.io$/i.test(window.location.hostname || "");
           const baseMessage = String(error?.message || "SEPA export failed.");
-          authState.status = isGithubPages
-            ? `${baseMessage} SEPA XML requires a running backend API (the /api route is not available on static GitHub Pages alone).`
+          const noFunctionConfigured = !String(APPWRITE_CONFIG?.sepaExportFunctionId || "").trim();
+          const isGithubPages = /\.github\.io$/i.test(window.location.hostname || "");
+          authState.status = noFunctionConfigured && isGithubPages
+            ? `${baseMessage} Configure ClubHubAppwriteConfig.sepaExportFunctionId to run SEPA export through Appwrite on GitHub Pages.`
             : baseMessage;
           mount();
           switchView("fees");
@@ -5118,6 +8865,7 @@
         try {
           authState.pendingAction = "sign-in";
           authState.status = "Signing you in...";
+          recordDiagnostic("info", "auth", `Sign-in started for ${email}.`);
           mount();
           await signInWithEmailPassword(email, password);
           try {
@@ -5127,9 +8875,11 @@
           }
           await loadBootstrapData();
           authState.status = `Signed in as ${authDisplayName() || authState.user?.email || "user"}.`;
+          recordDiagnostic("info", "auth", "Sign-in succeeded.", authState.user?.email || email);
           showToast(authState.status, "success");
         } catch (error) {
           authState.status = error.message || "Sign in failed.";
+          recordDiagnostic("error", "auth", "Sign-in failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -5153,12 +8903,15 @@
         try {
           authState.pendingAction = "reset-password";
           authState.status = "Sending password reset email...";
+          recordDiagnostic("info", "auth", `Password reset requested for ${email}.`);
           mount();
           await sendResetPasswordEmail(email);
           authState.status = `Password reset email sent to ${email}.`;
+          recordDiagnostic("info", "auth", "Password reset email sent.", email);
           showToast(authState.status, "success");
         } catch (error) {
           authState.status = error.message || "Could not send password reset email.";
+          recordDiagnostic("error", "auth", "Password reset request failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -5174,12 +8927,15 @@
         try {
           authState.pendingAction = "sign-out";
           authState.status = "Signing out...";
+          recordDiagnostic("info", "auth", "Sign-out started.", authState.user?.email || "");
           mount();
           await signOut();
           authState.status = "Signed out.";
+          recordDiagnostic("info", "auth", "Sign-out succeeded.");
           showToast(authState.status, "info");
         } catch (error) {
           authState.status = error.message || "Sign out failed.";
+          recordDiagnostic("error", "auth", "Sign-out failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -5209,12 +8965,15 @@
         try {
           authState.pendingAction = "invite-admin";
           authState.status = `Sending invite to ${email}...`;
+          recordDiagnostic("info", "invite", `Invite sending started for ${email}.`, authInviteRole);
           mount();
           await inviteAdmin(email, email.split("@")[0] || email, [authInviteRole]);
           authState.status = `Invite sent to ${email}. They must set their password before signing in.`;
+          recordDiagnostic("info", "invite", "Invite sent.", `${email} (${authInviteRole})`);
           showToast(authState.status, "success");
         } catch (error) {
           authState.status = error.message || "Could not send invite.";
+          recordDiagnostic("error", "invite", "Invite failed.", summarizeDiagnosticError(error));
           showToast(authState.status, "error");
         } finally {
           authState.pendingAction = "";
@@ -5272,6 +9031,37 @@
       backToSignInButton.onclick = function () {
         window.location.hash = "#dashboard";
       };
+    }
+  }
+
+  function bindDiagnosticsActions() {
+    const exportButton = document.getElementById("export-diagnostics-log");
+    if (exportButton) {
+      exportButton.onclick = function () {
+        exportDiagnosticsLog();
+      };
+    }
+
+    const clearButton = document.getElementById("clear-diagnostics-log");
+    if (clearButton) {
+      clearButton.onclick = function () {
+        if (!window.confirm("Clear local diagnostics logs from this browser?")) return;
+        clearDiagnosticsLog();
+        recordDiagnostic("info", "diagnostics", "Diagnostics log cleared.");
+        mount();
+        switchView("settings");
+      };
+    }
+
+    const refreshRemoteButton = document.getElementById("refresh-remote-diagnostics-log");
+    if (refreshRemoteButton) {
+      refreshRemoteButton.onclick = async function () {
+        await loadRemoteDiagnosticsLog(true);
+      };
+    }
+
+    if (currentAccessRole === "admin" && backendClient && diagnosticsTableId() && !remoteDiagnosticsLoading && !remoteDiagnosticsLoadedAt) {
+      void loadRemoteDiagnosticsLog(false);
     }
   }
 
@@ -5430,6 +9220,18 @@
           mount();
           switchView("fees");
         }
+      };
+    });
+  }
+
+  function bindRosterActions() {
+    document.querySelectorAll(".roster-filter-chip").forEach((button) => {
+      button.onclick = function () {
+        const nextPosition = String(button.dataset.rosterPosition || "all").trim() || "all";
+        selectedRosterPosition = nextPosition === "all" ? "all" : nextPosition.toUpperCase();
+        saveStoredValue(ROSTER_FILTER_KEY, selectedRosterPosition);
+        mount();
+        switchView("roster");
       };
     });
   }
@@ -5986,6 +9788,273 @@
     }
   }
 
+  function bindTryoutActions() {
+    const form = document.getElementById("tryout-form");
+    const submitButton = document.getElementById("tryout-submit-button");
+    if (form) {
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        const payload = collectTryoutRegistrationPayload(form);
+        const validationMessage = validateTryoutRegistration(payload);
+        if (validationMessage) {
+          tryoutRegistrationStatusMessage(validationMessage, "error");
+          showToast(validationMessage, "error");
+          return;
+        }
+
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Submitting...";
+        }
+        tryoutRegistrationStatusMessage("Submitting your registration...", "info");
+        try {
+          const result = await saveTryoutRegistration(payload);
+          if (tryoutSubmissionsLoadedAt && result.data) {
+            tryoutSubmissions = [normalizeTryoutSubmissionRow(result.data), ...tryoutSubmissions];
+          }
+          form.reset();
+          const message = result.localOnly
+            ? "Registration saved in this local preview. Live Appwrite storage is not configured here."
+            : "Registration received. We will contact you when the next tryout details are confirmed.";
+          tryoutRegistrationStatusMessage(message, "success");
+          showToast(message, "success");
+          if (tryoutSubmissionsLoadedAt) {
+            mount();
+            switchView("tryout");
+          }
+        } catch (error) {
+          const message = error?.message || "Could not submit the tryout registration.";
+          tryoutRegistrationStatusMessage(message, "error");
+          showToast(message, "error");
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = "Register interest";
+          }
+        }
+      };
+    }
+
+    const loadButton = document.getElementById("tryout-load-submissions");
+    if (loadButton) {
+      loadButton.onclick = function () {
+        loadTryoutSubmissions();
+      };
+    }
+
+    const searchInput = document.getElementById("tryout-submission-search");
+    if (searchInput) {
+      searchInput.oninput = function () {
+        const rawValue = String(searchInput.value || "");
+        const cursorStart = Number.isFinite(searchInput.selectionStart) ? searchInput.selectionStart : rawValue.length;
+        const cursorEnd = Number.isFinite(searchInput.selectionEnd) ? searchInput.selectionEnd : rawValue.length;
+        tryoutSubmissionFilters = {
+          ...tryoutSubmissionFilters,
+          search: rawValue
+        };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+        const nextSearchInput = document.getElementById("tryout-submission-search");
+        if (nextSearchInput) {
+          nextSearchInput.focus();
+          const safeStart = Math.min(cursorStart, nextSearchInput.value.length);
+          const safeEnd = Math.min(cursorEnd, nextSearchInput.value.length);
+          nextSearchInput.setSelectionRange(safeStart, safeEnd);
+        }
+      };
+    }
+
+    const uniFilter = document.getElementById("tryout-filter-uni-wien");
+    if (uniFilter) {
+      uniFilter.onchange = function () {
+        tryoutSubmissionFilters = { ...tryoutSubmissionFilters, uniWien: String(uniFilter.value || "all") };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const experienceFilter = document.getElementById("tryout-filter-experience");
+    if (experienceFilter) {
+      experienceFilter.onchange = function () {
+        tryoutSubmissionFilters = { ...tryoutSubmissionFilters, experience: String(experienceFilter.value || "all") };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const statusFilter = document.getElementById("tryout-filter-status");
+    if (statusFilter) {
+      statusFilter.onchange = function () {
+        tryoutSubmissionFilters = { ...tryoutSubmissionFilters, status: String(statusFilter.value || "all") };
+        saveTryoutSubmissionFilters();
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const exportCsvButton = document.getElementById("tryout-export-csv");
+    if (exportCsvButton) {
+      exportCsvButton.onclick = function () {
+        downloadCsv(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.csv");
+      };
+    }
+
+    const exportExcelButton = document.getElementById("tryout-export-excel");
+    if (exportExcelButton) {
+      exportExcelButton.onclick = function () {
+        downloadExcel(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.xls");
+      }
+    }
+  }
+
+  function openEquipmentPhotoDialog(photoSrc, title) {
+    const dialog = document.getElementById("equipment-photo-dialog");
+    const image = document.getElementById("equipment-photo-dialog-image");
+    const heading = document.getElementById("equipment-photo-dialog-title");
+    if (!dialog || !image) return;
+    image.src = String(photoSrc || "").trim();
+    image.alt = String(title || "Equipment preview").trim() || "Equipment preview";
+    if (heading) {
+      heading.textContent = String(title || "Equipment preview").trim() || "Equipment preview";
+    }
+    dialog.showModal();
+  }
+
+  function bindOrganizationActions() {
+    const addButton = document.getElementById("organization-add-entry");
+    const dialog = document.getElementById("organization-dialog");
+    const form = document.getElementById("organization-form");
+    const submitButton = document.getElementById("organization-submit-button");
+    const closeButton = document.getElementById("organization-dialog-close");
+    const cancelButton = document.getElementById("organization-dialog-cancel");
+    const memberOptions = document.getElementById("organization-member-options");
+    if (memberOptions) {
+      memberOptions.innerHTML = state.members
+        .map((member) => String(member.name || `${member.firstName || ""} ${member.lastName || ""}`).trim())
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+        .map((name) => `<option value="${name.replaceAll('"', "&quot;")}"></option>`)
+        .join("");
+    }
+    if (addButton) {
+      addButton.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        openOrganizationDialog(null);
+      };
+    }
+
+    if (closeButton && dialog) {
+      closeButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (cancelButton && dialog) {
+      cancelButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (submitButton && form) {
+      submitButton.onclick = function () {
+        form.requestSubmit();
+      };
+    }
+
+    if (form) {
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        const payload = normalizeOrganizationEntry({
+          id: String(form.elements.organizationId.value || organizationDialogEditingId || generateOrganizationId()).trim(),
+          headOf: String(form.elements.headOf.value || "").trim(),
+          verantwortung: String(form.elements.verantwortung.value || "").trim(),
+          "co-verantwortung": String(form.elements.coVerantwortung.value || "").trim(),
+          aufgaben: String(form.elements.aufgaben.value || "").trim()
+        }, 0);
+        if (!payload.headOf) {
+          showToast("Section is required.", "error");
+          return;
+        }
+        try {
+          await saveOrganizationEntry(payload);
+          dialog?.close();
+          organizationDialogEditingId = "";
+          showToast("Organization section saved.", "success");
+          mount();
+          switchView("organization");
+        } catch (error) {
+          showToast(error?.message || "Could not save organization section.", "error");
+        }
+      };
+    }
+
+    document.querySelectorAll(".organization-edit-button").forEach((button) => {
+      button.onclick = function () {
+        if (currentAccessRole !== "admin") return;
+        const organizationId = String(button.dataset.organizationId || "").trim();
+        const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
+        if (!currentRow) return;
+        openOrganizationDialog(currentRow);
+      };
+    });
+
+    document.querySelectorAll(".organization-delete-button").forEach((button) => {
+      button.onclick = async function () {
+        if (currentAccessRole !== "admin") return;
+        const organizationId = String(button.dataset.organizationId || "").trim();
+        const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
+        if (!currentRow) return;
+        if (!window.confirm(`Delete organization section '${currentRow.headOf || currentRow.id}'?`)) return;
+        try {
+          await deleteOrganizationEntry(organizationId);
+          showToast("Organization section deleted.", "success");
+          mount();
+          switchView("organization");
+        } catch (error) {
+          showToast(error?.message || "Could not delete organization section.", "error");
+        }
+      };
+    });
+  }
+
+  function bindEquipmentPhotoDialog() {
+    const dialog = document.getElementById("equipment-photo-dialog");
+    const closeButton = document.getElementById("equipment-photo-dialog-close");
+    const cancelButton = document.getElementById("equipment-photo-dialog-cancel");
+
+    document.querySelectorAll(".equipment-photo-thumb-button").forEach((button) => {
+      button.onclick = function () {
+        const photoSrc = String(button.dataset.equipmentPhotoSrc || "").trim();
+        if (!photoSrc) return;
+        const title = String(button.dataset.equipmentPhotoTitle || "Equipment photo").trim();
+        openEquipmentPhotoDialog(photoSrc, title);
+      };
+    });
+
+    if (closeButton && dialog) {
+      closeButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (cancelButton && dialog) {
+      cancelButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (dialog) {
+      dialog.onclick = function (event) {
+        if (event.target === dialog) {
+          dialog.close();
+        }
+      };
+    }
+  }
+
   function mount() {
     try {
       ensureValidFeeFilter();
@@ -6002,36 +10071,49 @@
       bindLocalPreviewActions();
       document.getElementById("dashboard").innerHTML = renderDashboard();
       bindDashboardActions();
+      document.getElementById("roster").innerHTML = renderRoster();
+      document.getElementById("hall-of-fame").innerHTML = renderHallOfFame();
+      document.getElementById("tryout").innerHTML = renderTryout();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
       document.getElementById("passes").innerHTML = renderPasses();
+      document.getElementById("organization").innerHTML = renderOrganization();
       document.getElementById("equipment").innerHTML = renderEquipment();
       document.getElementById("pass-sync").innerHTML = renderPassSyncReview();
-      document.getElementById("events").innerHTML = renderEvents();
+      document.getElementById("events").innerHTML = renderGamesBoard();
       document.getElementById("invites").innerHTML = renderInvites();
       document.getElementById("settings").innerHTML = renderSettings();
       document.getElementById("recovery").innerHTML = renderRecoveryGate();
       bindMemberActions();
+      bindTryoutActions();
       bindUserPageActions();
+      bindOrganizationActions();
       bindEquipmentActions();
+      bindGamesActions();
+      bindRosterActions();
+      bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();
       bindPassFilters();
       bindPassSyncActions();
       bindFeeEditModeActions();
       bindAuthActions();
+      bindDiagnosticsActions();
       bindRecoveryActions();
       bindChangePasswordAction();
       bindTableExports();
       bindTableSorts();
+      setupLazyImages(document);
       updateNavigationVisibility();
       switchView(getRouteView());
+      hydrateVisibleLazyImages(document.getElementById(resolveAllowedView(getRouteView())) || document);
       setupMembersStickyHeader();
       setupFeesStickyHeader();
       setupPassesStickyHeader();
     } catch (error) {
       console.error("Emperors bundle mount failed", error);
+      recordDiagnostic("error", "app", "App bundle mount failed.", summarizeDiagnosticError(error));
       const dashboard = document.getElementById("dashboard");
       if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${error.message}</p></article>`;
       switchView("dashboard");
@@ -6057,6 +10139,12 @@
   bindNavigation();
   bindButtonFeedback();
   bindMobileMenu();
+  window.addEventListener("error", function (event) {
+    recordDiagnostic("error", "window", "Unhandled browser error.", summarizeDiagnosticError(event.error || event.message));
+  });
+  window.addEventListener("unhandledrejection", function (event) {
+    recordDiagnostic("error", "promise", "Unhandled promise rejection.", summarizeDiagnosticError(event.reason));
+  });
   window.addEventListener("hashchange", function () {
     updateNavigationVisibility();
     switchView(getRouteView());

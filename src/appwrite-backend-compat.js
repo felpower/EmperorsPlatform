@@ -100,7 +100,8 @@
       tryout_registrations: String(config.tryoutRegistrationsTableId || "tryout_registrations"),
       organization: String(config.organizationTableId || "organization"),
       equipment_inventory: String(config.equipmentTableId || "equipment_inventory"),
-      diagnostics_logs: String(config.diagnosticsTableId || "diagnostics_logs")
+      diagnostics_logs: String(config.diagnosticsTableId || "diagnostics_logs"),
+      hall_of_fame: String(config.hallOfFameTableId || "hall_of_fame")
     };
   }
 

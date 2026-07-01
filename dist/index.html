@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="All-in-one football team platform for memberships, player passes, attendance, and role-based administration."
+      content="Uni Wien Emperors Tryout, games and roster for Vienna’s American football club. Find membership info, player passes and team organization."
     />
     <meta name="theme-color" content="#171d1d" />
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./assets/emperors-mark.png?v=20260512a" type="image/png" />
+    <link rel="apple-touch-icon" href="./assets/emperors-mark.png?v=20260512a" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,14 +17,17 @@
       href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260623a" />
     <script src="https://cdn.jsdelivr.net/npm/appwrite@17.0.0"></script>
-    <script src="./src/appwrite-config.js?v=20260416"></script>
-    <script src="./src/appwrite-backend-compat.js?v=20260416"></script>
+    <script src="./src/appwrite-config.js?v=20260622b"></script>
+    <script src="./src/appwrite-backend-compat.js?v=20260622b"></script>
+    <script src="./src/modules/cache-utils.js?v=20260508a"></script>
+    <script src="./src/modules/iban-utils.js?v=20260508a"></script>
+    <script src="./src/modules/profile-finance.js?v=20260508a"></script>
     <title>Uni Wien Emperors Platform</title>
   </head>
   <body>
-    <button id="menu-toggle" class="menu-toggle-button" type="button" aria-label="Toggle menu">
+    <button id="menu-toggle" class="menu-toggle-button" type="button" aria-label="Toggle menu" data-no-toast="true">
       <span></span>
       <span></span>
       <span></span>
@@ -41,18 +45,27 @@
 
         <nav class="nav" aria-label="Primary">
           <a class="nav-link active" href="#dashboard" data-view="dashboard">Dashboard</a>
+          <a class="nav-link" href="#roster" data-view="roster">Roster</a>
+          <a class="nav-link" href="#hall-of-fame" data-view="hall-of-fame">Hall of Fame</a>
+          <a class="nav-link" href="#tryout" data-view="tryout">Tryout</a>
           <a class="nav-link" href="#members" data-view="members">Members</a>
           <a class="nav-link" href="#fees" data-view="fees">Membership Finance</a>
           <a class="nav-link" href="#passes" data-view="passes">Player Passes</a>
+          <a class="nav-link" href="#organization" data-view="organization">Organization</a>
           <a class="nav-link" href="#equipment" data-view="equipment">Equipment</a>
-          <a class="nav-link" href="#pass-sync" data-view="pass-sync">Pass Sync Review</a>
-          <a class="nav-link" href="#events" data-view="events">Practices &amp; Games</a>
+          <!-- <a class="nav-link" href="#pass-sync" data-view="pass-sync">Pass Sync Review</a> -->
+          <a class="nav-link" href="#events" data-view="events">Games</a>
           <a class="nav-link" href="#invites" data-view="invites">Invites</a>
           <a class="nav-link" href="#settings" data-view="settings">Setup</a>
           <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--line);" />
           <div class="button-row" style="display:flex; gap:8px;">
             <button id="profile-nav-button" class="nav-link" type="button" style="background: none; border: none; cursor: pointer; text-align: left; display: block; width: auto; flex:1;">My Profile</button>
             <button id="logout-nav-button" class="nav-link" type="button" style="background: none; border: none; cursor: pointer; text-align: left; display: none; width: auto; flex:1;">Log out</button>
+          </div>
+          <div class="sidebar-legal">
+            <p class="sidebar-legal-label">Rechtliches</p>
+            <a class="sidebar-legal-link" href="./impressum.html">Impressum</a>
+            <a class="sidebar-legal-link" href="./datenschutz.html">Datenschutz</a>
           </div>
         </nav>
       </aside>
@@ -63,13 +76,17 @@
         </header>
 
         <section id="dashboard" class="view active" aria-label="Dashboard"></section>
+        <section id="roster" class="view" aria-label="Roster"></section>
+        <section id="hall-of-fame" class="view" aria-label="Hall of Fame"></section>
+        <section id="tryout" class="view" aria-label="Tryout"></section>
         <section id="members" class="view" aria-label="Members"></section>
         <section id="fees" class="view" aria-label="Membership finance"></section>
         <section id="user" class="view" aria-label="User profile"></section>
         <section id="passes" class="view" aria-label="Player passes"></section>
+        <section id="organization" class="view" aria-label="Organization"></section>
         <section id="equipment" class="view" aria-label="Equipment inventory"></section>
         <section id="pass-sync" class="view" aria-label="Pass sync review"></section>
-        <section id="events" class="view" aria-label="Events"></section>
+        <section id="events" class="view" aria-label="Games"></section>
         <section id="invites" class="view" aria-label="Invites"></section>
         <section id="settings" class="view" aria-label="Setup"></section>
         <section id="recovery" class="view" aria-label="Set password"></section>
@@ -156,6 +173,9 @@
             <label class="status-check"><input type="checkbox" name="positions" value="NT" /><span>NT</span></label>
             <label class="status-check"><input type="checkbox" name="positions" value="ILB" /><span>ILB</span></label>
             <label class="status-check"><input type="checkbox" name="positions" value="OLB" /><span>OLB</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="Coach" /><span>Coach</span></label>
+            <label class="status-check"><input type="checkbox" name="positions" value="Staff" /><span>Staff</span></label>
+            
           </div>
         </fieldset>
 
@@ -196,6 +216,68 @@
       </form>
     </dialog>
 
-    <script defer src="./app.bundle.js?v=20260416"></script>
+    <dialog id="organization-dialog" class="dialog">
+      <form method="post" id="organization-form" class="dialog-form" novalidate>
+        <input type="hidden" name="organizationId" />
+
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Organization</p>
+            <h3 id="organization-dialog-title">Add organization section</h3>
+          </div>
+          <button class="ghost-icon" id="organization-dialog-close" type="button" value="cancel" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Section
+            <input name="headOf" placeholder="e.g. Coaching" />
+          </label>
+
+          <label>
+            Verantwortlicher
+            <input name="verantwortung" list="organization-member-options" placeholder="Name" />
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Co-Verantwortlicher
+            <input name="coVerantwortung" list="organization-member-options" placeholder="Optional" />
+          </label>
+        </div>
+
+        <label>
+          Aufgaben
+          <textarea name="aufgaben" rows="5" placeholder="One task per line or comma-separated"></textarea>
+        </label>
+
+        <div class="dialog-actions">
+          <button value="cancel" id="organization-dialog-cancel" type="button" class="ghost-button">Cancel</button>
+          <button value="default" type="button" class="primary-button" id="organization-submit-button">Save section</button>
+        </div>
+        <datalist id="organization-member-options"></datalist>
+      </form>
+    </dialog>
+
+    <dialog id="equipment-photo-dialog" class="dialog equipment-photo-dialog">
+      <div class="dialog-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Equipment Photo</p>
+            <h3 id="equipment-photo-dialog-title">Preview</h3>
+          </div>
+          <button class="ghost-icon" id="equipment-photo-dialog-close" type="button" value="cancel" aria-label="Close">&times;</button>
+        </div>
+        <div class="equipment-photo-dialog-body">
+          <img id="equipment-photo-dialog-image" src="" alt="Equipment preview" />
+        </div>
+        <div class="dialog-actions">
+          <button value="cancel" id="equipment-photo-dialog-cancel" type="button" class="ghost-button">Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script defer src="./app.bundle.js?v=20260623b"></script>
   </body>
 </html>

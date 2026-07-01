@@ -76,7 +76,31 @@
         aufgaben: "Posts erstellen, Informationen nach außen transportieren, Insta-Anfragen beantworten, Media-Days planen"
       }
     ],
-    equipment: []
+    equipment: [],
+    hallOfFame: [
+      { id: "hof-seed-1", year: 2022, name: "Thaddeus \"Thunderfoot\" Kowalski", position: "Kicker" },
+      { id: "hof-seed-2", year: 2022, name: "Biggus Blockus Huber", position: "Offensive Tackle" },
+      { id: "hof-seed-3", year: 2022, name: "Werner \"The Vienna Wall\" Steinberger", position: "Defensive Tackle" },
+      { id: "hof-seed-4", year: 2022, name: "Scrambling Sam Novak", position: "Quarterback" },
+      { id: "hof-seed-5", year: 2022, name: "Gruber \"Hands of Glue\" Aigner", position: "Wide Receiver" },
+      { id: "hof-seed-6", year: 2023, name: "Bianca \"Blitzkrieg\" Steiner", position: "Linebacker" },
+      { id: "hof-seed-7", year: 2023, name: "Marco \"The Mongoose\" Falkner", position: "Cornerback" },
+      { id: "hof-seed-8", year: 2023, name: "Sir Fumbles-a-Lot Fischer", position: "Running Back" },
+      { id: "hof-seed-9", year: 2023, name: "Gunnar \"Gronk of Grinzing\" Wagner", position: "Tight End" },
+      { id: "hof-seed-10", year: 2023, name: "Ilse \"Iron Lung\" Brandstätter", position: "Middle Linebacker" },
+      { id: "hof-seed-11", year: 2023, name: "Dominik \"Touchdown Dance\" Divjak", position: "Wide Receiver" },
+      { id: "hof-seed-12", year: 2024, name: "Sepp \"The Sandwich\" Moser", position: "Center" },
+      { id: "hof-seed-13", year: 2024, name: "Nikolaus \"Ice Cold Niki\" Berger", position: "Kicker" },
+      { id: "hof-seed-14", year: 2024, name: "Franzi \"Freight Train\" Reisinger", position: "Fullback" },
+      { id: "hof-seed-15", year: 2024, name: "Alexander \"The Filing Cabinet\" Pichler", position: "Offensive Guard" },
+      { id: "hof-seed-16", year: 2025, name: "Katharina \"Sackmaster\" Lechner", position: "Defensive End" },
+      { id: "hof-seed-17", year: 2025, name: "Rudi \"Rocket\" Hofer", position: "Running Back" },
+      { id: "hof-seed-18", year: 2025, name: "Fabian \"The Professor\" Gruber", position: "Quarterback" },
+      { id: "hof-seed-19", year: 2025, name: "Lena \"Lockdown\" Winkler", position: "Cornerback" },
+      { id: "hof-seed-20", year: 2025, name: "Tobias \"Big Toby\" Kranzl", position: "Nose Tackle" },
+      { id: "hof-seed-21", year: 2025, name: "Manuel \"Mad Hands\" Ortner", position: "Wide Receiver" },
+      { id: "hof-seed-22", year: 2025, name: "Sophie \"The Wrecking Ball\" Zach", position: "Strong Safety" }
+    ]
   };
   const CLUBEE_GAMES_SOURCE_URL = "https://clubee.com/afbo/spiele-568998v4/leagues/16957/seasons/218";
   const EMPERORS_TEAM_NAME = "UNI-Wien Emperors";
@@ -213,7 +237,7 @@
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
-  const viewIds = ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -2224,6 +2248,49 @@
       .sort((left, right) => String(left.headOf || "").localeCompare(String(right.headOf || ""), undefined, { sensitivity: "base" }));
   }
 
+  function generateHallOfFameId() {
+    const randomPart = Math.random().toString(36).slice(2, 8);
+    return `hof-${Date.now()}-${randomPart}`;
+  }
+
+  function normalizeHallOfFameEntry(row, index) {
+    const yearRaw = organizationRowValue(row, ["year"]);
+    const year = Number(yearRaw);
+    return {
+      id: String(organizationRowValue(row, ["id", "$id"]) || `hof-${index + 1}`).trim(),
+      year: Number.isFinite(year) && year > 0 ? year : new Date().getFullYear(),
+      name: String(organizationRowValue(row, ["name"]) || "").trim(),
+      position: String(organizationRowValue(row, ["position"]) || "").trim()
+    };
+  }
+
+  function sortHallOfFameRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => normalizeHallOfFameEntry(row, index))
+      .filter((row) => row.name)
+      .sort((left, right) => {
+        if (right.year !== left.year) return right.year - left.year;
+        return String(left.name || "").localeCompare(String(right.name || ""), undefined, { sensitivity: "base" });
+      });
+  }
+
+  function canManageHallOfFame() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    return String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
+  function groupHallOfFameByYear(rows) {
+    const byYear = new Map();
+    rows.forEach((row) => {
+      const list = byYear.get(row.year) || [];
+      list.push(row);
+      byYear.set(row.year, list);
+    });
+    return Array.from(byYear.entries())
+      .map(([year, members]) => ({ year, members }))
+      .sort((left, right) => right.year - left.year);
+  }
+
   function sortEquipmentRows(rows) {
     const sorted = [...normalizeEquipmentRows(rows)].sort((left, right) => {
       const groupCompare = String(left.group || "").localeCompare(String(right.group || ""), undefined, { sensitivity: "base" });
@@ -2311,7 +2378,8 @@
       events: Array.isArray(value.events) ? value.events : [],
       invites: Array.isArray(value.invites) ? value.invites : [],
       organization: sortOrganizationRows(value.organization),
-      equipment: sortEquipmentRows(value.equipment)
+      equipment: sortEquipmentRows(value.equipment),
+      hallOfFame: sortHallOfFameRows(value.hallOfFame)
     };
   }
 
@@ -3156,10 +3224,12 @@
   function applyBootstrap(bootstrap) {
     const previousOrganization = Array.isArray(state?.organization) ? state.organization : [];
     const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
+    const previousHallOfFame = Array.isArray(state?.hallOfFame) ? state.hallOfFame : [];
     state = normalizeState({
       ...bootstrap,
       organization: Array.isArray(bootstrap?.organization) ? bootstrap.organization : previousOrganization,
-      equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment
+      equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment,
+      hallOfFame: Array.isArray(bootstrap?.hallOfFame) ? bootstrap.hallOfFame : previousHallOfFame
     });
     bootstrapMeta = {
       source: bootstrap.source || "local-sqlite",
@@ -3367,6 +3437,7 @@
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
     const organizationRows = await selectMaybe("organization", "*", true);
+    const hallOfFameRows = await selectMaybe("hall_of_fame", "id, year, name, position", true);
     const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
     const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
     const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
@@ -3517,6 +3588,7 @@
       confirmations: 0
     }));
     const organization = sortOrganizationRows(organizationRows || []);
+    const hallOfFame = sortHallOfFameRows(hallOfFameRows || []);
     const previousMembers = Array.isArray(state?.members) ? state.members : [];
     const previousFees = Array.isArray(state?.fees) ? state.fees : [];
     const previousEvents = Array.isArray(state?.events) ? state.events : [];
@@ -3545,7 +3617,8 @@
       fees: shouldUseCachedBootstrap && !fees.length ? previousFees : fees,
       organization: organization.length ? organization : state.organization,
       events: shouldUseCachedBootstrap && !events.length ? previousEvents : events,
-      invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites
+      invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites,
+      hallOfFame: hallOfFame.length ? hallOfFame : state.hallOfFame
     });
     authState.status = shouldUseCachedBootstrap
       ? `Appwrite session restored for ${authDisplayName() || authState.user.email}. Showing cached data while remote records refresh.`
@@ -4993,6 +5066,245 @@
         </div>
         ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
         <div class="roster-sections">${sectionsHtml}</div>
+      </section>
+    `;
+  }
+
+  let hallOfFameLoadPromise = null;
+  let hallOfFameLoadAttempted = false;
+  let hallOfFameStatus = "";
+  let hallOfFameDialogEditingId = "";
+
+  function mapPublicHallOfFameRow(row, index) {
+    return normalizeHallOfFameEntry({
+      id: publicRosterField(row, "id", "$id"),
+      year: publicRosterField(row, "year"),
+      name: publicRosterField(row, "name"),
+      position: publicRosterField(row, "position")
+    }, index);
+  }
+
+  async function loadPublicHallOfFameBootstrap() {
+    if (!backendClient) return;
+    const response = await backendClient.from("hall_of_fame").select("id, year, name, position");
+    if (response.error) {
+      throw response.error;
+    }
+    const rows = (response.data || []).map(mapPublicHallOfFameRow);
+    state = normalizeState({ ...state, hallOfFame: rows });
+    hallOfFameStatus = rows.length ? "" : "No Hall of Fame entries yet.";
+    saveState();
+  }
+
+  function hallOfFameErrorMessage(error) {
+    const message = String(error?.message || error || "Could not load the Hall of Fame.").trim();
+    if (/permission|unauthorized|missing scope|read/i.test(message)) {
+      return "The Hall of Fame page is public, but Appwrite is not allowing guest reads for the hall_of_fame collection yet.";
+    }
+    return message;
+  }
+
+  function ensureHallOfFameLoaded() {
+    if (!backendClient || authState.user || hallOfFameLoadPromise || hallOfFameLoadAttempted) return;
+    hallOfFameLoadAttempted = true;
+    hallOfFameStatus = hallOfFameStatus || "Loading Hall of Fame...";
+    hallOfFameLoadPromise = loadPublicHallOfFameBootstrap()
+      .then(() => {
+        hallOfFameStatus = hallOfFameStatus || "";
+        mount();
+        switchView("hall-of-fame");
+      })
+      .catch((error) => {
+        hallOfFameStatus = hallOfFameErrorMessage(error);
+        mount();
+        switchView("hall-of-fame");
+      })
+      .finally(() => {
+        hallOfFameLoadPromise = null;
+      });
+    mount();
+    switchView("hall-of-fame");
+  }
+
+  async function saveHallOfFameEntry(entry) {
+    if (!canManageHallOfFame()) {
+      throw new Error("Only admins can update the Hall of Fame.");
+    }
+    const normalized = normalizeHallOfFameEntry({
+      id: entry?.id || generateHallOfFameId(),
+      year: entry?.year,
+      name: entry?.name,
+      position: entry?.position
+    }, 0);
+    if (!normalized.name) {
+      throw new Error("Name is required.");
+    }
+    const remotePayload = {
+      id: normalized.id,
+      year: normalized.year,
+      name: normalized.name,
+      position: normalized.position || null
+    };
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("hall_of_fame").upsert(remotePayload, { onConflict: "id" });
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the write. Please grant create/update permissions on the 'hall_of_fame' collection to admins.");
+        }
+        throw response.error;
+      }
+    }
+    const existingIndex = (state.hallOfFame || []).findIndex((row) => String(row.id) === String(normalized.id));
+    const nextRows = existingIndex >= 0
+      ? state.hallOfFame.map((row, index) => (index === existingIndex ? normalized : row))
+      : [...(state.hallOfFame || []), normalized];
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: state.organization,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      hallOfFame: nextRows
+    });
+    recordActivity("hallOfFame", existingIndex >= 0 ? "Hall of Fame entry updated." : "Hall of Fame entry added.", {
+      action: existingIndex >= 0 ? "hall_of_fame_updated" : "hall_of_fame_created",
+      hallOfFameId: normalized.id,
+      year: normalized.year,
+      name: normalized.name,
+      position: normalized.position
+    });
+  }
+
+  async function deleteHallOfFameEntry(hallOfFameId) {
+    if (!canManageHallOfFame()) {
+      throw new Error("Only admins can update the Hall of Fame.");
+    }
+    const normalizedId = String(hallOfFameId || "").trim();
+    if (!normalizedId) return;
+    const currentRow = (state.hallOfFame || []).find((row) => String(row.id) === normalizedId);
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("hall_of_fame").delete().eq("id", normalizedId);
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the delete. Please grant delete permissions on the 'hall_of_fame' collection to admins.");
+        }
+        throw response.error;
+      }
+    }
+    const nextRows = (state.hallOfFame || []).filter((row) => String(row.id) !== normalizedId);
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: state.organization,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      hallOfFame: nextRows
+    });
+    recordActivity("hallOfFame", "Hall of Fame entry deleted.", {
+      action: "hall_of_fame_deleted",
+      hallOfFameId: normalizedId,
+      name: currentRow?.name || "",
+      year: currentRow?.year || ""
+    });
+  }
+
+  function openHallOfFameDialog(entry) {
+    const dialog = document.getElementById("hof-dialog");
+    const form = document.getElementById("hof-form");
+    const title = document.getElementById("hof-dialog-title");
+    const submit = document.getElementById("hof-submit-button");
+    if (!dialog || !form) return;
+    hallOfFameDialogEditingId = String(entry?.id || "").trim();
+    form.reset();
+    form.elements.hofId.value = hallOfFameDialogEditingId;
+    form.elements.name.value = entry?.name || "";
+    form.elements.year.value = entry?.year || new Date().getFullYear();
+    form.elements.position.value = entry?.position || "";
+    title.textContent = entry ? `Edit ${entry.name}` : "Add Hall of Famer";
+    submit.textContent = entry ? "Save changes" : "Add to Hall of Fame";
+    dialog.showModal();
+  }
+
+  function renderHallOfFameCard(member, canManage, index) {
+    return `
+      <article class="hof-card">
+        <div class="hof-card-media-shell">
+          ${renderLazyImage({
+            src: INLINE_AVATAR_PLACEHOLDER,
+            fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
+            alt: `${member.name} portrait`,
+            className: "hof-player-image",
+            wrapperClass: "hof-player-media",
+            eager: index < 8
+          })}
+          ${member.position ? `<div class="hof-position-badge">${escapeHtml(member.position)}</div>` : ""}
+        </div>
+        <div class="hof-card-body">
+          <h3>${escapeHtml(member.name)}</h3>
+          <p>${escapeHtml(member.position || "Hall of Famer")}</p>
+          ${canManage ? `
+            <div class="action-row">
+              <button type="button" class="ghost-button small-button hof-edit-button" data-hof-id="${escapeAttribute(member.id)}" data-no-toast="true">Edit</button>
+              <button type="button" class="ghost-button small-button danger-button hof-delete-button" data-hof-id="${escapeAttribute(member.id)}" data-no-toast="true">Delete</button>
+            </div>
+          ` : ""}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderHallOfFameYearSection(yearGroup, canManage) {
+    return `
+      <section class="hof-year-section">
+        <div class="hof-year-head">
+          <p class="eyebrow">Class of</p>
+          <h3>${escapeHtml(String(yearGroup.year))}</h3>
+        </div>
+        <div class="hof-grid">
+          ${yearGroup.members.map((member, index) => renderHallOfFameCard(member, canManage, index)).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderHallOfFame() {
+    const canManage = canManageHallOfFame();
+    const rows = sortHallOfFameRows(state.hallOfFame || []);
+    const groups = groupHallOfFameByYear(rows);
+    const loadingMessage = hallOfFameLoadPromise ? "Loading Hall of Fame..." : hallOfFameStatus;
+    const groupsHtml = groups.map((group) => renderHallOfFameYearSection(group, canManage)).join("") || `
+      <div class="hof-grid">
+        <article class="setup-card roster-empty-card">
+          <p class="eyebrow">Hall of Fame</p>
+          <h3>No inductees yet</h3>
+          <p class="muted">Check back soon — new Hall of Famers are added after each induction event.</p>
+        </article>
+      </div>
+    `;
+    return `
+      <section class="hof-page">
+        <div class="hof-page-head roster-page-head">
+          <div>
+            <p class="eyebrow">Legacy</p>
+            <h2>Hall of Fame</h2>
+            <p class="roster-page-copy">Honoring the Emperors who left it all on the field since 2022.</p>
+          </div>
+          <div class="roster-count">
+            <strong>${rows.length}</strong>
+            <span>Inductees</span>
+          </div>
+        </div>
+        ${canManage ? `<div class="button-row"><button type="button" class="primary-button" id="hof-add-entry">Add Hall of Famer</button></div>` : ""}
+        ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
+        <div class="hof-years">${groupsHtml}</div>
       </section>
     `;
   }
@@ -7377,7 +7689,7 @@
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "tryout" || normalizedViewId === "events" || normalizedViewId === "organization";
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events" || normalizedViewId === "organization";
   }
 
   function canAccessView(viewId) {
@@ -7540,6 +7852,9 @@
     const finalView = resolveAllowedView(nextViewId);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
+    }
+    if (finalView === "hall-of-fame") {
+      ensureHallOfFameLoaded();
     }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
@@ -9134,6 +9449,94 @@
     });
   }
 
+  function bindHallOfFameActions() {
+    const addButton = document.getElementById("hof-add-entry");
+    const dialog = document.getElementById("hof-dialog");
+    const form = document.getElementById("hof-form");
+    const submitButton = document.getElementById("hof-submit-button");
+    const closeButton = document.getElementById("hof-dialog-close");
+    const cancelButton = document.getElementById("hof-dialog-cancel");
+
+    if (addButton) {
+      addButton.onclick = function () {
+        if (!canManageHallOfFame()) return;
+        openHallOfFameDialog(null);
+      };
+    }
+
+    if (closeButton && dialog) {
+      closeButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (cancelButton && dialog) {
+      cancelButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (submitButton && form) {
+      submitButton.onclick = function () {
+        form.requestSubmit();
+      };
+    }
+
+    if (form) {
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        const payload = {
+          id: String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim(),
+          year: Number(form.elements.year.value || new Date().getFullYear()),
+          name: String(form.elements.name.value || "").trim(),
+          position: String(form.elements.position.value || "").trim()
+        };
+        if (!payload.name) {
+          showToast("Name is required.", "error");
+          return;
+        }
+        try {
+          await saveHallOfFameEntry(payload);
+          dialog?.close();
+          hallOfFameDialogEditingId = "";
+          showToast("Hall of Fame entry saved.", "success");
+          mount();
+          switchView("hall-of-fame");
+        } catch (error) {
+          showToast(error?.message || "Could not save Hall of Fame entry.", "error");
+        }
+      };
+    }
+
+    document.querySelectorAll(".hof-edit-button").forEach((button) => {
+      button.onclick = function () {
+        if (!canManageHallOfFame()) return;
+        const hofId = String(button.dataset.hofId || "").trim();
+        const currentRow = (state.hallOfFame || []).find((row) => String(row.id) === hofId);
+        if (!currentRow) return;
+        openHallOfFameDialog(currentRow);
+      };
+    });
+
+    document.querySelectorAll(".hof-delete-button").forEach((button) => {
+      button.onclick = async function () {
+        if (!canManageHallOfFame()) return;
+        const hofId = String(button.dataset.hofId || "").trim();
+        const currentRow = (state.hallOfFame || []).find((row) => String(row.id) === hofId);
+        if (!currentRow) return;
+        if (!window.confirm(`Remove '${currentRow.name}' from the Hall of Fame?`)) return;
+        try {
+          await deleteHallOfFameEntry(hofId);
+          showToast("Hall of Fame entry deleted.", "success");
+          mount();
+          switchView("hall-of-fame");
+        } catch (error) {
+          showToast(error?.message || "Could not delete Hall of Fame entry.", "error");
+        }
+      };
+    });
+  }
+
   function bindMemberFilters() {
     const filtersDropdown = document.querySelector(".member-filters-dropdown");
     if (filtersDropdown) {
@@ -9970,6 +10373,7 @@
       document.getElementById("dashboard").innerHTML = renderDashboard();
       bindDashboardActions();
       document.getElementById("roster").innerHTML = renderRoster();
+      document.getElementById("hall-of-fame").innerHTML = renderHallOfFame();
       document.getElementById("tryout").innerHTML = renderTryout();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
@@ -9989,6 +10393,7 @@
       bindEquipmentActions();
       bindGamesActions();
       bindRosterActions();
+      bindHallOfFameActions();
       bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();

@@ -21,6 +21,13 @@ const publicCreateCollectionPermissions = [
   'delete("users")'
 ];
 
+const publicReadCollectionPermissions = [
+  'read("any")',
+  'create("users")',
+  'update("users")',
+  'delete("users")'
+];
+
 const schema = {
   members: {
     name: "members",
@@ -127,6 +134,16 @@ const schema = {
       { type: "string", key: "status", size: 32, required: true },
       { type: "string", key: "source", size: 64, required: false },
       { type: "datetime", key: "submitted_at", required: true }
+    ]
+  },
+  hall_of_fame: {
+    name: "hall_of_fame",
+    permissions: publicReadCollectionPermissions,
+    attributes: [
+      { type: "string", key: "id", size: 64, required: true },
+      { type: "integer", key: "year", required: true },
+      { type: "string", key: "name", size: 255, required: true },
+      { type: "string", key: "position", size: 128, required: false }
     ]
   }
 };
