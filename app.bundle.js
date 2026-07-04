@@ -194,8 +194,8 @@
     { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=7VueONQao_U",  homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "JKU Astros" }, homeScore: 13, awayScore: 28 },
     { id: "g-2026-06-06-semi-1", stage: "Semifinals", subtitle: "UNI-Wien Emperors vs. JKU Astros", startsAt: "2026-06-06T14:15:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=zMOdPBJRYgw",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "JKU Astros" }, homeScore: 14, awayScore: 24 },
     { id: "g-2026-06-06-semi-2", stage: "Semifinals", subtitle: "TU Robots vs. WU Tigers", startsAt: "2026-06-06T17:30:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=JqxiXr1XeiM",  homeTeam: { name: "TU Robots" }, awayTeam: { name: "WU Tigers" }, homeScore: 6, awayScore: 9 },
-    { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
-    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: null, awayScore: null }
+    { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: 7, awayScore: 24 },
+    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: 45, awayScore: 7 }
   ];
   const LEAGUE_STANDINGS_SNAPSHOT = {
     label: "RegularSeason 2025/26",
@@ -465,6 +465,16 @@
     }
   }
 
+  function isPermissionDeniedError(error) {
+    if (!error) return false;
+    const code = Number(error.code ?? error.status ?? error.statusCode);
+    if (code === 401 || code === 403) return true;
+    const type = String(error.type || "").toLowerCase();
+    if (type.includes("unauthorized") || type.includes("forbidden") || type.includes("missing_scope")) return true;
+    const message = String(error.message || error).toLowerCase();
+    return message.includes("not authorized") || message.includes("unauthorized") || message.includes("missing scope") || message.includes("permission");
+  }
+
   function diagnosticsFunctionId() {
     return String(APPWRITE_CONFIG?.diagnosticsFunctionId || "").trim();
   }
@@ -657,6 +667,7 @@
         : "No remote diagnostics recorded yet.";
     } catch (error) {
       remoteDiagnosticsStatus = `Could not load remote diagnostics: ${summarizeDiagnosticError(error)}`;
+      remoteDiagnosticsLoadedAt = Date.now();
     } finally {
       remoteDiagnosticsLoading = false;
       if (getRouteView() === "settings") {
@@ -1788,7 +1799,7 @@
           <p class="muted">${isFirstTime ? "You were invited to join Uni Wien Emperors. Set a password to activate your account." : "Create a new password for your account."}</p>
         </div>
         <div>
-          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Email:</strong> ${escapeHtml(email)}</p>
         </div>
         <div class="form-grid">
           <label>New Password<input id="recovery-password" type="password" autocomplete="new-password" placeholder="••••••••" minlength="8" /></label>
@@ -2677,9 +2688,13 @@
     }
     const memberLevelIban = String(member?.iban || "").trim();
     if (memberLevelIban) return memberLevelIban;
+    const feePeriodValue = (feePeriod) => {
+      const match = /^Q([1-4])_(\d{4})$/.exec(String(feePeriod || "").trim());
+      return match ? Number(match[2]) * 10 + Number(match[1]) : 0;
+    };
     const fees = state.fees
       .filter((fee) => String(fee.memberId) === String(memberId) && String(fee.iban || "").trim())
-      .sort((left, right) => String(right.feePeriod || "").localeCompare(String(left.feePeriod || "")));
+      .sort((left, right) => feePeriodValue(right.feePeriod) - feePeriodValue(left.feePeriod));
     return fees[0]?.iban || "";
   }
 
@@ -2985,9 +3000,9 @@
   }
 
   function downloadExcel(columns, rows, fileName) {
-    const headerHtml = columns.map((column) => `<th>${String(column.label || "")}</th>`).join("");
+    const headerHtml = columns.map((column) => `<th>${escapeHtml(String(column.label || ""))}</th>`).join("");
     const bodyHtml = rows
-      .map((row) => `<tr>${columns.map((column) => `<td>${String(row[column.key] ?? "")}</td>`).join("")}</tr>`)
+      .map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(String(row[column.key] ?? ""))}</td>`).join("")}</tr>`)
       .join("");
     const html = `
       <html>
@@ -3543,7 +3558,7 @@
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
     const organizationRows = await selectMaybe("organization", "*", true);
-    const hallOfFameRows = await selectMaybe("hall_of_fame", "id, year, name, position", true);
+    const hallOfFameRows = await selectMaybe("hall_of_fame", "id, year, name, position, photo_file_id, photo_url", true);
     const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
     const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
     const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
@@ -4794,7 +4809,7 @@
         status: statusByFeeId[String(fee.id)] || fee.status,
         amount: Number(fee.amount || 0),
         paidAmount: Number(fee.paidAmount || 0),
-        note: "",
+        note: String(fee.note || ""),
         iban: ibanValue
       });
     }
@@ -4877,7 +4892,7 @@
             wrapperClass: "avatar-lazy-media",
             eager: true
           })}
-          <h3 style="margin:0;">${userMember.name}</h3>
+          <h3 style="margin:0;">${escapeHtml(userMember.name || "")}</h3>
         </div>
         <div style="display: grid; gap: 12px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -6112,13 +6127,13 @@
                 ${showMemberIdColumn ? `<td><span class="meta">${member.id}</span></td>` : ""}
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${member.firstName || ""}" />`
-                    : `<strong>${member.firstName || "-"}</strong>`}
+                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${escapeAttribute(member.firstName || "")}" />`
+                    : `<strong>${escapeHtml(member.firstName || "-")}</strong>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${member.lastName || ""}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${member.email || ""}" placeholder="email" /></div>`
-                    : `<strong>${member.lastName || "-"}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? (member.email || "") : ""}</div>`}
+                    ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${escapeAttribute(member.lastName || "")}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${escapeAttribute(member.email || "")}" placeholder="email" /></div>`
+                    : `<strong>${escapeHtml(member.lastName || "-")}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? escapeHtml(member.email || "") : ""}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
@@ -6144,7 +6159,7 @@
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
                       ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${normalizeToIsoDate(member.passExpiry) || ""}" /></div>`
-                      : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : member.licenseName || "No pass data"}</div></div>`}
+                      : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : escapeHtml(member.licenseName || "No pass data")}</div></div>`}
                   </td>
                 ` : ""}
                 ${showActionColumn ? `
@@ -6274,7 +6289,7 @@
           <p class="eyebrow">Notes</p>
           <h3 style="margin-top: 4px;">Member notes</h3>
         </div>
-        <label>Notes<textarea id="user-notes" rows="3" placeholder="No notes yet" ${notesDisabled}>${member.notes || ""}</textarea></label>
+        <label>Notes<textarea id="user-notes" rows="3" placeholder="No notes yet" ${notesDisabled}>${escapeHtml(member.notes || "")}</textarea></label>
         ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
       </article>
     `;
@@ -6288,7 +6303,7 @@
         <div class="pill-row dense-row">
           ${statusPill(displayPassStatus(member.passStatus))}
         </div>
-        <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Valid till ${formatDate(member.passExpiry)}` : (member.licenseName || "No expiry date")}</p>
+        <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Valid till ${formatDate(member.passExpiry)}` : escapeHtml(member.licenseName || "No expiry date")}</p>
       </article>
     ` : "";
     const securitySection = authState.user && isOwnProfile(member) ? `
@@ -6322,17 +6337,17 @@
           </button>
           ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
-            <h3 style="margin:0;">${member.name}</h3>
-            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? (member.email || "") : ""}</p>
+            <h3 style="margin:0;">${escapeHtml(member.name || "")}</h3>
+            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? escapeHtml(member.email || "") : ""}</p>
             ${isOwnProfile(member) ? `<p class="meta" style="margin:6px 0 0;">Click image to change profile picture</p>` : ""}
           </div>
         </div>
         <div class="form-grid">
-          <label>First name<input id="user-first-name" value="${member.firstName || ""}" ${editDisabled} /></label>
-          <label>Last name<input id="user-last-name" value="${member.lastName || ""}" ${editDisabled} /></label>
+          <label>First name<input id="user-first-name" value="${escapeAttribute(member.firstName || "")}" ${editDisabled} /></label>
+          <label>Last name<input id="user-last-name" value="${escapeAttribute(member.lastName || "")}" ${editDisabled} /></label>
         </div>
         <div class="form-grid">
-          <label>Email<input id="user-email" type="email" value="${canViewProfileEmail ? (member.email || "") : ""}" ${editDisabled} /></label>
+          <label>Email<input id="user-email" type="email" value="${canViewProfileEmail ? escapeAttribute(member.email || "") : ""}" ${editDisabled} /></label>
           <label>Jersey number<input id="user-jersey" type="number" min="0" value="${member.jerseyNumber ?? ""}" ${editDisabled} /></label>
         </div>
         ${canEditProfile ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-profile" data-member-id="${member.id}">Save profile</button></div>` : ""}
@@ -6380,8 +6395,8 @@
           <p class="eyebrow">SEPA Preview</p>
           <h3>Last export summary</h3>
           <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
-          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${item.name} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
-          ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${item.name || "Unknown"}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
+          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${escapeHtml(item.name || "")} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
+          ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${escapeHtml(item.name || "Unknown")}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
         </article>
       `
       : "";
@@ -6457,8 +6472,8 @@
               <tr>
                 <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${fee.memberId}" aria-label="Open profile"></button></td>
                 ${feeEditMode ? `<td><input type="checkbox" class="fee-member-select" data-member-id="${fee.memberId}" ${selectedSet.has(String(fee.memberId)) ? "checked" : ""} /></td>` : ""}
-                <td>${memberFirstName(fee.memberId) || "-"}</td>
-                <td>${memberLastName(fee.memberId) || "-"}</td>
+                <td>${escapeHtml(memberFirstName(fee.memberId) || "-")}</td>
+                <td>${escapeHtml(memberLastName(fee.memberId) || "-")}</td>
                 <td>
                   ${String(feeInlineEditId) === String(fee.id)
                     ? `<input type="number" class="fee-row-input fee-row-amount" data-fee-id="${fee.id}" min="0" step="0.01" value="${Number(fee.amount || 0).toFixed(2)}" />`
@@ -6580,9 +6595,9 @@
             ${rows.map((member) => `
               <tr>
                 <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${member.id}" aria-label="Open profile"></button></td>
-                <td><strong>${member.firstName || "-"}</strong>${member.deletedAt ? ` ${statusPill("deleted", "deleted")}` : ""}</td>
-                <td><strong>${member.lastName || "-"}</strong></td>
-                <td>${formatList(member.positions, "-")}</td>
+                <td><strong>${escapeHtml(member.firstName || "-")}</strong>${member.deletedAt ? ` ${statusPill("deleted", "deleted")}` : ""}</td>
+                <td><strong>${escapeHtml(member.lastName || "-")}</strong></td>
+                <td>${escapeHtml(formatList(member.positions, "-"))}</td>
                 <td class="${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? formatDate(member.passExpiry) : "No expiry date"}</td>
                 <td>${statusPill(displayPassStatus(member.passStatus))}</td>
               </tr>
@@ -6635,7 +6650,7 @@
     const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
     const visibleColumnCount = canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6);
     const sheetTabs = equipmentSheetCounts(rows)
-      .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
+      .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${escapeAttribute(sheet.key)}">${escapeHtml(sheet.label)} (${escapeHtml(String(sheet.count))})</button>`)
       .join("");
     const kindFilterButtons = [
       { key: "all", label: "All" },
@@ -6700,7 +6715,7 @@
       const articlePrefix = item.parentItemId ? `<span class="meta" style="margin-right:6px;">↳</span>` : "";
       const typeMeta = item.itemKind === "container"
         ? `<span class="meta">Container${childCount ? ` · ${childCount} item${childCount === 1 ? "" : "s"}` : ""}</span>`
-        : (parent ? `<span class="meta">In ${parent.article || "container"}</span>` : `<span class="meta">Item</span>`);
+        : (parent ? `<span class="meta">In ${escapeHtml(parent.article || "container")}</span>` : `<span class="meta">Item</span>`);
       const photoSrc = resolveEquipmentPhotoSrc(item);
       const toggleContentsButton = item.itemKind === "container"
         ? `<button type="button" class="ghost-button small-button equipment-toggle-contents-button" data-container-id="${item.id}" data-no-toast="true">${isExpanded ? "Hide contents" : "Show contents"}</button>`
@@ -6711,17 +6726,17 @@
             <td colspan="${visibleColumnCount}">
               <div class="card" style="margin: 6px 0 0; padding: 14px 16px;">
                 <div class="button-row" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                  <strong>Contents of ${item.article || "container"}</strong>
+                  <strong>Contents of ${escapeHtml(item.article || "container")}</strong>
                   <span class="meta">${childCount} item${childCount === 1 ? "" : "s"}</span>
                 </div>
                 ${children.length
                   ? `<div style="display:grid; gap:8px;">${children.map((child) => `
                       <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:8px 0; border-top:1px solid rgba(15,23,42,0.08);">
                         <div>
-                          <strong>${child.article || "Unnamed item"}</strong>
-                          <div class="meta">${child.category || "No category"}${child.quantity ? ` · Qty ${child.quantity}` : ""}${child.location ? ` · ${child.location}` : ""}</div>
+                          <strong>${escapeHtml(child.article || "Unnamed item")}</strong>
+                          <div class="meta">${escapeHtml(child.category || "No category")}${child.quantity ? ` · Qty ${escapeHtml(String(child.quantity))}` : ""}${child.location ? ` · ${escapeHtml(child.location)}` : ""}</div>
                         </div>
-                        <div class="meta">${child.condition || "No condition"}</div>
+                        <div class="meta">${escapeHtml(child.condition || "No condition")}</div>
                       </div>
                     `).join("")}</div>`
                   : `<p class="meta" style="margin:0;">This container does not contain any items yet.</p>`}
@@ -6733,13 +6748,13 @@
       if (!isEditing) {
         return `
           <tr>
-            ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;", wrapperClass: "equipment-photo-lazy-media" })}</button>` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
-            <td>${item.quantity || "-"}</td>
-            <td>${item.condition || "-"}</td>
-            <td>${item.location || "-"}</td>
+            ${showGroupColumn ? `<td>${escapeHtml(item.group || "-")}</td>` : ""}
+            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${escapeAttribute(photoSrc)}" data-equipment-photo-title="${escapeAttribute(item.article || "Equipment photo")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;", wrapperClass: "equipment-photo-lazy-media" })}</button>` : ""}<div><strong>${articlePrefix}${escapeHtml(item.article || "-")}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
+            <td>${escapeHtml(String(item.quantity || "-"))}</td>
+            <td>${escapeHtml(item.condition || "-")}</td>
+            <td>${escapeHtml(item.location || "-")}</td>
             <td>${formatDate(item.checkedAt)}</td>
-            <td>${item.notes || "-"}</td>
+            <td>${escapeHtml(item.notes || "-")}</td>
             ${canEdit
               ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button>${item.itemKind === "container" ? `<button type="button" class="ghost-button small-button equipment-add-child-button" data-parent-id="${item.id}" data-no-toast="true">Add content</button>` : ""}<button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
               : ""}
@@ -6777,7 +6792,7 @@
         <div class="button-row">
           ${canEdit ? `<button id="equipment-add-sheet" type="button" class="ghost-button" data-no-toast="true">Add sheet</button>` : ""}
           ${canRemoveActiveSheet ? `<button id="equipment-remove-sheet" type="button" class="ghost-button danger-button" data-no-toast="true" data-sheet-key="${activeSheet}">Remove current sheet</button>` : ""}
-          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${equipmentSheetLabel(activeSheet)}`}</button>` : ""}
+          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${escapeHtml(equipmentSheetLabel(activeSheet))}`}</button>` : ""}
         </div>
       </div>
       ${equipmentStatus ? `<article class="card" style="margin-bottom: 12px;"><p class="meta">${equipmentStatus}</p></article>` : ""}
@@ -6825,7 +6840,7 @@
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No ${activeKindFilter === "containers" ? "containers" : activeKindFilter === "items" ? "items" : "equipment rows"} found for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No ${activeKindFilter === "containers" ? "containers" : activeKindFilter === "items" ? "items" : "equipment rows"} found for ${escapeHtml(equipmentSheetLabel(activeSheet).toLowerCase())}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -6877,7 +6892,7 @@
           </div>
         ` : `<p class="meta">Click <strong>Preview changes</strong> to see exactly what would be updated.</p>`}
       </article>
-      ${preview && preview.unmatchedNames?.length ? `<article class="card" style="margin-bottom: 14px;"><h3>Unmatched names</h3><p class="meta">${preview.unmatchedNames.join(", ")}</p></article>` : ""}
+      ${preview && preview.unmatchedNames?.length ? `<article class="card" style="margin-bottom: 14px;"><h3>Unmatched names</h3><p class="meta">${escapeHtml(preview.unmatchedNames.join(", "))}</p></article>` : ""}
       <div class="table-wrap">
         <table>
           <thead>
@@ -6892,9 +6907,9 @@
             ${changes.map((change) => `
               <tr>
                 <td><input type="checkbox" class="pass-sync-select" data-member-id="${change.memberId}" ${selectedSet.has(String(change.memberId)) ? "checked" : ""} /></td>
-                <td><strong>${change.memberName || "Unknown"}</strong><div class="meta">${change.memberEmail || "No email"}</div></td>
+                <td><strong>${escapeHtml(change.memberName || "Unknown")}</strong><div class="meta">${escapeHtml(change.memberEmail || "No email")}</div></td>
                 <td>${statusPill(change.existingPass ? "pending" : "exempt", change.existingPass ? "update" : "create")}</td>
-                <td>${(change.fieldChanges || []).map((fieldChange) => `<div class="meta">${passSyncFieldLabel(fieldChange.field)}: ${fieldChange.current || "-"} -> ${fieldChange.next || "-"}</div>`).join("")}</td>
+                <td>${(change.fieldChanges || []).map((fieldChange) => `<div class="meta">${escapeHtml(passSyncFieldLabel(fieldChange.field))}: ${escapeHtml(String(fieldChange.current || "-"))} -> ${escapeHtml(String(fieldChange.next || "-"))}</div>`).join("")}</td>
               </tr>
             `).join("") || `<tr><td colspan="4" class="meta">No updates needed based on current Clubee export.</td></tr>`}
           </tbody>
@@ -7008,7 +7023,7 @@
               </div>
               <div class="game-score">
                 ${game.hasScore
-                  ? `<span>${game.emperorsHome ? game.homeScore : game.opponentScore}</span><span class="meta">:</span><span>${game.emperorsHome ? game.awayScore : game.emperorsScore}</span>`
+                  ? `<span>${game.emperorsHome ? game.emperorsScore : game.opponentScore}</span><span class="meta">:</span><span>${game.emperorsHome ? game.opponentScore : game.emperorsScore}</span>`
                   : `<span class="meta">Kickoff</span>`}
               </div>
               <div class="game-team ${!game.emperorsHome ? "is-emperors" : ""}">
@@ -7523,7 +7538,37 @@
       return renderAuthGate();
     }
     if (!state.invites.length) return emptyState("No invite history yet", "Once events are editable, we can add attendance invitation tracking here.");
-    return `...`;
+    const inviteRowsHtml = state.invites
+      .slice()
+      .sort((left, right) => String(right.sentAt || "").localeCompare(String(left.sentAt || "")))
+      .map((invite) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(invite.sentAt) || "-")}</td>
+          <td>${escapeHtml(invite.channel || "email")}</td>
+          <td>${escapeHtml(String(invite.recipients ?? 0))}</td>
+          <td>${escapeHtml(invite.eventId || "-")}</td>
+        </tr>
+      `)
+      .join("");
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Invites</p>
+          <h3>Invite history</h3>
+          <p class="meta">Attendance and account invitations sent from the platform.</p>
+        </div>
+      </div>
+      <article class="setup-card">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Sent</th><th>Channel</th><th>Recipients</th><th>Event</th></tr>
+            </thead>
+            <tbody>${inviteRowsHtml}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
   }
 
   function renderSettings() {
@@ -7640,11 +7685,11 @@
     if (!normalizedName) return "";
     const matchedMember = organizationMemberMatch(normalizedName);
     const personMarkup = matchedMember
-      ? `<button type="button" class="organization-person-link open-user-page-button" data-member-id="${matchedMember.id}">${normalizedName}</button>`
-      : `<strong>${normalizedName}</strong>`;
+      ? `<button type="button" class="organization-person-link open-user-page-button" data-member-id="${escapeAttribute(matchedMember.id)}">${escapeHtml(normalizedName)}</button>`
+      : `<strong>${escapeHtml(normalizedName)}</strong>`;
     return `
       <div class="organization-person-block">
-        <p class="muted" style="margin:0 0 4px;">${label}</p>
+        <p class="muted" style="margin:0 0 4px;">${escapeHtml(label)}</p>
         ${personMarkup}
       </div>
     `;
@@ -7656,7 +7701,7 @@
     const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
     const branchRows = rootEntry ? rows.filter((entry) => String(entry.id) !== String(rootEntry.id)) : rows;
     const renderTaskItems = (tasks) => tasks.length
-      ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${task}</div>`).join("")}</div>`
+      ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${escapeHtml(task)}</div>`).join("")}</div>`
       : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`;
     const renderTaskDetails = (tasks) => tasks.length
       ? `<details class="organization-task-details"><summary class="organization-task-summary">Aufgaben (${tasks.length})</summary>${renderTaskItems(tasks)}</details>`
@@ -7693,7 +7738,7 @@
               const tasks = organizationTaskList(entry.aufgaben);
               return `
                 <article class="organization-branch">
-                  <div class="organization-branch-header">${entry.headOf || "Section"}</div>
+                  <div class="organization-branch-header">${escapeHtml(entry.headOf || "Section")}</div>
                   <div class="organization-branch-body">
                     <div class="organization-people">
                       ${renderOrganizationPerson("Verantwortlicher", entry.verantwortung)}
@@ -8220,6 +8265,7 @@
       };
     });
     document.querySelectorAll(".member-inline-pass-status").forEach((select) => {
+      if (!String(select.dataset.memberId || "").trim()) return;
       select.onchange = function () {
         const memberId = String(select.dataset.memberId || "").trim();
         if (!memberId) return;
@@ -9373,14 +9419,14 @@
     const cancelButton = document.getElementById("recovery-cancel");
     if (cancelButton) {
       cancelButton.onclick = function () {
-        window.location.hash = "#dashboard";
+        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
       };
     }
 
     const backToSignInButton = document.getElementById("recovery-back-to-sign-in");
     if (backToSignInButton) {
       backToSignInButton.onclick = function () {
-        window.location.hash = "#dashboard";
+        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
       };
     }
   }
@@ -10074,21 +10120,31 @@
     }
   }
 
+  function applyTableSort(table, key) {
+    if (!table || !key) return;
+    const current = tableSort[table] || { key: "", direction: "asc" };
+    const direction = current.key === key && current.direction === "asc" ? "desc" : "asc";
+    tableSort = {
+      ...tableSort,
+      [table]: { key, direction }
+    };
+    saveTableSort();
+    mount();
+  }
+
   function bindTableSorts() {
     document.querySelectorAll(".sort-button[data-sort-table][data-sort-key]").forEach((button) => {
       button.onclick = function () {
-        const table = button.dataset.sortTable;
-        const key = button.dataset.sortKey;
-        if (!table || !key) return;
-        const current = tableSort[table] || { key: "", direction: "asc" };
-        const direction = current.key === key && current.direction === "asc" ? "desc" : "asc";
-        tableSort = {
-          ...tableSort,
-          [table]: { key, direction }
-        };
-        saveTableSort();
-        mount();
+        applyTableSort(button.dataset.sortTable, button.dataset.sortKey);
       };
+    });
+  }
+
+  function attachStickySortDelegation(stickyElement) {
+    stickyElement.addEventListener("click", function (event) {
+      const button = event.target.closest(".sort-button[data-sort-table][data-sort-key]");
+      if (!button || !stickyElement.contains(button)) return;
+      applyTableSort(button.dataset.sortTable, button.dataset.sortKey);
     });
   }
 
@@ -10107,6 +10163,7 @@
 
     const sticky = document.createElement("div");
     sticky.className = "members-sticky-header";
+    attachStickySortDelegation(sticky);
     const stickyTable = document.createElement("table");
     stickyTable.className = "members-sticky-header-table";
     const clonedHead = thead.cloneNode(true);
@@ -10176,6 +10233,7 @@
 
     const sticky = document.createElement("div");
     sticky.className = "fees-sticky-header";
+    attachStickySortDelegation(sticky);
     const stickyTable = document.createElement("table");
     stickyTable.className = "fees-sticky-header-table";
     const clonedHead = thead.cloneNode(true);
@@ -10245,6 +10303,7 @@
 
     const sticky = document.createElement("div");
     sticky.className = "passes-sticky-header";
+    attachStickySortDelegation(sticky);
     const stickyTable = document.createElement("table");
     stickyTable.className = "passes-sticky-header-table";
     const clonedHead = thead.cloneNode(true);
@@ -10638,7 +10697,7 @@
       console.error("Emperors bundle mount failed", error);
       recordDiagnostic("error", "app", "App bundle mount failed.", summarizeDiagnosticError(error));
       const dashboard = document.getElementById("dashboard");
-      if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${error.message}</p></article>`;
+      if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${escapeHtml(String(error?.message || error || "Unknown error"))}</p></article>`;
       switchView("dashboard");
     }
   }

@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /src/
+Disallow: /appwrite/
+Disallow: /scripts/
+Disallow: /dist/
+
+Sitemap: https://emperors.page/sitemap.xml

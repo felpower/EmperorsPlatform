@@ -3,10 +3,76 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Uni Wien Emperors – American Football Team der Universität Wien | Tryouts, Roster & Games</title>
     <meta
       name="description"
-      content="Uni Wien Emperors Tryout, games and roster for Vienna’s American football club. Find membership info, player passes and team organization."
+      content="Uni Wien Emperors – das American-Football-Team der Universität Wien. Tryout-Anmeldung, Roster, Spielplan, Hall of Fame und Team-Organisation. Join the Emperors and play American football in Vienna!"
     />
+    <meta
+      name="keywords"
+      content="Uni Wien Emperors, Emperors Wien, American Football Wien, Universität Wien Football, Uni Wien Emperors Tryout, American Football Tryout Wien, Football Vienna, Emperors American Football"
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://emperors.page/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Uni Wien Emperors" />
+    <meta property="og:title" content="Uni Wien Emperors – American Football Team der Universität Wien" />
+    <meta
+      property="og:description"
+      content="Tryout-Anmeldung, Roster, Spielplan und Hall of Fame der Uni Wien Emperors – American Football in Wien."
+    />
+    <meta property="og:url" content="https://emperors.page/" />
+    <meta property="og:image" content="https://emperors.page/assets/emperors-mark.png" />
+    <meta property="og:locale" content="de_AT" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Uni Wien Emperors – American Football Team der Universität Wien" />
+    <meta
+      name="twitter:description"
+      content="Tryout-Anmeldung, Roster, Spielplan und Hall of Fame der Uni Wien Emperors – American Football in Wien."
+    />
+    <meta name="twitter:image" content="https://emperors.page/assets/emperors-mark.png" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "SportsTeam",
+          "@id": "https://emperors.page/#team",
+          "name": "Uni Wien Emperors",
+          "alternateName": ["UNI-Wien Emperors", "Emperors Wien", "Uni Wien Emperors American Football"],
+          "sport": "American Football",
+          "url": "https://emperors.page/",
+          "logo": "https://emperors.page/assets/emperors-mark.png",
+          "image": "https://emperors.page/assets/emperors-wordmark.png",
+          "location": {
+            "@type": "Place",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Wien",
+              "addressRegion": "Wien",
+              "addressCountry": "AT"
+            }
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://emperors.page/#website",
+          "url": "https://emperors.page/",
+          "name": "Uni Wien Emperors",
+          "alternateName": "Uni Wien Emperors Platform",
+          "inLanguage": ["de", "en"],
+          "publisher": { "@id": "https://emperors.page/#team" }
+        }
+      ]
+    }
+    </script>
     <meta name="theme-color" content="#171d1d" />
     <link rel="icon" href="./assets/emperors-mark.png?v=20260512a" type="image/png" />
     <link rel="apple-touch-icon" href="./assets/emperors-mark.png?v=20260512a" />
@@ -24,9 +90,24 @@
     <script src="./src/modules/cache-utils.js?v=20260508a"></script>
     <script src="./src/modules/iban-utils.js?v=20260508a"></script>
     <script src="./src/modules/profile-finance.js?v=20260508a"></script>
-    <title>Uni Wien Emperors Platform</title>
   </head>
   <body>
+    <noscript>
+      <section style="max-width: 720px; margin: 40px auto; padding: 0 20px; font-family: sans-serif;">
+        <h1>Uni Wien Emperors – American Football in Wien</h1>
+        <p>
+          Die Uni Wien Emperors sind das American-Football-Team der Universität Wien. Auf dieser Seite
+          findest du Informationen zum Tryout (Probetraining), den aktuellen Roster, den Spielplan
+          (Games), die Hall of Fame und die Team-Organisation.
+        </p>
+        <p>
+          The Uni Wien Emperors are the American football team of the University of Vienna. This site
+          hosts tryout registration, the current roster, the game schedule, the hall of fame and team
+          organization. Please enable JavaScript to use the site.
+        </p>
+        <p>Kontakt &amp; rechtliche Informationen: <a href="./impressum.html">Impressum</a> · <a href="./datenschutz.html">Datenschutz</a></p>
+      </section>
+    </noscript>
     <button id="menu-toggle" class="menu-toggle-button" type="button" aria-label="Toggle menu" data-no-toast="true">
       <span></span>
       <span></span>

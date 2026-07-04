@@ -9,15 +9,23 @@ const distDir = path.resolve(rootDir, "dist");
 // Files and folders to copy to dist/
 const filesToCopy = [
   "index.html",
+  "404.html",
+  "impressum.html",
+  "datenschutz.html",
   "app.bundle.js",
   "styles.css",
   "manifest.webmanifest",
+  "robots.txt",
+  "sitemap.xml",
+  "favicon.svg",
+  "CNAME",
   "sw.js",
   "README.md"
 ];
 
 const foldersToCopy = [
   "assets",
+  "src",
   "appwrite/templates"
 ];
 

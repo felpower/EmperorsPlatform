@@ -13,12 +13,20 @@
     return map;
   }
 
+  function feePeriodSortValue(feePeriod) {
+    const match = /^Q([1-4])_(\d{4})$/.exec(String(feePeriod || "").trim());
+    if (!match) return 0;
+    const quarter = Number(match[1]);
+    const year = Number(match[2]);
+    return year * 10 + quarter;
+  }
+
   function memberIban(member, fees, memberId) {
     const memberLevelIban = String(member?.iban || "").trim();
     if (memberLevelIban) return memberLevelIban;
     const newestFeeWithIban = (Array.isArray(fees) ? fees : [])
       .filter((fee) => String(fee.memberId) === String(memberId) && String(fee.iban || "").trim())
-      .sort((left, right) => String(right.feePeriod || "").localeCompare(String(left.feePeriod || "")))[0] || null;
+      .sort((left, right) => feePeriodSortValue(right.feePeriod) - feePeriodSortValue(left.feePeriod))[0] || null;
     return String(newestFeeWithIban?.iban || "").trim();
   }
 
@@ -55,7 +63,7 @@
         status: statusByFeeId[String(fee.id)] || fee.status,
         amount: Number(fee.amount || 0),
         paidAmount: Number(fee.paidAmount || 0),
-        note: "",
+        note: String(fee.note || ""),
         iban: normalizedIban
       });
     }
