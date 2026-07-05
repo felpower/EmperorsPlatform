@@ -1716,6 +1716,8 @@
     if (response.error) {
       throw response.error;
     }
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
+    invalidateCache(EQUIPMENT_CACHE_KEY);
     syncAuthSession(null);
   }
 
@@ -2323,7 +2325,7 @@
   function normalizeEquipmentRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((item, index) => normalizeEquipmentItem(item, index))
-      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId);
+      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId || item.condition || item.checkedAt || item.photoFileId || item.photoUrl);
   }
 
   function generateOrganizationId() {
@@ -4338,9 +4340,9 @@
       for (const row of rows) {
         const amountCents = Number(row.amount_cents || 0);
         let paidCents = Number(row.paid_cents || 0);
-        if (FEE_PAID_STATUSES.includes(normalizedStatus)) paidCents = amountCents;
+        if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
         else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
-        else paidCents = 0;
+        else if (FEE_ZERO_PAID_STATUSES.includes(normalizedStatus)) paidCents = 0;
 
         const update = await backendClient
           .from("membership_fees")
@@ -5235,12 +5237,12 @@
       .then(() => {
         hallOfFameStatus = hallOfFameStatus || "";
         mount();
-        switchView("hall-of-fame");
+        if (getRouteView() === "hall-of-fame") switchView("hall-of-fame");
       })
       .catch((error) => {
         hallOfFameStatus = hallOfFameErrorMessage(error);
         mount();
-        switchView("hall-of-fame");
+        if (getRouteView() === "hall-of-fame") switchView("hall-of-fame");
       })
       .finally(() => {
         hallOfFameLoadPromise = null;
@@ -7559,8 +7561,8 @@
         </div>
       </div>
       <article class="setup-card">
-        <div class="table-scroll">
-          <table class="data-table">
+        <div class="table-wrap">
+          <table>
             <thead>
               <tr><th>Sent</th><th>Channel</th><th>Recipients</th><th>Event</th></tr>
             </thead>
@@ -7864,7 +7866,7 @@
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
     if (normalizedRole === "admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "recovery"];
     if (normalizedRole === "coach") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
     if (normalizedRole === "tech_admin") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
     return ["dashboard", "roster", "tryout", "members", "user", "organization", "equipment", "events", "recovery"];
