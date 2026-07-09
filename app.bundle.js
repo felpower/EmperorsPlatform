@@ -5173,8 +5173,8 @@
         <div class="roster-page-head">
           <div>
             <p class="eyebrow">Team</p>
-            <h2>Roster</h2>
-            <p class="roster-page-copy">Active Emperors athletes, coaches and staff from the member database.</p>
+            <h2>Roster Season 2025/26</h2>
+            <p class="roster-page-copy">Active Emperors athletes, coaches and staff</p>
           </div>
           <div class="roster-count">
             <strong>${totalRosterMembers}</strong>
@@ -7698,6 +7698,17 @@
   }
 
   function renderOrganization() {
+    if (!(authState.user || isLocalPreviewMode())) {
+      return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Club Structure</p>
+          <h3>Organization</h3>
+          <p class="meta">Sign in to see the club structure.</p>
+        </div>
+      </div>
+      `;
+    }
     const rows = sortOrganizationRows(state.organization || []);
     const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
     const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
@@ -7713,7 +7724,7 @@
         <div>
           <p class="eyebrow">Club Structure</p>
           <h3>Organization</h3>
-          <p class="meta">Visible for everyone. Only admins can change responsibilities.</p>
+          <p class="meta">Visible for signed-in members. Only admins can change responsibilities.</p>
         </div>
         <div class="button-row">
           ${canEdit ? `<button type="button" class="primary-button" id="organization-add-entry">Add section</button>` : ""}
@@ -7874,12 +7885,13 @@
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events" || normalizedViewId === "organization";
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events";
   }
 
   function canAccessView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
     if (isPublicView(normalizedViewId)) return true;
+    if (normalizedViewId === "organization" && !(authState.user || isLocalPreviewMode())) return false;
     return viewsAllowedForRole(currentAccessRole).includes(normalizedViewId);
   }
 
