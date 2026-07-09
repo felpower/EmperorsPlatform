@@ -6146,6 +6146,11 @@
               <h3>We will follow up</h3>
               <p class="muted">Once the date, time and location are set, the team will send you the tryout details and what to bring.</p>
             </article>
+            <article class="setup-card">
+              <p class="eyebrow">No time?</p>
+              <h3>Can't make it?</h3>
+              <p class="muted">If you can't make it to the specified date, still sign up and we will contact you about alternative options.</p>
+            </article>
           </aside>
         </div>
         ${renderTryoutSubmissionsPanel()}
