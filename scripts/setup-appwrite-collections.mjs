@@ -136,6 +136,16 @@ const schema = {
       { type: "datetime", key: "submitted_at", required: true }
     ]
   },
+  tryout_settings: {
+    name: "tryout_settings",
+    permissions: publicReadCollectionPermissions,
+    attributes: [
+      { type: "string", key: "key", size: 64, required: true },
+      { type: "datetime", key: "tryout_date", required: false },
+      { type: "string", key: "tryout_note", size: 1024, required: false },
+      { type: "datetime", key: "updated_at", required: false }
+    ]
+  },
   hall_of_fame: {
     name: "hall_of_fame",
     permissions: publicReadCollectionPermissions,

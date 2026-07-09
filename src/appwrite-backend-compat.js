@@ -98,6 +98,7 @@
       event_recipients: String(config.eventRecipientsTableId || "event_recipients"),
       invites: String(config.invitesTableId || "invites"),
       tryout_registrations: String(config.tryoutRegistrationsTableId || "tryout_registrations"),
+      tryout_settings: String(config.tryoutSettingsTableId || "tryout_settings"),
       organization: String(config.organizationTableId || "organization"),
       equipment_inventory: String(config.equipmentTableId || "equipment_inventory"),
       diagnostics_logs: String(config.diagnosticsTableId || "diagnostics_logs"),

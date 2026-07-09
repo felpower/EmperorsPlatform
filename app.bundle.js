@@ -18,6 +18,10 @@
     fees: [],
     events: [],
     invites: [],
+    tryoutSettings: {
+      date: "2026-09-01",
+      note: "Location and check-in details will be sent to registered players closer to the date."
+    },
     organization: [
       {
         id: "org-emperors",
@@ -255,6 +259,10 @@
   //const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
   const INLINE_AVATAR_PLACEHOLDER = "assets/emperors_avatar.png";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
+  const DEFAULT_TRYOUT_SETTINGS = {
+    date: "2026-09-01",
+    note: "Location and check-in details will be sent to registered players closer to the date."
+  };
 
   const backendClient =
     window.ClubHubDataClient && typeof window.ClubHubDataClient.createClient === "function"
@@ -296,6 +304,11 @@
   let tryoutSubmissionsLoading = false;
   let tryoutSubmissionsLoadedAt = 0;
   let tryoutSubmissionFilters = loadTryoutSubmissionFilters();
+  let tryoutSettingsLoadPromise = null;
+  let tryoutSettingsLoadAttempted = false;
+  let tryoutSettingsStatus = "";
+  let tryoutSettingsEditing = false;
+  let tryoutSettingsSaving = false;
   let passFilters = loadPassFilters();
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
@@ -2383,6 +2396,15 @@
     };
   }
 
+  function normalizeTryoutSettings(value) {
+    const date = String(value?.date || "").trim();
+    const note = String(value?.note ?? "").trim();
+    return {
+      date: isIsoDateText(date) ? date : DEFAULT_TRYOUT_SETTINGS.date,
+      note: note || DEFAULT_TRYOUT_SETTINGS.note
+    };
+  }
+
   function sortHallOfFameRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((row, index) => normalizeHallOfFameEntry(row, index))
@@ -2498,7 +2520,8 @@
       invites: Array.isArray(value.invites) ? value.invites : [],
       organization: sortOrganizationRows(value.organization),
       equipment: sortEquipmentRows(value.equipment),
-      hallOfFame: sortHallOfFameRows(value.hallOfFame)
+      hallOfFame: sortHallOfFameRows(value.hallOfFame),
+      tryoutSettings: normalizeTryoutSettings(value.tryoutSettings)
     };
   }
 
@@ -3348,11 +3371,13 @@
     const previousOrganization = Array.isArray(state?.organization) ? state.organization : [];
     const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
     const previousHallOfFame = Array.isArray(state?.hallOfFame) ? state.hallOfFame : [];
+    const previousTryoutSettings = state?.tryoutSettings || null;
     state = normalizeState({
       ...bootstrap,
       organization: Array.isArray(bootstrap?.organization) ? bootstrap.organization : previousOrganization,
       equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment,
-      hallOfFame: Array.isArray(bootstrap?.hallOfFame) ? bootstrap.hallOfFame : previousHallOfFame
+      hallOfFame: Array.isArray(bootstrap?.hallOfFame) ? bootstrap.hallOfFame : previousHallOfFame,
+      tryoutSettings: bootstrap?.tryoutSettings || previousTryoutSettings
     });
     bootstrapMeta = {
       source: bootstrap.source || "local-sqlite",
@@ -3564,6 +3589,7 @@
     const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
     const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
     const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
+    const tryoutSettingsRows = await selectMaybe("tryout_settings", "key, tryout_date, tryout_note", true);
 
     const rolesByProfile = new Map();
     (memberRoleRows || []).forEach((row) => {
@@ -3733,6 +3759,10 @@
       saveStoredValue(ACCESS_KEY, currentAccessRole);
     }
 
+    const tryoutSettings = (tryoutSettingsRows || []).length
+      ? mapTryoutSettingsRow((tryoutSettingsRows || []).find((row) => String(row.key || "") === "tryout") || tryoutSettingsRows[0])
+      : state.tryoutSettings;
+
     applyBootstrap({
       source: "appwrite",
       permissionsModel: demoData.permissionsModel,
@@ -3741,6 +3771,7 @@
       organization: organization.length ? organization : state.organization,
       events: shouldUseCachedBootstrap && !events.length ? previousEvents : events,
       invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites,
+      tryoutSettings,
       hallOfFame: hallOfFame.length ? hallOfFame : state.hallOfFame
     });
     authState.status = shouldUseCachedBootstrap
@@ -5251,6 +5282,103 @@
     switchView("hall-of-fame");
   }
 
+  function mapTryoutSettingsRow(row) {
+    const rawDate = String(publicRosterField(row, "tryout_date", "tryoutDate") || "");
+    return normalizeTryoutSettings({
+      date: isIsoDateText(rawDate) ? rawDate : rawDate.slice(0, 10),
+      note: publicRosterField(row, "tryout_note", "tryoutNote")
+    });
+  }
+
+  async function loadPublicTryoutSettingsBootstrap() {
+    if (!backendClient) return;
+    const response = await backendClient.from("tryout_settings").select("key, tryout_date, tryout_note");
+    if (response.error) {
+      throw response.error;
+    }
+    const rows = response.data || [];
+    const row = rows.find((entry) => String(entry.key || "") === "tryout") || rows[0];
+    if (row) {
+      state = normalizeState({ ...state, tryoutSettings: mapTryoutSettingsRow(row) });
+      saveState();
+    }
+  }
+
+  function tryoutSettingsErrorMessage(error) {
+    const message = String(error?.message || error || "Could not load the tryout date.").trim();
+    if (/permission|unauthorized|missing scope|read/i.test(message)) {
+      return "Showing the default tryout date; Appwrite is not allowing guest reads for the tryout_settings collection yet.";
+    }
+    return message;
+  }
+
+  function ensureTryoutSettingsLoaded() {
+    if (!backendClient || authState.user || tryoutSettingsLoadPromise || tryoutSettingsLoadAttempted) return;
+    tryoutSettingsLoadAttempted = true;
+    tryoutSettingsLoadPromise = loadPublicTryoutSettingsBootstrap()
+      .then(() => {
+        mount();
+        if (getRouteView() === "tryout") switchView("tryout");
+      })
+      .catch((error) => {
+        tryoutSettingsStatus = tryoutSettingsErrorMessage(error);
+        mount();
+        if (getRouteView() === "tryout") switchView("tryout");
+      })
+      .finally(() => {
+        tryoutSettingsLoadPromise = null;
+      });
+    mount();
+  }
+
+  function canManageTryoutSettings() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    return String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
+  async function saveTryoutSettings({ date, note }) {
+    if (!canManageTryoutSettings()) {
+      throw new Error("Only admins can update the tryout date.");
+    }
+    const normalizedDate = String(date || "").trim();
+    if (!isIsoDateText(normalizedDate)) {
+      throw new Error("Please choose a valid tryout date.");
+    }
+    const normalizedNote = String(note || "").trim() || DEFAULT_TRYOUT_SETTINGS.note;
+    const remotePayload = {
+      key: "tryout",
+      tryout_date: `${normalizedDate}T12:00:00.000Z`,
+      tryout_note: normalizedNote,
+      updated_at: new Date().toISOString()
+    };
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("tryout_settings").upsert(remotePayload, { onConflict: "key" });
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the write. Please grant update permissions on the 'tryout_settings' table to authenticated users.");
+        }
+        throw response.error;
+      }
+    }
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: state.organization,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      hallOfFame: state.hallOfFame,
+      tryoutSettings: { date: normalizedDate, note: normalizedNote }
+    });
+    recordActivity("tryout", "Tryout date updated.", {
+      action: "tryout_settings_updated",
+      date: normalizedDate
+    });
+  }
+
   async function saveHallOfFameEntry(entry) {
     if (!canManageHallOfFame()) {
       throw new Error("Only admins can update the Hall of Fame.");
@@ -5869,18 +5997,38 @@
   }
 
   function renderTryout() {
+    const tryoutSettings = state.tryoutSettings || DEFAULT_TRYOUT_SETTINGS;
+    const canEditTryoutSettings = canManageTryoutSettings();
     return `
       <section class="tryout-page">
         <div class="tryout-hero">
           <div>
             <p class="eyebrow">Tryout</p>
             <h2>Join the Emperors</h2>
-            <p>We hold American Football tryouts twice per year. The next date is still to be announced, but you can already register and we will contact you when details are confirmed.</p>
+            <p>We hold American Football tryouts. Register below and we will contact you with the exact time, location and what to bring.</p>
           </div>
           <div class="tryout-date-panel" aria-label="Next tryout date">
-            <span>Next tryout</span>
-            <strong>Date TBA</strong>
-            <p>Spring or autumn window, depending on field and coaching availability.</p>
+            ${tryoutSettingsEditing && canEditTryoutSettings ? `
+              <span>Next tryout</span>
+              <form id="tryout-date-form" class="tryout-date-edit-form">
+                <label>Date
+                  <input type="date" name="tryoutDate" value="${escapeAttribute(tryoutSettings.date)}" required />
+                </label>
+                <label>Text below the date
+                  <textarea name="tryoutNote" rows="2">${escapeHtml(tryoutSettings.note)}</textarea>
+                </label>
+                <div class="button-row">
+                  <button type="submit" class="primary-button" id="tryout-date-save-button" ${tryoutSettingsSaving ? "disabled" : ""}>${tryoutSettingsSaving ? "Saving..." : "Save"}</button>
+                  <button type="button" class="ghost-button" id="tryout-date-cancel-button">Cancel</button>
+                </div>
+                <p id="tryout-date-status" class="tryout-form-status" aria-live="polite">${tryoutSettingsStatus ? escapeHtml(tryoutSettingsStatus) : ""}</p>
+              </form>
+            ` : `
+              <span>Next tryout</span>
+              <strong>${escapeHtml(formatDate(tryoutSettings.date))}</strong>
+              <p>${escapeHtml(tryoutSettings.note)}</p>
+              ${canEditTryoutSettings ? `<button type="button" class="ghost-button" id="tryout-date-edit-button">Edit date</button>` : ""}
+            `}
           </div>
         </div>
 
@@ -8052,6 +8200,9 @@
     }
     if (finalView === "hall-of-fame") {
       ensureHallOfFameLoaded();
+    }
+    if (finalView === "tryout") {
+      ensureTryoutSettingsLoaded();
     }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
@@ -10384,6 +10535,51 @@
   }
 
   function bindTryoutActions() {
+    const editButton = document.getElementById("tryout-date-edit-button");
+    if (editButton) {
+      editButton.onclick = function () {
+        tryoutSettingsStatus = "";
+        tryoutSettingsEditing = true;
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const cancelButton = document.getElementById("tryout-date-cancel-button");
+    if (cancelButton) {
+      cancelButton.onclick = function () {
+        tryoutSettingsStatus = "";
+        tryoutSettingsEditing = false;
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const dateForm = document.getElementById("tryout-date-form");
+    if (dateForm) {
+      dateForm.onsubmit = async function (event) {
+        event.preventDefault();
+        const nextDate = String(dateForm.elements.tryoutDate.value || "").trim();
+        const nextNote = String(dateForm.elements.tryoutNote.value || "").trim();
+        tryoutSettingsSaving = true;
+        tryoutSettingsStatus = "";
+        mount();
+        switchView("tryout");
+        try {
+          await saveTryoutSettings({ date: nextDate, note: nextNote });
+          tryoutSettingsEditing = false;
+          showToast("Tryout date updated.", "success");
+        } catch (error) {
+          tryoutSettingsStatus = error?.message || "Could not save the tryout date.";
+          showToast(tryoutSettingsStatus, "error");
+        } finally {
+          tryoutSettingsSaving = false;
+          mount();
+          switchView("tryout");
+        }
+      };
+    }
+
     const form = document.getElementById("tryout-form");
     const submitButton = document.getElementById("tryout-submit-button");
     if (form) {
