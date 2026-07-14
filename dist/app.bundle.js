@@ -18,6 +18,10 @@
     fees: [],
     events: [],
     invites: [],
+    tryoutSettings: {
+      date: "2026-09-01",
+      note: "Location and check-in details will be sent to registered players closer to the date."
+    },
     organization: [
       {
         id: "org-emperors",
@@ -76,7 +80,31 @@
         aufgaben: "Posts erstellen, Informationen nach außen transportieren, Insta-Anfragen beantworten, Media-Days planen"
       }
     ],
-    equipment: []
+    equipment: [],
+    hallOfFame: [
+      { id: "hof-seed-1", year: 2022, name: "Thaddeus \"Thunderfoot\" Kowalski", position: "Kicker/Punter" },
+      { id: "hof-seed-2", year: 2022, name: "Biggus Blockus Huber", position: "O-Line" },
+      { id: "hof-seed-3", year: 2022, name: "Werner \"The Vienna Wall\" Steinberger", position: "D-Line" },
+      { id: "hof-seed-4", year: 2022, name: "Scrambling Sam Novak", position: "Quarterback" },
+      { id: "hof-seed-5", year: 2022, name: "Gruber \"Hands of Glue\" Aigner", position: "Wide Receiver" },
+      { id: "hof-seed-6", year: 2023, name: "Bianca \"Blitzkrieg\" Steiner", position: "Linebacker" },
+      { id: "hof-seed-7", year: 2023, name: "Marco \"The Mongoose\" Falkner", position: "Defensive Back" },
+      { id: "hof-seed-8", year: 2023, name: "Sir Fumbles-a-Lot Fischer", position: "Running Back" },
+      { id: "hof-seed-9", year: 2023, name: "Gunnar \"Gronk of Grinzing\" Wagner", position: "Tight End" },
+      { id: "hof-seed-10", year: 2023, name: "Ilse \"Iron Lung\" Brandstätter", position: "Linebacker" },
+      { id: "hof-seed-11", year: 2023, name: "Dominik \"Touchdown Dance\" Divjak", position: "Wide Receiver" },
+      { id: "hof-seed-12", year: 2024, name: "Sepp \"The Sandwich\" Moser", position: "O-Line" },
+      { id: "hof-seed-13", year: 2024, name: "Nikolaus \"Ice Cold Niki\" Berger", position: "Kicker/Punter" },
+      { id: "hof-seed-14", year: 2024, name: "Franzi \"Freight Train\" Reisinger", position: "Running Back" },
+      { id: "hof-seed-15", year: 2024, name: "Alexander \"The Filing Cabinet\" Pichler", position: "O-Line" },
+      { id: "hof-seed-16", year: 2025, name: "Katharina \"Sackmaster\" Lechner", position: "D-Line" },
+      { id: "hof-seed-17", year: 2025, name: "Rudi \"Rocket\" Hofer", position: "Running Back" },
+      { id: "hof-seed-18", year: 2025, name: "Fabian \"The Professor\" Gruber", position: "Quarterback" },
+      { id: "hof-seed-19", year: 2025, name: "Lena \"Lockdown\" Winkler", position: "Defensive Back" },
+      { id: "hof-seed-20", year: 2025, name: "Tobias \"Big Toby\" Kranzl", position: "D-Line" },
+      { id: "hof-seed-21", year: 2025, name: "Manuel \"Mad Hands\" Ortner", position: "Wide Receiver" },
+      { id: "hof-seed-22", year: 2025, name: "Sophie \"The Wrecking Ball\" Zach", position: "Defensive Back" }
+    ]
   };
   const CLUBEE_GAMES_SOURCE_URL = "https://clubee.com/afbo/spiele-568998v4/leagues/16957/seasons/218";
   const EMPERORS_TEAM_NAME = "UNI-Wien Emperors";
@@ -170,8 +198,8 @@
     { id: "g-2026-05-23-wildcard-2", stage: "Playoffs", subtitle: "Wildcard ACSL 4. vs. 5.", startsAt: "2026-05-23T17:30:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=7VueONQao_U",  homeTeam: { name: "BOKU Beez" }, awayTeam: { name: "JKU Astros" }, homeScore: 13, awayScore: 28 },
     { id: "g-2026-06-06-semi-1", stage: "Semifinals", subtitle: "UNI-Wien Emperors vs. JKU Astros", startsAt: "2026-06-06T14:15:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=zMOdPBJRYgw",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "JKU Astros" }, homeScore: 14, awayScore: 24 },
     { id: "g-2026-06-06-semi-2", stage: "Semifinals", subtitle: "TU Robots vs. WU Tigers", startsAt: "2026-06-06T17:30:00+02:00", venueName: "Sportanlage Stadlau", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=JqxiXr1XeiM",  homeTeam: { name: "TU Robots" }, awayTeam: { name: "WU Tigers" }, homeScore: 6, awayScore: 9 },
-    { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: null, awayScore: null },
-    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: null, awayScore: null }
+    { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: 7, awayScore: 24 },
+    { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: 45, awayScore: 7 }
   ];
   const LEAGUE_STANDINGS_SNAPSHOT = {
     label: "RegularSeason 2025/26",
@@ -224,11 +252,17 @@
   const MAX_AVATAR_DIMENSION = 1280;
   const MAX_EQUIPMENT_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
   const MAX_EQUIPMENT_PHOTO_DIMENSION = 1600;
+  const MAX_HOF_PHOTO_UPLOAD_BYTES = 4 * 1024 * 1024;
+  const MAX_HOF_PHOTO_DIMENSION = 1600;
   const MAX_DIAGNOSTIC_LOG_ENTRIES = 200;
   const MAX_REMOTE_DIAGNOSTIC_ENTRIES = 150;
   //const INLINE_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%23f2f3f5'/%3E%3Ccircle cx='80' cy='62' r='28' fill='%23d0d5dd'/%3E%3Crect x='34' y='104' width='92' height='42' rx='21' fill='%23d0d5dd'/%3E%3C/svg%3E";
   const INLINE_AVATAR_PLACEHOLDER = "assets/emperors_avatar.png";
   const DEFAULT_PROFILE_AVATAR_URL = String(APPWRITE_CONFIG?.fallbackProfileImageUrl || "").trim();
+  const DEFAULT_TRYOUT_SETTINGS = {
+    date: "2026-09-01",
+    note: "Location and check-in details will be sent to registered players closer to the date."
+  };
 
   const backendClient =
     window.ClubHubDataClient && typeof window.ClubHubDataClient.createClient === "function"
@@ -270,6 +304,11 @@
   let tryoutSubmissionsLoading = false;
   let tryoutSubmissionsLoadedAt = 0;
   let tryoutSubmissionFilters = loadTryoutSubmissionFilters();
+  let tryoutSettingsLoadPromise = null;
+  let tryoutSettingsLoadAttempted = false;
+  let tryoutSettingsStatus = "";
+  let tryoutSettingsEditing = false;
+  let tryoutSettingsSaving = false;
   let passFilters = loadPassFilters();
   let equipmentSheets = loadEquipmentSheets();
   let selectedEquipmentSheet = loadStoredValue(EQUIPMENT_SHEET_KEY, "all");
@@ -437,6 +476,16 @@
     } catch {
       return String(error);
     }
+  }
+
+  function isPermissionDeniedError(error) {
+    if (!error) return false;
+    const code = Number(error.code ?? error.status ?? error.statusCode);
+    if (code === 401 || code === 403) return true;
+    const type = String(error.type || "").toLowerCase();
+    if (type.includes("unauthorized") || type.includes("forbidden") || type.includes("missing_scope")) return true;
+    const message = String(error.message || error).toLowerCase();
+    return message.includes("not authorized") || message.includes("unauthorized") || message.includes("missing scope") || message.includes("permission");
   }
 
   function diagnosticsFunctionId() {
@@ -631,6 +680,7 @@
         : "No remote diagnostics recorded yet.";
     } catch (error) {
       remoteDiagnosticsStatus = `Could not load remote diagnostics: ${summarizeDiagnosticError(error)}`;
+      remoteDiagnosticsLoadedAt = Date.now();
     } finally {
       remoteDiagnosticsLoading = false;
       if (getRouteView() === "settings") {
@@ -1032,6 +1082,108 @@
       // Ignore missing file errors so photo removal stays idempotent.
     }
     bumpEquipmentPhotoVersion(normalizedEquipmentId);
+  }
+
+  function hallOfFamePhotoVersionKey(hofId) {
+    return `clubhub-hof-photo-version-${String(hofId || "").trim()}`;
+  }
+
+  function hallOfFamePhotoVersion(hofId) {
+    const key = hallOfFamePhotoVersionKey(hofId);
+    return key ? String(localStorage.getItem(key) || "").trim() : "";
+  }
+
+  function bumpHallOfFamePhotoVersion(hofId) {
+    const key = hallOfFamePhotoVersionKey(hofId);
+    if (!key) return;
+    localStorage.setItem(key, String(Date.now()));
+  }
+
+  function hallOfFamePhotoFileId(hofId) {
+    const normalized = String(hofId || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const safe = normalized || "unknown";
+    return `hof-${safe}`.slice(0, 36);
+  }
+
+  function storageHallOfFamePhotoUrl(fileId, hofId = "") {
+    const bucketId = String(APPWRITE_CONFIG?.hallOfFamePicturesBucketId || "").trim();
+    const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
+    const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
+    const normalizedFileId = String(fileId || "").trim();
+    if (!bucketId || !endpoint || !projectId || !normalizedFileId) return "";
+    const base = endpoint.replace(/\/$/, "");
+    const version = hallOfFamePhotoVersion(hofId || normalizedFileId);
+    const query = new URLSearchParams({ project: projectId });
+    if (version) query.set("v", version);
+    return `${base}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(normalizedFileId)}/view?${query.toString()}`;
+  }
+
+  async function uploadHallOfFamePhotoToStorage(file, hofId) {
+    const bucketId = String(APPWRITE_CONFIG?.hallOfFamePicturesBucketId || "").trim();
+    if (!bucketId) {
+      throw new Error("Missing hallOfFamePicturesBucketId in Appwrite config.");
+    }
+    const normalizedHofId = String(hofId || "").trim();
+    if (!normalizedHofId) {
+      throw new Error("Hall of Fame entry id is missing.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      throw new Error("Appwrite Storage API is unavailable in this browser runtime.");
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    const fileId = hallOfFamePhotoFileId(normalizedHofId);
+
+    try {
+      if (typeof storage.deleteFile === "function") {
+        await storage.deleteFile(bucketId, fileId);
+      }
+    } catch {
+      // Ignore missing file errors; create below will handle fresh uploads.
+    }
+
+    await storage.createFile(bucketId, fileId, file);
+    bumpHallOfFamePhotoVersion(normalizedHofId);
+    return {
+      photoFileId: fileId,
+      photoUrl: storageHallOfFamePhotoUrl(fileId, normalizedHofId)
+    };
+  }
+
+  async function deleteHallOfFamePhotoFromStorage(hofId, photoFileId) {
+    const bucketId = String(APPWRITE_CONFIG?.hallOfFamePicturesBucketId || "").trim();
+    if (!bucketId) return;
+    const normalizedHofId = String(hofId || "").trim();
+    const normalizedFileId = String(photoFileId || hallOfFamePhotoFileId(normalizedHofId)).trim();
+    if (!normalizedFileId) return;
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Storage !== "function") {
+      return;
+    }
+
+    const client = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+
+    const storage = new appwriteSdk.Storage(client);
+    try {
+      await storage.deleteFile(bucketId, normalizedFileId);
+    } catch {
+      // Ignore missing file errors so photo removal stays idempotent.
+    }
+    bumpHallOfFamePhotoVersion(normalizedHofId);
   }
 
   function resolveEquipmentPhotoSrc(item) {
@@ -1577,6 +1729,8 @@
     if (response.error) {
       throw response.error;
     }
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
+    invalidateCache(EQUIPMENT_CACHE_KEY);
     syncAuthSession(null);
   }
 
@@ -1660,7 +1814,7 @@
           <p class="muted">${isFirstTime ? "You were invited to join Uni Wien Emperors. Set a password to activate your account." : "Create a new password for your account."}</p>
         </div>
         <div>
-          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Email:</strong> ${escapeHtml(email)}</p>
         </div>
         <div class="form-grid">
           <label>New Password<input id="recovery-password" type="password" autocomplete="new-password" placeholder="••••••••" minlength="8" /></label>
@@ -2184,7 +2338,7 @@
   function normalizeEquipmentRows(rows) {
     return (Array.isArray(rows) ? rows : [])
       .map((item, index) => normalizeEquipmentItem(item, index))
-      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId);
+      .filter((item) => item.article || item.category || item.quantity || item.location || item.notes || item.parentItemId || item.condition || item.checkedAt || item.photoFileId || item.photoUrl);
   }
 
   function generateOrganizationId() {
@@ -2222,6 +2376,60 @@
       .map((row, index) => normalizeOrganizationEntry(row, index))
       .filter((row) => row.headOf || row.verantwortung || row.coVerantwortung || row.aufgaben)
       .sort((left, right) => String(left.headOf || "").localeCompare(String(right.headOf || ""), undefined, { sensitivity: "base" }));
+  }
+
+  function generateHallOfFameId() {
+    const randomPart = Math.random().toString(36).slice(2, 8);
+    return `hof-${Date.now()}-${randomPart}`;
+  }
+
+  function normalizeHallOfFameEntry(row, index) {
+    const yearRaw = organizationRowValue(row, ["year"]);
+    const year = Number(yearRaw);
+    return {
+      id: String(organizationRowValue(row, ["id", "$id"]) || `hof-${index + 1}`).trim(),
+      year: Number.isFinite(year) && year > 0 ? year : new Date().getFullYear(),
+      name: String(organizationRowValue(row, ["name"]) || "").trim(),
+      position: String(organizationRowValue(row, ["position"]) || "").trim(),
+      photoFileId: String(organizationRowValue(row, ["photoFileId", "photo_file_id"]) || "").trim(),
+      photoUrl: String(organizationRowValue(row, ["photoUrl", "photo_url"]) || "").trim()
+    };
+  }
+
+  function normalizeTryoutSettings(value) {
+    const date = String(value?.date || "").trim();
+    const note = String(value?.note ?? "").trim();
+    return {
+      date: isIsoDateText(date) ? date : DEFAULT_TRYOUT_SETTINGS.date,
+      note: note || DEFAULT_TRYOUT_SETTINGS.note
+    };
+  }
+
+  function sortHallOfFameRows(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => normalizeHallOfFameEntry(row, index))
+      .filter((row) => row.name)
+      .sort((left, right) => {
+        if (right.year !== left.year) return right.year - left.year;
+        return String(left.name || "").localeCompare(String(right.name || ""), undefined, { sensitivity: "base" });
+      });
+  }
+
+  function canManageHallOfFame() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    return String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
+  function groupHallOfFameByYear(rows) {
+    const byYear = new Map();
+    rows.forEach((row) => {
+      const list = byYear.get(row.year) || [];
+      list.push(row);
+      byYear.set(row.year, list);
+    });
+    return Array.from(byYear.entries())
+      .map(([year, members]) => ({ year, members }))
+      .sort((left, right) => right.year - left.year);
   }
 
   function sortEquipmentRows(rows) {
@@ -2311,7 +2519,9 @@
       events: Array.isArray(value.events) ? value.events : [],
       invites: Array.isArray(value.invites) ? value.invites : [],
       organization: sortOrganizationRows(value.organization),
-      equipment: sortEquipmentRows(value.equipment)
+      equipment: sortEquipmentRows(value.equipment),
+      hallOfFame: sortHallOfFameRows(value.hallOfFame),
+      tryoutSettings: normalizeTryoutSettings(value.tryoutSettings)
     };
   }
 
@@ -2503,9 +2713,13 @@
     }
     const memberLevelIban = String(member?.iban || "").trim();
     if (memberLevelIban) return memberLevelIban;
+    const feePeriodValue = (feePeriod) => {
+      const match = /^Q([1-4])_(\d{4})$/.exec(String(feePeriod || "").trim());
+      return match ? Number(match[2]) * 10 + Number(match[1]) : 0;
+    };
     const fees = state.fees
       .filter((fee) => String(fee.memberId) === String(memberId) && String(fee.iban || "").trim())
-      .sort((left, right) => String(right.feePeriod || "").localeCompare(String(left.feePeriod || "")));
+      .sort((left, right) => feePeriodValue(right.feePeriod) - feePeriodValue(left.feePeriod));
     return fees[0]?.iban || "";
   }
 
@@ -2810,23 +3024,191 @@
     downloadBlobFile(csv, "text/csv;charset=utf-8", fileName);
   }
 
+  function createCrc32Table() {
+    return Array.from({ length: 256 }, (_, index) => {
+      let value = index;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+      }
+      return value >>> 0;
+    });
+  }
+
+  const crc32Table = createCrc32Table();
+
+  function crc32(bytes) {
+    let value = 0xffffffff;
+    bytes.forEach((byte) => {
+      value = crc32Table[(value ^ byte) & 0xff] ^ (value >>> 8);
+    });
+    return (value ^ 0xffffffff) >>> 0;
+  }
+
+  function uint16(value) {
+    return [value & 0xff, (value >>> 8) & 0xff];
+  }
+
+  function uint32(value) {
+    return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+  }
+
+  function encodeUtf8(value) {
+    return new TextEncoder().encode(String(value || ""));
+  }
+
+  function concatBytes(parts) {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    parts.forEach((part) => {
+      output.set(part, offset);
+      offset += part.length;
+    });
+    return output;
+  }
+
+  function createZip(files) {
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    files.forEach((file) => {
+      const nameBytes = encodeUtf8(file.name);
+      const contentBytes = file.content instanceof Uint8Array ? file.content : encodeUtf8(file.content);
+      const checksum = crc32(contentBytes);
+      const localHeader = new Uint8Array([
+        ...uint32(0x04034b50),
+        ...uint16(20),
+        ...uint16(0x0800),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(checksum),
+        ...uint32(contentBytes.length),
+        ...uint32(contentBytes.length),
+        ...uint16(nameBytes.length),
+        ...uint16(0)
+      ]);
+      localParts.push(localHeader, nameBytes, contentBytes);
+      const centralHeader = new Uint8Array([
+        ...uint32(0x02014b50),
+        ...uint16(20),
+        ...uint16(20),
+        ...uint16(0x0800),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(checksum),
+        ...uint32(contentBytes.length),
+        ...uint32(contentBytes.length),
+        ...uint16(nameBytes.length),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(0),
+        ...uint32(offset)
+      ]);
+      centralParts.push(centralHeader, nameBytes);
+      offset += localHeader.length + nameBytes.length + contentBytes.length;
+    });
+    const centralDirectory = concatBytes(centralParts);
+    const localFiles = concatBytes(localParts);
+    const endRecord = new Uint8Array([
+      ...uint32(0x06054b50),
+      ...uint16(0),
+      ...uint16(0),
+      ...uint16(files.length),
+      ...uint16(files.length),
+      ...uint32(centralDirectory.length),
+      ...uint32(localFiles.length),
+      ...uint16(0)
+    ]);
+    return concatBytes([localFiles, centralDirectory, endRecord]);
+  }
+
+  function excelColumnName(index) {
+    let name = "";
+    let value = index + 1;
+    while (value > 0) {
+      const remainder = (value - 1) % 26;
+      name = String.fromCharCode(65 + remainder) + name;
+      value = Math.floor((value - 1) / 26);
+    }
+    return name;
+  }
+
+  function escapeXml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+  }
+
+  function createXlsxBlob(columns, rows) {
+    const allRows = [
+      columns.map((column) => column.label || ""),
+      ...rows.map((row) => columns.map((column) => row[column.key] ?? ""))
+    ];
+    const sheetRows = allRows.map((values, rowIndex) => {
+      const cells = values.map((value, columnIndex) => {
+        const reference = `${excelColumnName(columnIndex)}${rowIndex + 1}`;
+        return `<c r="${reference}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+      }).join("");
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    }).join("");
+    const maxColumn = excelColumnName(Math.max(columns.length - 1, 0));
+    const dimension = columns.length ? `A1:${maxColumn}${Math.max(allRows.length, 1)}` : "A1";
+    const now = new Date().toISOString();
+    const files = [
+      {
+        name: "[Content_Types].xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`
+      },
+      {
+        name: "_rels/.rels",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`
+      },
+      {
+        name: "docProps/app.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Emperors App</Application></Properties>`
+      },
+      {
+        name: "docProps/core.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>Emperors App</dc:creator><cp:lastModifiedBy>Emperors App</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`
+      },
+      {
+        name: "xl/workbook.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Submissions" sheetId="1" r:id="rId1"/></sheets></workbook>`
+      },
+      {
+        name: "xl/_rels/workbook.xml.rels",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`
+      },
+      {
+        name: "xl/styles.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`
+      },
+      {
+        name: "xl/worksheets/sheet1.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="${dimension}"/><sheetData>${sheetRows}</sheetData></worksheet>`
+      }
+    ];
+    return new Blob([createZip(files)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
   function downloadExcel(columns, rows, fileName) {
-    const headerHtml = columns.map((column) => `<th>${String(column.label || "")}</th>`).join("");
-    const bodyHtml = rows
-      .map((row) => `<tr>${columns.map((column) => `<td>${String(row[column.key] ?? "")}</td>`).join("")}</tr>`)
-      .join("");
-    const html = `
-      <html>
-      <head><meta charset="utf-8" /></head>
-      <body>
-        <table>
-          <thead><tr>${headerHtml}</tr></thead>
-          <tbody>${bodyHtml}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-    downloadBlobFile(html, "application/vnd.ms-excel;charset=utf-8", fileName);
+    const safeFileName = String(fileName || "export.xlsx").replace(/\.xls$/i, ".xlsx");
+    const blob = createXlsxBlob(columns, rows);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = /\.xlsx$/i.test(safeFileName) ? safeFileName : `${safeFileName}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function downloadFromApi(url, fallbackFileName) {
@@ -3156,10 +3538,14 @@
   function applyBootstrap(bootstrap) {
     const previousOrganization = Array.isArray(state?.organization) ? state.organization : [];
     const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
+    const previousHallOfFame = Array.isArray(state?.hallOfFame) ? state.hallOfFame : [];
+    const previousTryoutSettings = state?.tryoutSettings || null;
     state = normalizeState({
       ...bootstrap,
       organization: Array.isArray(bootstrap?.organization) ? bootstrap.organization : previousOrganization,
-      equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment
+      equipment: Array.isArray(bootstrap?.equipment) ? bootstrap.equipment : previousEquipment,
+      hallOfFame: Array.isArray(bootstrap?.hallOfFame) ? bootstrap.hallOfFame : previousHallOfFame,
+      tryoutSettings: bootstrap?.tryoutSettings || previousTryoutSettings
     });
     bootstrapMeta = {
       source: bootstrap.source || "local-sqlite",
@@ -3367,9 +3753,11 @@
       ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
       : [];
     const organizationRows = await selectMaybe("organization", "*", true);
+    const hallOfFameRows = await selectMaybe("hall_of_fame", "id, year, name, position, photo_file_id, photo_url", true);
     const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
     const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
     const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
+    const tryoutSettingsRows = await selectMaybe("tryout_settings", "key, tryout_date, tryout_note", true);
 
     const rolesByProfile = new Map();
     (memberRoleRows || []).forEach((row) => {
@@ -3517,6 +3905,7 @@
       confirmations: 0
     }));
     const organization = sortOrganizationRows(organizationRows || []);
+    const hallOfFame = sortHallOfFameRows(hallOfFameRows || []);
     const previousMembers = Array.isArray(state?.members) ? state.members : [];
     const previousFees = Array.isArray(state?.fees) ? state.fees : [];
     const previousEvents = Array.isArray(state?.events) ? state.events : [];
@@ -3538,6 +3927,10 @@
       saveStoredValue(ACCESS_KEY, currentAccessRole);
     }
 
+    const tryoutSettings = (tryoutSettingsRows || []).length
+      ? mapTryoutSettingsRow((tryoutSettingsRows || []).find((row) => String(row.key || "") === "tryout") || tryoutSettingsRows[0])
+      : state.tryoutSettings;
+
     applyBootstrap({
       source: "appwrite",
       permissionsModel: demoData.permissionsModel,
@@ -3545,7 +3938,9 @@
       fees: shouldUseCachedBootstrap && !fees.length ? previousFees : fees,
       organization: organization.length ? organization : state.organization,
       events: shouldUseCachedBootstrap && !events.length ? previousEvents : events,
-      invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites
+      invites: shouldUseCachedBootstrap && !invites.length ? previousInvites : invites,
+      tryoutSettings,
+      hallOfFame: hallOfFame.length ? hallOfFame : state.hallOfFame
     });
     authState.status = shouldUseCachedBootstrap
       ? `Appwrite session restored for ${authDisplayName() || authState.user.email}. Showing cached data while remote records refresh.`
@@ -4144,9 +4539,9 @@
       for (const row of rows) {
         const amountCents = Number(row.amount_cents || 0);
         let paidCents = Number(row.paid_cents || 0);
-        if (FEE_PAID_STATUSES.includes(normalizedStatus)) paidCents = amountCents;
+        if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
         else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
-        else paidCents = 0;
+        else if (FEE_ZERO_PAID_STATUSES.includes(normalizedStatus)) paidCents = 0;
 
         const update = await backendClient
           .from("membership_fees")
@@ -4615,7 +5010,7 @@
         status: statusByFeeId[String(fee.id)] || fee.status,
         amount: Number(fee.amount || 0),
         paidAmount: Number(fee.paidAmount || 0),
-        note: "",
+        note: String(fee.note || ""),
         iban: ibanValue
       });
     }
@@ -4698,7 +5093,7 @@
             wrapperClass: "avatar-lazy-media",
             eager: true
           })}
-          <h3 style="margin:0;">${userMember.name}</h3>
+          <h3 style="margin:0;">${escapeHtml(userMember.name || "")}</h3>
         </div>
         <div style="display: grid; gap: 12px;">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
@@ -4977,8 +5372,8 @@
         <div class="roster-page-head">
           <div>
             <p class="eyebrow">Team</p>
-            <h2>Roster</h2>
-            <p class="roster-page-copy">Active Emperors athletes, coaches and staff from the member database.</p>
+            <h2>Roster Season 2025/26</h2>
+            <p class="roster-page-copy">Active Emperors athletes, coaches and staff</p>
           </div>
           <div class="roster-count">
             <strong>${totalRosterMembers}</strong>
@@ -4997,104 +5392,370 @@
     `;
   }
 
-  const HALL_OF_FAME_CLASSES = [
-    {
-      year: 2022,
-      members: [
-        { name: "Thaddeus \"Thunderfoot\" Kowalski", position: "Kicker" },
-        { name: "Biggus Blockus Huber", position: "Offensive Tackle" },
-        { name: "Werner \"The Vienna Wall\" Steinberger", position: "Defensive Tackle" },
-        { name: "Scrambling Sam Novak", position: "Quarterback" },
-        { name: "Gruber \"Hands of Glue\" Aigner", position: "Wide Receiver" }
-      ]
-    },
-    {
-      year: 2023,
-      members: [
-        { name: "Bianca \"Blitzkrieg\" Steiner", position: "Linebacker" },
-        { name: "Marco \"The Mongoose\" Falkner", position: "Cornerback" },
-        { name: "Sir Fumbles-a-Lot Fischer", position: "Running Back" },
-        { name: "Gunnar \"Gronk of Grinzing\" Wagner", position: "Tight End" },
-        { name: "Ilse \"Iron Lung\" Brandstätter", position: "Middle Linebacker" },
-        { name: "Dominik \"Touchdown Dance\" Divjak", position: "Wide Receiver" }
-      ]
-    },
-    {
-      year: 2024,
-      members: [
-        { name: "Sepp \"The Sandwich\" Moser", position: "Center" },
-        { name: "Nikolaus \"Ice Cold Niki\" Berger", position: "Kicker" },
-        { name: "Franzi \"Freight Train\" Reisinger", position: "Fullback" },
-        { name: "Alexander \"The Filing Cabinet\" Pichler", position: "Offensive Guard" }
-      ]
-    },
-    {
-      year: 2025,
-      members: [
-        { name: "Katharina \"Sackmaster\" Lechner", position: "Defensive End" },
-        { name: "Rudi \"Rocket\" Hofer", position: "Running Back" },
-        { name: "Fabian \"The Professor\" Gruber", position: "Quarterback" },
-        { name: "Lena \"Lockdown\" Winkler", position: "Cornerback" },
-        { name: "Tobias \"Big Toby\" Kranzl", position: "Nose Tackle" },
-        { name: "Manuel \"Mad Hands\" Ortner", position: "Wide Receiver" },
-        { name: "Sophie \"The Wrecking Ball\" Zach", position: "Strong Safety" }
-      ]
-    }
-  ];
+  let hallOfFameLoadPromise = null;
+  let hallOfFameLoadAttempted = false;
+  let hallOfFameStatus = "";
+  let hallOfFameDialogEditingId = "";
 
-  function renderHallOfFameCard(member, index) {
+  function mapPublicHallOfFameRow(row, index) {
+    return normalizeHallOfFameEntry({
+      id: publicRosterField(row, "id", "$id"),
+      year: publicRosterField(row, "year"),
+      name: publicRosterField(row, "name"),
+      position: publicRosterField(row, "position"),
+      photoFileId: publicRosterField(row, "photo_file_id", "photoFileId"),
+      photoUrl: publicRosterField(row, "photo_url", "photoUrl")
+    }, index);
+  }
+
+  async function loadPublicHallOfFameBootstrap() {
+    if (!backendClient) return;
+    const response = await backendClient.from("hall_of_fame").select("id, year, name, position, photo_file_id, photo_url");
+    if (response.error) {
+      throw response.error;
+    }
+    const rows = (response.data || []).map(mapPublicHallOfFameRow);
+    state = normalizeState({ ...state, hallOfFame: rows });
+    hallOfFameStatus = rows.length ? "" : "No Hall of Fame entries yet.";
+    saveState();
+  }
+
+  function hallOfFameErrorMessage(error) {
+    const message = String(error?.message || error || "Could not load the Hall of Fame.").trim();
+    if (/permission|unauthorized|missing scope|read/i.test(message)) {
+      return "The Hall of Fame page is public, but Appwrite is not allowing guest reads for the hall_of_fame collection yet.";
+    }
+    return message;
+  }
+
+  function ensureHallOfFameLoaded() {
+    if (!backendClient || authState.user || hallOfFameLoadPromise || hallOfFameLoadAttempted) return;
+    hallOfFameLoadAttempted = true;
+    hallOfFameStatus = hallOfFameStatus || "Loading Hall of Fame...";
+    hallOfFameLoadPromise = loadPublicHallOfFameBootstrap()
+      .then(() => {
+        hallOfFameStatus = hallOfFameStatus || "";
+        mount();
+        if (getRouteView() === "hall-of-fame") switchView("hall-of-fame");
+      })
+      .catch((error) => {
+        hallOfFameStatus = hallOfFameErrorMessage(error);
+        mount();
+        if (getRouteView() === "hall-of-fame") switchView("hall-of-fame");
+      })
+      .finally(() => {
+        hallOfFameLoadPromise = null;
+      });
+    mount();
+    switchView("hall-of-fame");
+  }
+
+  function mapTryoutSettingsRow(row) {
+    const rawDate = String(publicRosterField(row, "tryout_date", "tryoutDate") || "");
+    return normalizeTryoutSettings({
+      date: isIsoDateText(rawDate) ? rawDate : rawDate.slice(0, 10),
+      note: publicRosterField(row, "tryout_note", "tryoutNote")
+    });
+  }
+
+  async function loadPublicTryoutSettingsBootstrap() {
+    if (!backendClient) return;
+    const response = await backendClient.from("tryout_settings").select("key, tryout_date, tryout_note");
+    if (response.error) {
+      throw response.error;
+    }
+    const rows = response.data || [];
+    const row = rows.find((entry) => String(entry.key || "") === "tryout") || rows[0];
+    if (row) {
+      state = normalizeState({ ...state, tryoutSettings: mapTryoutSettingsRow(row) });
+      saveState();
+    }
+  }
+
+  function tryoutSettingsErrorMessage(error) {
+    const message = String(error?.message || error || "Could not load the tryout date.").trim();
+    if (/permission|unauthorized|missing scope|read/i.test(message)) {
+      return "Showing the default tryout date; Appwrite is not allowing guest reads for the tryout_settings collection yet.";
+    }
+    return message;
+  }
+
+  function ensureTryoutSettingsLoaded() {
+    if (!backendClient || authState.user || tryoutSettingsLoadPromise || tryoutSettingsLoadAttempted) return;
+    tryoutSettingsLoadAttempted = true;
+    tryoutSettingsLoadPromise = loadPublicTryoutSettingsBootstrap()
+      .then(() => {
+        mount();
+        if (getRouteView() === "tryout") switchView("tryout");
+      })
+      .catch((error) => {
+        tryoutSettingsStatus = tryoutSettingsErrorMessage(error);
+        mount();
+        if (getRouteView() === "tryout") switchView("tryout");
+      })
+      .finally(() => {
+        tryoutSettingsLoadPromise = null;
+      });
+    mount();
+  }
+
+  function canManageTryoutSettings() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    return String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
+  async function saveTryoutSettings({ date, note }) {
+    if (!canManageTryoutSettings()) {
+      throw new Error("Only admins can update the tryout date.");
+    }
+    const normalizedDate = String(date || "").trim();
+    if (!isIsoDateText(normalizedDate)) {
+      throw new Error("Please choose a valid tryout date.");
+    }
+    const normalizedNote = String(note || "").trim() || DEFAULT_TRYOUT_SETTINGS.note;
+    const remotePayload = {
+      key: "tryout",
+      tryout_date: `${normalizedDate}T12:00:00.000Z`,
+      tryout_note: normalizedNote,
+      updated_at: new Date().toISOString()
+    };
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("tryout_settings").upsert(remotePayload, { onConflict: "key" });
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the write. Please grant update permissions on the 'tryout_settings' table to authenticated users.");
+        }
+        throw response.error;
+      }
+    }
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: state.organization,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      hallOfFame: state.hallOfFame,
+      tryoutSettings: { date: normalizedDate, note: normalizedNote }
+    });
+    recordActivity("tryout", "Tryout date updated.", {
+      action: "tryout_settings_updated",
+      date: normalizedDate
+    });
+  }
+
+  async function saveHallOfFameEntry(entry) {
+    if (!canManageHallOfFame()) {
+      throw new Error("Only admins can update the Hall of Fame.");
+    }
+    const normalized = normalizeHallOfFameEntry({
+      id: entry?.id || generateHallOfFameId(),
+      year: entry?.year,
+      name: entry?.name,
+      position: entry?.position,
+      photoFileId: entry?.photoFileId,
+      photoUrl: entry?.photoUrl
+    }, 0);
+    if (!normalized.name) {
+      throw new Error("Name is required.");
+    }
+    const remotePayload = {
+      id: normalized.id,
+      year: normalized.year,
+      name: normalized.name,
+      position: normalized.position || null,
+      photo_file_id: normalized.photoFileId || null,
+      photo_url: normalized.photoUrl || null
+    };
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("hall_of_fame").upsert(remotePayload, { onConflict: "id" });
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the write. Please grant create/update permissions on the 'hall_of_fame' collection to admins.");
+        }
+        throw response.error;
+      }
+    }
+    const existingIndex = (state.hallOfFame || []).findIndex((row) => String(row.id) === String(normalized.id));
+    const nextRows = existingIndex >= 0
+      ? state.hallOfFame.map((row, index) => (index === existingIndex ? normalized : row))
+      : [...(state.hallOfFame || []), normalized];
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: state.organization,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      hallOfFame: nextRows
+    });
+    recordActivity("hallOfFame", existingIndex >= 0 ? "Hall of Fame entry updated." : "Hall of Fame entry added.", {
+      action: existingIndex >= 0 ? "hall_of_fame_updated" : "hall_of_fame_created",
+      hallOfFameId: normalized.id,
+      year: normalized.year,
+      name: normalized.name,
+      position: normalized.position
+    });
+  }
+
+  async function deleteHallOfFameEntry(hallOfFameId) {
+    if (!canManageHallOfFame()) {
+      throw new Error("Only admins can update the Hall of Fame.");
+    }
+    const normalizedId = String(hallOfFameId || "").trim();
+    if (!normalizedId) return;
+    const currentRow = (state.hallOfFame || []).find((row) => String(row.id) === normalizedId);
+    if (backendClient && authState.user) {
+      const response = await backendClient.from("hall_of_fame").delete().eq("id", normalizedId);
+      if (response.error) {
+        const message = String(response.error?.message || "");
+        if (/authoriz|permission|not authorized|role missing/i.test(message)) {
+          throw new Error("Appwrite denied the delete. Please grant delete permissions on the 'hall_of_fame' collection to admins.");
+        }
+        throw response.error;
+      }
+    }
+    if (currentRow?.photoFileId || currentRow?.photoUrl) {
+      await deleteHallOfFamePhotoFromStorage(normalizedId, currentRow.photoFileId);
+    }
+    const nextRows = (state.hallOfFame || []).filter((row) => String(row.id) !== normalizedId);
+    applyBootstrap({
+      source: bootstrapMeta.source,
+      permissionsModel: bootstrapMeta.permissionsModel,
+      members: state.members,
+      fees: state.fees,
+      organization: state.organization,
+      events: state.events,
+      invites: state.invites,
+      equipment: state.equipment,
+      hallOfFame: nextRows
+    });
+    recordActivity("hallOfFame", "Hall of Fame entry deleted.", {
+      action: "hall_of_fame_deleted",
+      hallOfFameId: normalizedId,
+      name: currentRow?.name || "",
+      year: currentRow?.year || ""
+    });
+  }
+
+  function updateHallOfFamePhotoPreview(url) {
+    const image = document.getElementById("hof-photo-preview-image");
+    const placeholder = document.getElementById("hof-photo-preview-placeholder");
+    const removeButton = document.getElementById("hof-photo-remove");
+    const normalizedUrl = String(url || "").trim();
+    if (image) {
+      image.src = normalizedUrl;
+      image.style.display = normalizedUrl ? "block" : "none";
+    }
+    if (placeholder) {
+      placeholder.style.display = normalizedUrl ? "none" : "flex";
+    }
+    if (removeButton) {
+      removeButton.style.display = normalizedUrl ? "" : "none";
+    }
+  }
+
+  function openHallOfFameDialog(entry) {
+    const dialog = document.getElementById("hof-dialog");
+    const form = document.getElementById("hof-form");
+    const title = document.getElementById("hof-dialog-title");
+    const submit = document.getElementById("hof-submit-button");
+    if (!dialog || !form) return;
+    hallOfFameDialogEditingId = String(entry?.id || generateHallOfFameId()).trim();
+    form.reset();
+    form.elements.hofId.value = hallOfFameDialogEditingId;
+    form.elements.name.value = entry?.name || "";
+    form.elements.year.value = entry?.year || new Date().getFullYear();
+    form.elements.position.value = entry?.position || "";
+    form.elements.photoFileId.value = entry?.photoFileId || "";
+    form.elements.photoUrl.value = entry?.photoUrl || "";
+    updateHallOfFamePhotoPreview(entry?.photoUrl || "");
+    title.textContent = entry ? `Edit ${entry.name}` : "Add Hall of Famer";
+    submit.textContent = entry ? "Save changes" : "Add to Hall of Fame";
+    dialog.showModal();
+  }
+
+  function renderHallOfFameCard(member, canManage, index) {
+    const photoAttr = member.photoUrl
+      ? ` data-hof-photo-src="${escapeAttribute(member.photoUrl)}" data-hof-photo-name="${escapeAttribute(member.name)}"`
+      : "";
     return `
       <article class="hof-card">
-        <div class="hof-card-media-shell">
+        <div class="hof-card-media-shell"${photoAttr}>
           ${renderLazyImage({
-            src: INLINE_AVATAR_PLACEHOLDER,
+            src: member.photoUrl || INLINE_AVATAR_PLACEHOLDER,
             fallbackSrc: INLINE_AVATAR_PLACEHOLDER,
             alt: `${member.name} portrait`,
             className: "hof-player-image",
             wrapperClass: "hof-player-media",
             eager: index < 8
           })}
-          <div class="hof-position-badge">${escapeHtml(member.position)}</div>
+          ${member.position ? `<div class="hof-position-badge">${escapeHtml(member.position)}</div>` : ""}
         </div>
         <div class="hof-card-body">
           <h3>${escapeHtml(member.name)}</h3>
-          <p>${escapeHtml(member.position)}</p>
+          <p>${escapeHtml(member.position || "Hall of Famer")}</p>
+          ${canManage ? `
+            <div class="action-row">
+              <button type="button" class="ghost-button small-button hof-edit-button" data-hof-id="${escapeAttribute(member.id)}" data-no-toast="true">Edit</button>
+              <button type="button" class="ghost-button small-button danger-button hof-delete-button" data-hof-id="${escapeAttribute(member.id)}" data-no-toast="true">Delete</button>
+            </div>
+          ` : ""}
         </div>
       </article>
     `;
   }
 
-  function renderHallOfFameYearSection(yearClass) {
+  function renderHallOfFameYearSection(yearGroup, canManage) {
     return `
       <section class="hof-year-section">
         <div class="hof-year-head">
           <p class="eyebrow">Class of</p>
-          <h3>${escapeHtml(String(yearClass.year))}</h3>
+          <h3>${escapeHtml(String(yearGroup.year))}</h3>
         </div>
         <div class="hof-grid">
-          ${yearClass.members.map((member, index) => renderHallOfFameCard(member, index)).join("")}
+          ${yearGroup.members.map((member, index) => renderHallOfFameCard(member, canManage, index)).join("")}
         </div>
       </section>
     `;
   }
 
   function renderHallOfFame() {
-    const classes = HALL_OF_FAME_CLASSES.slice().sort((left, right) => right.year - left.year);
-    const totalInductees = classes.reduce((sum, yearClass) => sum + yearClass.members.length, 0);
+    const canManage = canManageHallOfFame();
+    const rows = sortHallOfFameRows(state.hallOfFame || []);
+    const groups = groupHallOfFameByYear(rows);
+    const loadingMessage = hallOfFameLoadPromise ? "Loading Hall of Fame..." : hallOfFameStatus;
+    const groupsHtml = groups.map((group) => renderHallOfFameYearSection(group, canManage)).join("") || `
+      <div class="hof-grid">
+        <article class="setup-card roster-empty-card">
+          <p class="eyebrow">Hall of Fame</p>
+          <h3>No inductees yet</h3>
+          <p class="muted">Check back soon — new Hall of Famers are added after each induction event.</p>
+        </article>
+      </div>
+    `;
     return `
       <section class="hof-page">
         <div class="hof-page-head roster-page-head">
           <div>
             <p class="eyebrow">Legacy</p>
             <h2>Hall of Fame</h2>
-            <p class="roster-page-copy">Honoring the Emperors who left it all on the field since 2022.</p>
+            <p class="roster-page-copy">Honoring the Emperors who left it all on the field since 2017.</p>
           </div>
           <div class="roster-count">
-            <strong>${totalInductees}</strong>
+            <strong>${rows.length}</strong>
             <span>Inductees</span>
           </div>
         </div>
-        <div class="hof-years">${classes.map(renderHallOfFameYearSection).join("")}</div>
+        ${canManage ? `<div class="button-row"><button type="button" class="primary-button" id="hof-add-entry">Add Hall of Famer</button></div>` : ""}
+        ${loadingMessage ? `<p class="meta roster-status-message">${escapeHtml(loadingMessage)}</p>` : ""}
+        <div class="hof-years">${groupsHtml}</div>
       </section>
     `;
   }
@@ -5193,6 +5854,10 @@
       }
     };
     return labels[kind]?.[normalized] || normalized || "-";
+  }
+
+  function tryoutSubmissionStatusOptions() {
+    return ["new", "contacted", "invited", "archived"];
   }
 
   function localTryoutSubmissionRows() {
@@ -5373,6 +6038,43 @@
     return { localOnly: false, data: Array.isArray(response.data) ? response.data[0] : response.data };
   }
 
+  async function updateTryoutSubmissionStatus(submissionId, status) {
+    const normalizedId = String(submissionId || "").trim();
+    const normalizedStatus = String(status || "").trim();
+    if (!normalizedId) throw new Error("Missing tryout submission id.");
+    if (!tryoutSubmissionStatusOptions().includes(normalizedStatus)) {
+      throw new Error("Unsupported tryout submission status.");
+    }
+
+    if (!backendClient || !authState.user) {
+      const current = (() => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })();
+      const next = current.map((row) => {
+        const rowId = String(tryoutValue(row, "id", "$id") || "").trim();
+        return rowId === normalizedId ? { ...row, status: normalizedStatus } : row;
+      });
+      const updatedRow = next.find((row) => String(tryoutValue(row, "id", "$id") || "").trim() === normalizedId);
+      if (!updatedRow) throw new Error("Tryout submission was not found.");
+      localStorage.setItem(TRYOUT_REGISTRATIONS_STORAGE_KEY, JSON.stringify(next));
+      return normalizeTryoutSubmissionRow(updatedRow);
+    }
+
+    const response = await backendClient
+      .from("tryout_registrations")
+      .update({ status: normalizedStatus })
+      .eq("id", normalizedId)
+      .select("*")
+      .single();
+    if (response.error) throw response.error;
+    return normalizeTryoutSubmissionRow(response.data || { id: normalizedId, status: normalizedStatus });
+  }
+
   function renderTryoutFilterSelect({ id, label, value, options, kind }) {
     return `
       <label>${escapeHtml(label)}
@@ -5396,7 +6098,7 @@
       : "Not loaded yet";
     const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
     const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
-    const statusOptions = Array.from(new Set(["new", "contacted", "invited", "archived", ...tryoutSubmissionFilterOptions("status")]));
+    const statusOptions = Array.from(new Set([...tryoutSubmissionStatusOptions(), ...tryoutSubmissionFilterOptions("status")]));
 
     return `
       <section class="tryout-admin-panel setup-card">
@@ -5408,7 +6110,6 @@
           </div>
           <div class="tryout-admin-actions">
             <button type="button" class="ghost-button" id="tryout-load-submissions" data-no-toast="true" ${tryoutSubmissionsLoading ? "disabled" : ""}>${loaded ? "Refresh submissions" : "Load submissions"}</button>
-            <button type="button" class="ghost-button" id="tryout-export-csv" data-no-toast="true" ${exportDisabled}>CSV for Sheets</button>
             <button type="button" class="ghost-button" id="tryout-export-excel" data-no-toast="true" ${exportDisabled}>Excel</button>
           </div>
         </div>
@@ -5489,7 +6190,11 @@
                       ${!row.footballExperienceDetails && !row.otherSports && !row.availabilityNotes ? `<p class="meta">No notes</p>` : ""}
                     </details>
                   </td>
-                  <td>${statusPill(row.status || "new", tryoutLabel("status", row.status || "new"))}</td>
+                  <td>
+                    <select class="tryout-status-select" data-tryout-submission-id="${escapeAttribute(row.id)}" aria-label="Tryout status for ${escapeAttribute(`${row.firstName} ${row.lastName}`.trim() || "submission")}">
+                      ${statusOptions.map((status) => `<option value="${escapeAttribute(status)}" ${String(row.status || "new") === status ? "selected" : ""}>${escapeHtml(tryoutLabel("status", status))}</option>`).join("")}
+                    </select>
+                  </td>
                 </tr>
               `).join("") || `
                 <tr><td colspan="7" class="meta">No submissions match the current filters.</td></tr>
@@ -5504,18 +6209,38 @@
   }
 
   function renderTryout() {
+    const tryoutSettings = state.tryoutSettings || DEFAULT_TRYOUT_SETTINGS;
+    const canEditTryoutSettings = canManageTryoutSettings();
     return `
       <section class="tryout-page">
         <div class="tryout-hero">
           <div>
             <p class="eyebrow">Tryout</p>
             <h2>Join the Emperors</h2>
-            <p>We hold American Football tryouts twice per year. The next date is still to be announced, but you can already register and we will contact you when details are confirmed.</p>
+            <p>We hold American Football tryouts. Register below and we will contact you with the exact time, location and what to bring.</p>
           </div>
           <div class="tryout-date-panel" aria-label="Next tryout date">
-            <span>Next tryout</span>
-            <strong>Date TBA</strong>
-            <p>Spring or autumn window, depending on field and coaching availability.</p>
+            ${tryoutSettingsEditing && canEditTryoutSettings ? `
+              <span>Next tryout</span>
+              <form id="tryout-date-form" class="tryout-date-edit-form">
+                <label>Date
+                  <input type="date" name="tryoutDate" value="${escapeAttribute(tryoutSettings.date)}" required />
+                </label>
+                <label>Text below the date
+                  <textarea name="tryoutNote" rows="2">${escapeHtml(tryoutSettings.note)}</textarea>
+                </label>
+                <div class="button-row">
+                  <button type="submit" class="primary-button" id="tryout-date-save-button" ${tryoutSettingsSaving ? "disabled" : ""}>${tryoutSettingsSaving ? "Saving..." : "Save"}</button>
+                  <button type="button" class="ghost-button" id="tryout-date-cancel-button">Cancel</button>
+                </div>
+                <p id="tryout-date-status" class="tryout-form-status" aria-live="polite">${tryoutSettingsStatus ? escapeHtml(tryoutSettingsStatus) : ""}</p>
+              </form>
+            ` : `
+              <span>Next tryout</span>
+              <strong>${escapeHtml(formatDate(tryoutSettings.date))}</strong>
+              <p>${escapeHtml(tryoutSettings.note)}</p>
+              ${canEditTryoutSettings ? `<button type="button" class="ghost-button" id="tryout-date-edit-button">Edit date</button>` : ""}
+            `}
           </div>
         </div>
 
@@ -5632,6 +6357,11 @@
               <p class="eyebrow">After signup</p>
               <h3>We will follow up</h3>
               <p class="muted">Once the date, time and location are set, the team will send you the tryout details and what to bring.</p>
+            </article>
+            <article class="setup-card">
+              <p class="eyebrow">No time?</p>
+              <h3>Can't make it?</h3>
+              <p class="muted">If you can't make it to the specified date, still sign up and we will contact you about alternative options.</p>
             </article>
           </aside>
         </div>
@@ -5764,13 +6494,13 @@
                 ${showMemberIdColumn ? `<td><span class="meta">${member.id}</span></td>` : ""}
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${member.firstName || ""}" />`
-                    : `<strong>${member.firstName || "-"}</strong>`}
+                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${escapeAttribute(member.firstName || "")}" />`
+                    : `<strong>${escapeHtml(member.firstName || "-")}</strong>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${member.lastName || ""}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${member.email || ""}" placeholder="email" /></div>`
-                    : `<strong>${member.lastName || "-"}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? (member.email || "") : ""}</div>`}
+                    ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${escapeAttribute(member.lastName || "")}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${escapeAttribute(member.email || "")}" placeholder="email" /></div>`
+                    : `<strong>${escapeHtml(member.lastName || "-")}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? escapeHtml(member.email || "") : ""}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
@@ -5796,7 +6526,7 @@
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
                       ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${normalizeToIsoDate(member.passExpiry) || ""}" /></div>`
-                      : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : member.licenseName || "No pass data"}</div></div>`}
+                      : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : escapeHtml(member.licenseName || "No pass data")}</div></div>`}
                   </td>
                 ` : ""}
                 ${showActionColumn ? `
@@ -5926,7 +6656,7 @@
           <p class="eyebrow">Notes</p>
           <h3 style="margin-top: 4px;">Member notes</h3>
         </div>
-        <label>Notes<textarea id="user-notes" rows="3" placeholder="No notes yet" ${notesDisabled}>${member.notes || ""}</textarea></label>
+        <label>Notes<textarea id="user-notes" rows="3" placeholder="No notes yet" ${notesDisabled}>${escapeHtml(member.notes || "")}</textarea></label>
         ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
       </article>
     `;
@@ -5940,7 +6670,7 @@
         <div class="pill-row dense-row">
           ${statusPill(displayPassStatus(member.passStatus))}
         </div>
-        <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Valid till ${formatDate(member.passExpiry)}` : (member.licenseName || "No expiry date")}</p>
+        <p class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Valid till ${formatDate(member.passExpiry)}` : escapeHtml(member.licenseName || "No expiry date")}</p>
       </article>
     ` : "";
     const securitySection = authState.user && isOwnProfile(member) ? `
@@ -5974,17 +6704,17 @@
           </button>
           ${isOwnProfile(member) ? `<input id="user-upload-profile-image-input" type="file" accept="image/*" hidden />` : ""}
           <div>
-            <h3 style="margin:0;">${member.name}</h3>
-            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? (member.email || "") : ""}</p>
+            <h3 style="margin:0;">${escapeHtml(member.name || "")}</h3>
+            <p class="meta" style="margin:4px 0 0;">${canViewProfileEmail ? escapeHtml(member.email || "") : ""}</p>
             ${isOwnProfile(member) ? `<p class="meta" style="margin:6px 0 0;">Click image to change profile picture</p>` : ""}
           </div>
         </div>
         <div class="form-grid">
-          <label>First name<input id="user-first-name" value="${member.firstName || ""}" ${editDisabled} /></label>
-          <label>Last name<input id="user-last-name" value="${member.lastName || ""}" ${editDisabled} /></label>
+          <label>First name<input id="user-first-name" value="${escapeAttribute(member.firstName || "")}" ${editDisabled} /></label>
+          <label>Last name<input id="user-last-name" value="${escapeAttribute(member.lastName || "")}" ${editDisabled} /></label>
         </div>
         <div class="form-grid">
-          <label>Email<input id="user-email" type="email" value="${canViewProfileEmail ? (member.email || "") : ""}" ${editDisabled} /></label>
+          <label>Email<input id="user-email" type="email" value="${canViewProfileEmail ? escapeAttribute(member.email || "") : ""}" ${editDisabled} /></label>
           <label>Jersey number<input id="user-jersey" type="number" min="0" value="${member.jerseyNumber ?? ""}" ${editDisabled} /></label>
         </div>
         ${canEditProfile ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-profile" data-member-id="${member.id}">Save profile</button></div>` : ""}
@@ -6032,8 +6762,8 @@
           <p class="eyebrow">SEPA Preview</p>
           <h3>Last export summary</h3>
           <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
-          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${item.name} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
-          ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${item.name || "Unknown"}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
+          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${escapeHtml(item.name || "")} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
+          ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${escapeHtml(item.name || "Unknown")}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
         </article>
       `
       : "";
@@ -6109,8 +6839,8 @@
               <tr>
                 <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${fee.memberId}" aria-label="Open profile"></button></td>
                 ${feeEditMode ? `<td><input type="checkbox" class="fee-member-select" data-member-id="${fee.memberId}" ${selectedSet.has(String(fee.memberId)) ? "checked" : ""} /></td>` : ""}
-                <td>${memberFirstName(fee.memberId) || "-"}</td>
-                <td>${memberLastName(fee.memberId) || "-"}</td>
+                <td>${escapeHtml(memberFirstName(fee.memberId) || "-")}</td>
+                <td>${escapeHtml(memberLastName(fee.memberId) || "-")}</td>
                 <td>
                   ${String(feeInlineEditId) === String(fee.id)
                     ? `<input type="number" class="fee-row-input fee-row-amount" data-fee-id="${fee.id}" min="0" step="0.01" value="${Number(fee.amount || 0).toFixed(2)}" />`
@@ -6232,9 +6962,9 @@
             ${rows.map((member) => `
               <tr>
                 <td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${member.id}" aria-label="Open profile"></button></td>
-                <td><strong>${member.firstName || "-"}</strong>${member.deletedAt ? ` ${statusPill("deleted", "deleted")}` : ""}</td>
-                <td><strong>${member.lastName || "-"}</strong></td>
-                <td>${formatList(member.positions, "-")}</td>
+                <td><strong>${escapeHtml(member.firstName || "-")}</strong>${member.deletedAt ? ` ${statusPill("deleted", "deleted")}` : ""}</td>
+                <td><strong>${escapeHtml(member.lastName || "-")}</strong></td>
+                <td>${escapeHtml(formatList(member.positions, "-"))}</td>
                 <td class="${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? formatDate(member.passExpiry) : "No expiry date"}</td>
                 <td>${statusPill(displayPassStatus(member.passStatus))}</td>
               </tr>
@@ -6287,7 +7017,7 @@
     const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
     const visibleColumnCount = canEdit ? (showGroupColumn ? 8 : 7) : (showGroupColumn ? 7 : 6);
     const sheetTabs = equipmentSheetCounts(rows)
-      .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${sheet.key}">${sheet.label} (${sheet.count})</button>`)
+      .map((sheet) => `<button type="button" class="sort-button equipment-sheet-tab ${sheet.key === activeSheet ? "is-active" : ""}" data-no-toast="true" data-equipment-sheet="${escapeAttribute(sheet.key)}">${escapeHtml(sheet.label)} (${escapeHtml(String(sheet.count))})</button>`)
       .join("");
     const kindFilterButtons = [
       { key: "all", label: "All" },
@@ -6352,7 +7082,7 @@
       const articlePrefix = item.parentItemId ? `<span class="meta" style="margin-right:6px;">↳</span>` : "";
       const typeMeta = item.itemKind === "container"
         ? `<span class="meta">Container${childCount ? ` · ${childCount} item${childCount === 1 ? "" : "s"}` : ""}</span>`
-        : (parent ? `<span class="meta">In ${parent.article || "container"}</span>` : `<span class="meta">Item</span>`);
+        : (parent ? `<span class="meta">In ${escapeHtml(parent.article || "container")}</span>` : `<span class="meta">Item</span>`);
       const photoSrc = resolveEquipmentPhotoSrc(item);
       const toggleContentsButton = item.itemKind === "container"
         ? `<button type="button" class="ghost-button small-button equipment-toggle-contents-button" data-container-id="${item.id}" data-no-toast="true">${isExpanded ? "Hide contents" : "Show contents"}</button>`
@@ -6363,17 +7093,17 @@
             <td colspan="${visibleColumnCount}">
               <div class="card" style="margin: 6px 0 0; padding: 14px 16px;">
                 <div class="button-row" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                  <strong>Contents of ${item.article || "container"}</strong>
+                  <strong>Contents of ${escapeHtml(item.article || "container")}</strong>
                   <span class="meta">${childCount} item${childCount === 1 ? "" : "s"}</span>
                 </div>
                 ${children.length
                   ? `<div style="display:grid; gap:8px;">${children.map((child) => `
                       <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:8px 0; border-top:1px solid rgba(15,23,42,0.08);">
                         <div>
-                          <strong>${child.article || "Unnamed item"}</strong>
-                          <div class="meta">${child.category || "No category"}${child.quantity ? ` · Qty ${child.quantity}` : ""}${child.location ? ` · ${child.location}` : ""}</div>
+                          <strong>${escapeHtml(child.article || "Unnamed item")}</strong>
+                          <div class="meta">${escapeHtml(child.category || "No category")}${child.quantity ? ` · Qty ${escapeHtml(String(child.quantity))}` : ""}${child.location ? ` · ${escapeHtml(child.location)}` : ""}</div>
                         </div>
-                        <div class="meta">${child.condition || "No condition"}</div>
+                        <div class="meta">${escapeHtml(child.condition || "No condition")}</div>
                       </div>
                     `).join("")}</div>`
                   : `<p class="meta" style="margin:0;">This container does not contain any items yet.</p>`}
@@ -6385,13 +7115,13 @@
       if (!isEditing) {
         return `
           <tr>
-            ${showGroupColumn ? `<td>${item.group || "-"}</td>` : ""}
-            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${photoSrc.replaceAll('"', "&quot;")}" data-equipment-photo-title="${String(item.article || "Equipment photo").replaceAll('"', "&quot;")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;", wrapperClass: "equipment-photo-lazy-media" })}</button>` : ""}<div><strong>${articlePrefix}${item.article || "-"}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
-            <td>${item.quantity || "-"}</td>
-            <td>${item.condition || "-"}</td>
-            <td>${item.location || "-"}</td>
+            ${showGroupColumn ? `<td>${escapeHtml(item.group || "-")}</td>` : ""}
+            <td><div style="display:flex; gap:12px; align-items:flex-start;">${photoSrc ? `<button type="button" class="equipment-photo-thumb-button" data-equipment-photo-src="${escapeAttribute(photoSrc)}" data-equipment-photo-title="${escapeAttribute(item.article || "Equipment photo")}" data-no-toast="true">${renderLazyImage({ src: photoSrc, alt: "Equipment photo", style: "width:64px; height:64px; object-fit:cover; border-radius:12px; border:1px solid var(--line); flex:0 0 auto;", wrapperClass: "equipment-photo-lazy-media" })}</button>` : ""}<div><strong>${articlePrefix}${escapeHtml(item.article || "-")}</strong><div>${typeMeta}</div>${toggleContentsButton ? `<div style="margin-top:6px;">${toggleContentsButton}</div>` : ""}</div></div></div></td>
+            <td>${escapeHtml(String(item.quantity || "-"))}</td>
+            <td>${escapeHtml(item.condition || "-")}</td>
+            <td>${escapeHtml(item.location || "-")}</td>
             <td>${formatDate(item.checkedAt)}</td>
-            <td>${item.notes || "-"}</td>
+            <td>${escapeHtml(item.notes || "-")}</td>
             ${canEdit
               ? `<td><div class="action-row"><button type="button" class="ghost-button small-button equipment-edit-button" data-equipment-id="${item.id}" data-no-toast="true">Edit</button>${item.itemKind === "container" ? `<button type="button" class="ghost-button small-button equipment-add-child-button" data-parent-id="${item.id}" data-no-toast="true">Add content</button>` : ""}<button type="button" class="ghost-button small-button danger-button equipment-delete-button" data-equipment-id="${item.id}" data-no-toast="true">Delete</button></div></td>`
               : ""}
@@ -6429,7 +7159,7 @@
         <div class="button-row">
           ${canEdit ? `<button id="equipment-add-sheet" type="button" class="ghost-button" data-no-toast="true">Add sheet</button>` : ""}
           ${canRemoveActiveSheet ? `<button id="equipment-remove-sheet" type="button" class="ghost-button danger-button" data-no-toast="true" data-sheet-key="${activeSheet}">Remove current sheet</button>` : ""}
-          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${equipmentSheetLabel(activeSheet)}`}</button>` : ""}
+          ${canEdit ? `<button id="equipment-add-item" type="button" class="primary-button" data-no-toast="true">${activeSheet === "all" ? "Add item" : `Add item to ${escapeHtml(equipmentSheetLabel(activeSheet))}`}</button>` : ""}
         </div>
       </div>
       ${equipmentStatus ? `<article class="card" style="margin-bottom: 12px;"><p class="meta">${equipmentStatus}</p></article>` : ""}
@@ -6477,7 +7207,7 @@
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No ${activeKindFilter === "containers" ? "containers" : activeKindFilter === "items" ? "items" : "equipment rows"} found for ${equipmentSheetLabel(activeSheet).toLowerCase()}.</td></tr>`}
+            ${rowsHtml || `<tr><td colspan="${visibleColumnCount}" class="meta">No ${activeKindFilter === "containers" ? "containers" : activeKindFilter === "items" ? "items" : "equipment rows"} found for ${escapeHtml(equipmentSheetLabel(activeSheet).toLowerCase())}.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -6529,7 +7259,7 @@
           </div>
         ` : `<p class="meta">Click <strong>Preview changes</strong> to see exactly what would be updated.</p>`}
       </article>
-      ${preview && preview.unmatchedNames?.length ? `<article class="card" style="margin-bottom: 14px;"><h3>Unmatched names</h3><p class="meta">${preview.unmatchedNames.join(", ")}</p></article>` : ""}
+      ${preview && preview.unmatchedNames?.length ? `<article class="card" style="margin-bottom: 14px;"><h3>Unmatched names</h3><p class="meta">${escapeHtml(preview.unmatchedNames.join(", "))}</p></article>` : ""}
       <div class="table-wrap">
         <table>
           <thead>
@@ -6544,9 +7274,9 @@
             ${changes.map((change) => `
               <tr>
                 <td><input type="checkbox" class="pass-sync-select" data-member-id="${change.memberId}" ${selectedSet.has(String(change.memberId)) ? "checked" : ""} /></td>
-                <td><strong>${change.memberName || "Unknown"}</strong><div class="meta">${change.memberEmail || "No email"}</div></td>
+                <td><strong>${escapeHtml(change.memberName || "Unknown")}</strong><div class="meta">${escapeHtml(change.memberEmail || "No email")}</div></td>
                 <td>${statusPill(change.existingPass ? "pending" : "exempt", change.existingPass ? "update" : "create")}</td>
-                <td>${(change.fieldChanges || []).map((fieldChange) => `<div class="meta">${passSyncFieldLabel(fieldChange.field)}: ${fieldChange.current || "-"} -> ${fieldChange.next || "-"}</div>`).join("")}</td>
+                <td>${(change.fieldChanges || []).map((fieldChange) => `<div class="meta">${escapeHtml(passSyncFieldLabel(fieldChange.field))}: ${escapeHtml(String(fieldChange.current || "-"))} -> ${escapeHtml(String(fieldChange.next || "-"))}</div>`).join("")}</td>
               </tr>
             `).join("") || `<tr><td colspan="4" class="meta">No updates needed based on current Clubee export.</td></tr>`}
           </tbody>
@@ -6660,7 +7390,7 @@
               </div>
               <div class="game-score">
                 ${game.hasScore
-                  ? `<span>${game.emperorsHome ? game.homeScore : game.opponentScore}</span><span class="meta">:</span><span>${game.emperorsHome ? game.awayScore : game.emperorsScore}</span>`
+                  ? `<span>${game.emperorsHome ? game.emperorsScore : game.opponentScore}</span><span class="meta">:</span><span>${game.emperorsHome ? game.opponentScore : game.emperorsScore}</span>`
                   : `<span class="meta">Kickoff</span>`}
               </div>
               <div class="game-team ${!game.emperorsHome ? "is-emperors" : ""}">
@@ -7175,7 +7905,37 @@
       return renderAuthGate();
     }
     if (!state.invites.length) return emptyState("No invite history yet", "Once events are editable, we can add attendance invitation tracking here.");
-    return `...`;
+    const inviteRowsHtml = state.invites
+      .slice()
+      .sort((left, right) => String(right.sentAt || "").localeCompare(String(left.sentAt || "")))
+      .map((invite) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(invite.sentAt) || "-")}</td>
+          <td>${escapeHtml(invite.channel || "email")}</td>
+          <td>${escapeHtml(String(invite.recipients ?? 0))}</td>
+          <td>${escapeHtml(invite.eventId || "-")}</td>
+        </tr>
+      `)
+      .join("");
+    return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Invites</p>
+          <h3>Invite history</h3>
+          <p class="meta">Attendance and account invitations sent from the platform.</p>
+        </div>
+      </div>
+      <article class="setup-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Sent</th><th>Channel</th><th>Recipients</th><th>Event</th></tr>
+            </thead>
+            <tbody>${inviteRowsHtml}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
   }
 
   function renderSettings() {
@@ -7292,23 +8052,34 @@
     if (!normalizedName) return "";
     const matchedMember = organizationMemberMatch(normalizedName);
     const personMarkup = matchedMember
-      ? `<button type="button" class="organization-person-link open-user-page-button" data-member-id="${matchedMember.id}">${normalizedName}</button>`
-      : `<strong>${normalizedName}</strong>`;
+      ? `<button type="button" class="organization-person-link open-user-page-button" data-member-id="${escapeAttribute(matchedMember.id)}">${escapeHtml(normalizedName)}</button>`
+      : `<strong>${escapeHtml(normalizedName)}</strong>`;
     return `
       <div class="organization-person-block">
-        <p class="muted" style="margin:0 0 4px;">${label}</p>
+        <p class="muted" style="margin:0 0 4px;">${escapeHtml(label)}</p>
         ${personMarkup}
       </div>
     `;
   }
 
   function renderOrganization() {
+    if (!(authState.user || isLocalPreviewMode())) {
+      return `
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Club Structure</p>
+          <h3>Organization</h3>
+          <p class="meta">Sign in to see the club structure.</p>
+        </div>
+      </div>
+      `;
+    }
     const rows = sortOrganizationRows(state.organization || []);
     const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
     const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
     const branchRows = rootEntry ? rows.filter((entry) => String(entry.id) !== String(rootEntry.id)) : rows;
     const renderTaskItems = (tasks) => tasks.length
-      ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${task}</div>`).join("")}</div>`
+      ? `<div class="organization-task-list">${tasks.map((task) => `<div class="organization-task-item">${escapeHtml(task)}</div>`).join("")}</div>`
       : `<p class="meta" style="margin:0;">No tasks listed yet.</p>`;
     const renderTaskDetails = (tasks) => tasks.length
       ? `<details class="organization-task-details"><summary class="organization-task-summary">Aufgaben (${tasks.length})</summary>${renderTaskItems(tasks)}</details>`
@@ -7318,7 +8089,7 @@
         <div>
           <p class="eyebrow">Club Structure</p>
           <h3>Organization</h3>
-          <p class="meta">Visible for everyone. Only admins can change responsibilities.</p>
+          <p class="meta">Visible for signed-in members. Only admins can change responsibilities.</p>
         </div>
         <div class="button-row">
           ${canEdit ? `<button type="button" class="primary-button" id="organization-add-entry">Add section</button>` : ""}
@@ -7345,7 +8116,7 @@
               const tasks = organizationTaskList(entry.aufgaben);
               return `
                 <article class="organization-branch">
-                  <div class="organization-branch-header">${entry.headOf || "Section"}</div>
+                  <div class="organization-branch-header">${escapeHtml(entry.headOf || "Section")}</div>
                   <div class="organization-branch-body">
                     <div class="organization-people">
                       ${renderOrganizationPerson("Verantwortlicher", entry.verantwortung)}
@@ -7471,7 +8242,7 @@
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
     if (normalizedRole === "admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
-    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "recovery"];
     if (normalizedRole === "coach") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
     if (normalizedRole === "tech_admin") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
     return ["dashboard", "roster", "tryout", "members", "user", "organization", "equipment", "events", "recovery"];
@@ -7479,12 +8250,13 @@
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events" || normalizedViewId === "organization";
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events";
   }
 
   function canAccessView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
     if (isPublicView(normalizedViewId)) return true;
+    if (normalizedViewId === "organization" && !(authState.user || isLocalPreviewMode())) return false;
     return viewsAllowedForRole(currentAccessRole).includes(normalizedViewId);
   }
 
@@ -7642,6 +8414,12 @@
     const finalView = resolveAllowedView(nextViewId);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
+    }
+    if (finalView === "hall-of-fame") {
+      ensureHallOfFameLoaded();
+    }
+    if (finalView === "tryout") {
+      ensureTryoutSettingsLoaded();
     }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
@@ -7869,6 +8647,7 @@
       };
     });
     document.querySelectorAll(".member-inline-pass-status").forEach((select) => {
+      if (!String(select.dataset.memberId || "").trim()) return;
       select.onchange = function () {
         const memberId = String(select.dataset.memberId || "").trim();
         if (!memberId) return;
@@ -9022,14 +9801,14 @@
     const cancelButton = document.getElementById("recovery-cancel");
     if (cancelButton) {
       cancelButton.onclick = function () {
-        window.location.hash = "#dashboard";
+        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
       };
     }
 
     const backToSignInButton = document.getElementById("recovery-back-to-sign-in");
     if (backToSignInButton) {
       backToSignInButton.onclick = function () {
-        window.location.hash = "#dashboard";
+        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
       };
     }
   }
@@ -9234,6 +10013,177 @@
         switchView("roster");
       };
     });
+  }
+
+  function bindHallOfFameLightbox() {
+    const dialog = document.getElementById("hof-lightbox");
+    const img = document.getElementById("hof-lightbox-img");
+    const caption = document.getElementById("hof-lightbox-caption");
+    if (!dialog || !img || !caption) return;
+
+    document.querySelectorAll(".hof-card-media-shell[data-hof-photo-src]").forEach((shell) => {
+      shell.onclick = function () {
+        img.src = String(shell.dataset.hofPhotoSrc || "");
+        img.alt = String(shell.dataset.hofPhotoName || "");
+        caption.textContent = String(shell.dataset.hofPhotoName || "");
+        dialog.showModal();
+      };
+    });
+
+    dialog.onclick = function (event) {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    };
+  }
+
+  function bindHallOfFameActions() {
+    const addButton = document.getElementById("hof-add-entry");
+    const dialog = document.getElementById("hof-dialog");
+    const form = document.getElementById("hof-form");
+    const submitButton = document.getElementById("hof-submit-button");
+    const closeButton = document.getElementById("hof-dialog-close");
+    const cancelButton = document.getElementById("hof-dialog-cancel");
+    const photoTrigger = document.getElementById("hof-photo-trigger");
+    const photoInput = document.getElementById("hof-photo-input");
+    const photoRemove = document.getElementById("hof-photo-remove");
+
+    if (photoTrigger && photoInput) {
+      photoTrigger.onclick = function () {
+        photoInput.click();
+      };
+    }
+
+    if (photoInput && form) {
+      photoInput.onchange = async function () {
+        const originalFile = photoInput.files && photoInput.files[0];
+        if (!originalFile) return;
+        const hofId = String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim();
+        if (!hofId) return;
+        try {
+          let uploadFile = originalFile;
+          if (Number(uploadFile.size || 0) > MAX_HOF_PHOTO_UPLOAD_BYTES) {
+            uploadFile = await compressImageForAvatar(uploadFile, {
+              maxBytes: MAX_HOF_PHOTO_UPLOAD_BYTES,
+              maxDimension: MAX_HOF_PHOTO_DIMENSION
+            });
+          }
+          if (Number(uploadFile.size || 0) > MAX_HOF_PHOTO_UPLOAD_BYTES) {
+            throw new Error("Photo is still too large after compression. Please choose a smaller image.");
+          }
+          const uploaded = await uploadHallOfFamePhotoToStorage(uploadFile, hofId);
+          form.elements.photoFileId.value = uploaded.photoFileId || "";
+          form.elements.photoUrl.value = uploaded.photoUrl || "";
+          updateHallOfFamePhotoPreview(uploaded.photoUrl || "");
+          showToast("Photo uploaded.", "success");
+        } catch (error) {
+          showToast(error?.message || "Could not upload photo.", "error");
+        } finally {
+          photoInput.value = "";
+        }
+      };
+    }
+
+    if (photoRemove && form) {
+      photoRemove.onclick = async function () {
+        const hofId = String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim();
+        const photoFileId = String(form.elements.photoFileId.value || "").trim();
+        try {
+          if (hofId) {
+            await deleteHallOfFamePhotoFromStorage(hofId, photoFileId);
+          }
+          form.elements.photoFileId.value = "";
+          form.elements.photoUrl.value = "";
+          updateHallOfFamePhotoPreview("");
+          showToast("Photo removed.", "success");
+        } catch (error) {
+          showToast(error?.message || "Could not remove photo.", "error");
+        }
+      };
+    }
+
+    if (addButton) {
+      addButton.onclick = function () {
+        if (!canManageHallOfFame()) return;
+        openHallOfFameDialog(null);
+      };
+    }
+
+    if (closeButton && dialog) {
+      closeButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (cancelButton && dialog) {
+      cancelButton.onclick = function () {
+        dialog.close();
+      };
+    }
+
+    if (submitButton && form) {
+      submitButton.onclick = function () {
+        form.requestSubmit();
+      };
+    }
+
+    if (form) {
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        const payload = {
+          id: String(form.elements.hofId.value || hallOfFameDialogEditingId || "").trim(),
+          year: Number(form.elements.year.value || new Date().getFullYear()),
+          name: String(form.elements.name.value || "").trim(),
+          position: String(form.elements.position.value || "").trim(),
+          photoFileId: String(form.elements.photoFileId.value || "").trim(),
+          photoUrl: String(form.elements.photoUrl.value || "").trim()
+        };
+        if (!payload.name) {
+          showToast("Name is required.", "error");
+          return;
+        }
+        try {
+          await saveHallOfFameEntry(payload);
+          dialog?.close();
+          hallOfFameDialogEditingId = "";
+          showToast("Hall of Fame entry saved.", "success");
+          mount();
+          switchView("hall-of-fame");
+        } catch (error) {
+          showToast(error?.message || "Could not save Hall of Fame entry.", "error");
+        }
+      };
+    }
+
+    document.querySelectorAll(".hof-edit-button").forEach((button) => {
+      button.onclick = function () {
+        if (!canManageHallOfFame()) return;
+        const hofId = String(button.dataset.hofId || "").trim();
+        const currentRow = (state.hallOfFame || []).find((row) => String(row.id) === hofId);
+        if (!currentRow) return;
+        openHallOfFameDialog(currentRow);
+      };
+    });
+
+    document.querySelectorAll(".hof-delete-button").forEach((button) => {
+      button.onclick = async function () {
+        if (!canManageHallOfFame()) return;
+        const hofId = String(button.dataset.hofId || "").trim();
+        const currentRow = (state.hallOfFame || []).find((row) => String(row.id) === hofId);
+        if (!currentRow) return;
+        if (!window.confirm(`Remove '${currentRow.name}' from the Hall of Fame?`)) return;
+        try {
+          await deleteHallOfFameEntry(hofId);
+          showToast("Hall of Fame entry deleted.", "success");
+          mount();
+          switchView("hall-of-fame");
+        } catch (error) {
+          showToast(error?.message || "Could not delete Hall of Fame entry.", "error");
+        }
+      };
+    });
+
+    bindHallOfFameLightbox();
   }
 
   function bindMemberFilters() {
@@ -9552,21 +10502,31 @@
     }
   }
 
+  function applyTableSort(table, key) {
+    if (!table || !key) return;
+    const current = tableSort[table] || { key: "", direction: "asc" };
+    const direction = current.key === key && current.direction === "asc" ? "desc" : "asc";
+    tableSort = {
+      ...tableSort,
+      [table]: { key, direction }
+    };
+    saveTableSort();
+    mount();
+  }
+
   function bindTableSorts() {
     document.querySelectorAll(".sort-button[data-sort-table][data-sort-key]").forEach((button) => {
       button.onclick = function () {
-        const table = button.dataset.sortTable;
-        const key = button.dataset.sortKey;
-        if (!table || !key) return;
-        const current = tableSort[table] || { key: "", direction: "asc" };
-        const direction = current.key === key && current.direction === "asc" ? "desc" : "asc";
-        tableSort = {
-          ...tableSort,
-          [table]: { key, direction }
-        };
-        saveTableSort();
-        mount();
+        applyTableSort(button.dataset.sortTable, button.dataset.sortKey);
       };
+    });
+  }
+
+  function attachStickySortDelegation(stickyElement) {
+    stickyElement.addEventListener("click", function (event) {
+      const button = event.target.closest(".sort-button[data-sort-table][data-sort-key]");
+      if (!button || !stickyElement.contains(button)) return;
+      applyTableSort(button.dataset.sortTable, button.dataset.sortKey);
     });
   }
 
@@ -9585,6 +10545,7 @@
 
     const sticky = document.createElement("div");
     sticky.className = "members-sticky-header";
+    attachStickySortDelegation(sticky);
     const stickyTable = document.createElement("table");
     stickyTable.className = "members-sticky-header-table";
     const clonedHead = thead.cloneNode(true);
@@ -9654,6 +10615,7 @@
 
     const sticky = document.createElement("div");
     sticky.className = "fees-sticky-header";
+    attachStickySortDelegation(sticky);
     const stickyTable = document.createElement("table");
     stickyTable.className = "fees-sticky-header-table";
     const clonedHead = thead.cloneNode(true);
@@ -9723,6 +10685,7 @@
 
     const sticky = document.createElement("div");
     sticky.className = "passes-sticky-header";
+    attachStickySortDelegation(sticky);
     const stickyTable = document.createElement("table");
     stickyTable.className = "passes-sticky-header-table";
     const clonedHead = thead.cloneNode(true);
@@ -9789,6 +10752,51 @@
   }
 
   function bindTryoutActions() {
+    const editButton = document.getElementById("tryout-date-edit-button");
+    if (editButton) {
+      editButton.onclick = function () {
+        tryoutSettingsStatus = "";
+        tryoutSettingsEditing = true;
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const cancelButton = document.getElementById("tryout-date-cancel-button");
+    if (cancelButton) {
+      cancelButton.onclick = function () {
+        tryoutSettingsStatus = "";
+        tryoutSettingsEditing = false;
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const dateForm = document.getElementById("tryout-date-form");
+    if (dateForm) {
+      dateForm.onsubmit = async function (event) {
+        event.preventDefault();
+        const nextDate = String(dateForm.elements.tryoutDate.value || "").trim();
+        const nextNote = String(dateForm.elements.tryoutNote.value || "").trim();
+        tryoutSettingsSaving = true;
+        tryoutSettingsStatus = "";
+        mount();
+        switchView("tryout");
+        try {
+          await saveTryoutSettings({ date: nextDate, note: nextNote });
+          tryoutSettingsEditing = false;
+          showToast("Tryout date updated.", "success");
+        } catch (error) {
+          tryoutSettingsStatus = error?.message || "Could not save the tryout date.";
+          showToast(tryoutSettingsStatus, "error");
+        } finally {
+          tryoutSettingsSaving = false;
+          mount();
+          switchView("tryout");
+        }
+      };
+    }
+
     const form = document.getElementById("tryout-form");
     const submitButton = document.getElementById("tryout-submit-button");
     if (form) {
@@ -9895,19 +10903,35 @@
       };
     }
 
-    const exportCsvButton = document.getElementById("tryout-export-csv");
-    if (exportCsvButton) {
-      exportCsvButton.onclick = function () {
-        downloadCsv(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.csv");
-      };
-    }
-
     const exportExcelButton = document.getElementById("tryout-export-excel");
     if (exportExcelButton) {
       exportExcelButton.onclick = function () {
-        downloadExcel(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.xls");
+        downloadExcel(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.xlsx");
       }
     }
+
+    document.querySelectorAll(".tryout-status-select").forEach((select) => {
+      select.onchange = async function () {
+        const submissionId = String(select.dataset.tryoutSubmissionId || "").trim();
+        const nextStatus = String(select.value || "new").trim();
+        const previousRow = tryoutSubmissions.find((row) => String(row.id) === submissionId);
+        const previousStatus = previousRow?.status || "new";
+        select.disabled = true;
+        try {
+          const updated = await updateTryoutSubmissionStatus(submissionId, nextStatus);
+          tryoutSubmissions = tryoutSubmissions.map((row) => String(row.id) === submissionId ? { ...row, ...updated, status: nextStatus } : row);
+          tryoutSubmissionsStatus = `Updated ${[updated.firstName, updated.lastName].filter(Boolean).join(" ") || "tryout submission"} to ${tryoutLabel("status", nextStatus)}.`;
+          showToast("Tryout status updated.", "success");
+        } catch (error) {
+          select.value = previousStatus;
+          tryoutSubmissionsStatus = error?.message || "Could not update tryout status.";
+          showToast(tryoutSubmissionsStatus, "error");
+        } finally {
+          mount();
+          switchView("tryout");
+        }
+      };
+    });
   }
 
   function openEquipmentPhotoDialog(photoSrc, title) {
@@ -10092,6 +11116,7 @@
       bindEquipmentActions();
       bindGamesActions();
       bindRosterActions();
+      bindHallOfFameActions();
       bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();
@@ -10115,7 +11140,7 @@
       console.error("Emperors bundle mount failed", error);
       recordDiagnostic("error", "app", "App bundle mount failed.", summarizeDiagnosticError(error));
       const dashboard = document.getElementById("dashboard");
-      if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${error.message}</p></article>`;
+      if (dashboard) dashboard.innerHTML = `<article class="setup-card"><p class="eyebrow">Startup issue</p><h3>App bundle error</h3><p>${escapeHtml(String(error?.message || error || "Unknown error"))}</p></article>`;
       switchView("dashboard");
     }
   }

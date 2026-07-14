@@ -1217,6 +1217,17 @@ button {
   line-height: 1.35;
 }
 
+.tryout-status-select {
+  width: 100%;
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+}
+
 .game-score {
   display: inline-flex;
   align-items: center;

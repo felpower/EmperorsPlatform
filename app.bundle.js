@@ -3024,23 +3024,191 @@
     downloadBlobFile(csv, "text/csv;charset=utf-8", fileName);
   }
 
+  function createCrc32Table() {
+    return Array.from({ length: 256 }, (_, index) => {
+      let value = index;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+      }
+      return value >>> 0;
+    });
+  }
+
+  const crc32Table = createCrc32Table();
+
+  function crc32(bytes) {
+    let value = 0xffffffff;
+    bytes.forEach((byte) => {
+      value = crc32Table[(value ^ byte) & 0xff] ^ (value >>> 8);
+    });
+    return (value ^ 0xffffffff) >>> 0;
+  }
+
+  function uint16(value) {
+    return [value & 0xff, (value >>> 8) & 0xff];
+  }
+
+  function uint32(value) {
+    return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+  }
+
+  function encodeUtf8(value) {
+    return new TextEncoder().encode(String(value || ""));
+  }
+
+  function concatBytes(parts) {
+    const total = parts.reduce((sum, part) => sum + part.length, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    parts.forEach((part) => {
+      output.set(part, offset);
+      offset += part.length;
+    });
+    return output;
+  }
+
+  function createZip(files) {
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    files.forEach((file) => {
+      const nameBytes = encodeUtf8(file.name);
+      const contentBytes = file.content instanceof Uint8Array ? file.content : encodeUtf8(file.content);
+      const checksum = crc32(contentBytes);
+      const localHeader = new Uint8Array([
+        ...uint32(0x04034b50),
+        ...uint16(20),
+        ...uint16(0x0800),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(checksum),
+        ...uint32(contentBytes.length),
+        ...uint32(contentBytes.length),
+        ...uint16(nameBytes.length),
+        ...uint16(0)
+      ]);
+      localParts.push(localHeader, nameBytes, contentBytes);
+      const centralHeader = new Uint8Array([
+        ...uint32(0x02014b50),
+        ...uint16(20),
+        ...uint16(20),
+        ...uint16(0x0800),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(checksum),
+        ...uint32(contentBytes.length),
+        ...uint32(contentBytes.length),
+        ...uint16(nameBytes.length),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint16(0),
+        ...uint32(0),
+        ...uint32(offset)
+      ]);
+      centralParts.push(centralHeader, nameBytes);
+      offset += localHeader.length + nameBytes.length + contentBytes.length;
+    });
+    const centralDirectory = concatBytes(centralParts);
+    const localFiles = concatBytes(localParts);
+    const endRecord = new Uint8Array([
+      ...uint32(0x06054b50),
+      ...uint16(0),
+      ...uint16(0),
+      ...uint16(files.length),
+      ...uint16(files.length),
+      ...uint32(centralDirectory.length),
+      ...uint32(localFiles.length),
+      ...uint16(0)
+    ]);
+    return concatBytes([localFiles, centralDirectory, endRecord]);
+  }
+
+  function excelColumnName(index) {
+    let name = "";
+    let value = index + 1;
+    while (value > 0) {
+      const remainder = (value - 1) % 26;
+      name = String.fromCharCode(65 + remainder) + name;
+      value = Math.floor((value - 1) / 26);
+    }
+    return name;
+  }
+
+  function escapeXml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+  }
+
+  function createXlsxBlob(columns, rows) {
+    const allRows = [
+      columns.map((column) => column.label || ""),
+      ...rows.map((row) => columns.map((column) => row[column.key] ?? ""))
+    ];
+    const sheetRows = allRows.map((values, rowIndex) => {
+      const cells = values.map((value, columnIndex) => {
+        const reference = `${excelColumnName(columnIndex)}${rowIndex + 1}`;
+        return `<c r="${reference}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+      }).join("");
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    }).join("");
+    const maxColumn = excelColumnName(Math.max(columns.length - 1, 0));
+    const dimension = columns.length ? `A1:${maxColumn}${Math.max(allRows.length, 1)}` : "A1";
+    const now = new Date().toISOString();
+    const files = [
+      {
+        name: "[Content_Types].xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`
+      },
+      {
+        name: "_rels/.rels",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`
+      },
+      {
+        name: "docProps/app.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Emperors App</Application></Properties>`
+      },
+      {
+        name: "docProps/core.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>Emperors App</dc:creator><cp:lastModifiedBy>Emperors App</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`
+      },
+      {
+        name: "xl/workbook.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Submissions" sheetId="1" r:id="rId1"/></sheets></workbook>`
+      },
+      {
+        name: "xl/_rels/workbook.xml.rels",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`
+      },
+      {
+        name: "xl/styles.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`
+      },
+      {
+        name: "xl/worksheets/sheet1.xml",
+        content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="${dimension}"/><sheetData>${sheetRows}</sheetData></worksheet>`
+      }
+    ];
+    return new Blob([createZip(files)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
   function downloadExcel(columns, rows, fileName) {
-    const headerHtml = columns.map((column) => `<th>${escapeHtml(String(column.label || ""))}</th>`).join("");
-    const bodyHtml = rows
-      .map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(String(row[column.key] ?? ""))}</td>`).join("")}</tr>`)
-      .join("");
-    const html = `
-      <html>
-      <head><meta charset="utf-8" /></head>
-      <body>
-        <table>
-          <thead><tr>${headerHtml}</tr></thead>
-          <tbody>${bodyHtml}</tbody>
-        </table>
-      </body>
-      </html>
-    `;
-    downloadBlobFile(html, "application/vnd.ms-excel;charset=utf-8", fileName);
+    const safeFileName = String(fileName || "export.xlsx").replace(/\.xls$/i, ".xlsx");
+    const blob = createXlsxBlob(columns, rows);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = /\.xlsx$/i.test(safeFileName) ? safeFileName : `${safeFileName}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function downloadFromApi(url, fallbackFileName) {
@@ -5688,6 +5856,10 @@
     return labels[kind]?.[normalized] || normalized || "-";
   }
 
+  function tryoutSubmissionStatusOptions() {
+    return ["new", "contacted", "invited", "archived"];
+  }
+
   function localTryoutSubmissionRows() {
     try {
       const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
@@ -5866,6 +6038,43 @@
     return { localOnly: false, data: Array.isArray(response.data) ? response.data[0] : response.data };
   }
 
+  async function updateTryoutSubmissionStatus(submissionId, status) {
+    const normalizedId = String(submissionId || "").trim();
+    const normalizedStatus = String(status || "").trim();
+    if (!normalizedId) throw new Error("Missing tryout submission id.");
+    if (!tryoutSubmissionStatusOptions().includes(normalizedStatus)) {
+      throw new Error("Unsupported tryout submission status.");
+    }
+
+    if (!backendClient || !authState.user) {
+      const current = (() => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(TRYOUT_REGISTRATIONS_STORAGE_KEY) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })();
+      const next = current.map((row) => {
+        const rowId = String(tryoutValue(row, "id", "$id") || "").trim();
+        return rowId === normalizedId ? { ...row, status: normalizedStatus } : row;
+      });
+      const updatedRow = next.find((row) => String(tryoutValue(row, "id", "$id") || "").trim() === normalizedId);
+      if (!updatedRow) throw new Error("Tryout submission was not found.");
+      localStorage.setItem(TRYOUT_REGISTRATIONS_STORAGE_KEY, JSON.stringify(next));
+      return normalizeTryoutSubmissionRow(updatedRow);
+    }
+
+    const response = await backendClient
+      .from("tryout_registrations")
+      .update({ status: normalizedStatus })
+      .eq("id", normalizedId)
+      .select("*")
+      .single();
+    if (response.error) throw response.error;
+    return normalizeTryoutSubmissionRow(response.data || { id: normalizedId, status: normalizedStatus });
+  }
+
   function renderTryoutFilterSelect({ id, label, value, options, kind }) {
     return `
       <label>${escapeHtml(label)}
@@ -5889,7 +6098,7 @@
       : "Not loaded yet";
     const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
     const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
-    const statusOptions = Array.from(new Set(["new", "contacted", "invited", "archived", ...tryoutSubmissionFilterOptions("status")]));
+    const statusOptions = Array.from(new Set([...tryoutSubmissionStatusOptions(), ...tryoutSubmissionFilterOptions("status")]));
 
     return `
       <section class="tryout-admin-panel setup-card">
@@ -5901,7 +6110,6 @@
           </div>
           <div class="tryout-admin-actions">
             <button type="button" class="ghost-button" id="tryout-load-submissions" data-no-toast="true" ${tryoutSubmissionsLoading ? "disabled" : ""}>${loaded ? "Refresh submissions" : "Load submissions"}</button>
-            <button type="button" class="ghost-button" id="tryout-export-csv" data-no-toast="true" ${exportDisabled}>CSV for Sheets</button>
             <button type="button" class="ghost-button" id="tryout-export-excel" data-no-toast="true" ${exportDisabled}>Excel</button>
           </div>
         </div>
@@ -5982,7 +6190,11 @@
                       ${!row.footballExperienceDetails && !row.otherSports && !row.availabilityNotes ? `<p class="meta">No notes</p>` : ""}
                     </details>
                   </td>
-                  <td>${statusPill(row.status || "new", tryoutLabel("status", row.status || "new"))}</td>
+                  <td>
+                    <select class="tryout-status-select" data-tryout-submission-id="${escapeAttribute(row.id)}" aria-label="Tryout status for ${escapeAttribute(`${row.firstName} ${row.lastName}`.trim() || "submission")}">
+                      ${statusOptions.map((status) => `<option value="${escapeAttribute(status)}" ${String(row.status || "new") === status ? "selected" : ""}>${escapeHtml(tryoutLabel("status", status))}</option>`).join("")}
+                    </select>
+                  </td>
                 </tr>
               `).join("") || `
                 <tr><td colspan="7" class="meta">No submissions match the current filters.</td></tr>
@@ -10691,19 +10903,35 @@
       };
     }
 
-    const exportCsvButton = document.getElementById("tryout-export-csv");
-    if (exportCsvButton) {
-      exportCsvButton.onclick = function () {
-        downloadCsv(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.csv");
-      };
-    }
-
     const exportExcelButton = document.getElementById("tryout-export-excel");
     if (exportExcelButton) {
       exportExcelButton.onclick = function () {
-        downloadExcel(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.xls");
+        downloadExcel(tryoutSubmissionExportColumns(), tryoutSubmissionExportRows(), "tryout-submissions.xlsx");
       }
     }
+
+    document.querySelectorAll(".tryout-status-select").forEach((select) => {
+      select.onchange = async function () {
+        const submissionId = String(select.dataset.tryoutSubmissionId || "").trim();
+        const nextStatus = String(select.value || "new").trim();
+        const previousRow = tryoutSubmissions.find((row) => String(row.id) === submissionId);
+        const previousStatus = previousRow?.status || "new";
+        select.disabled = true;
+        try {
+          const updated = await updateTryoutSubmissionStatus(submissionId, nextStatus);
+          tryoutSubmissions = tryoutSubmissions.map((row) => String(row.id) === submissionId ? { ...row, ...updated, status: nextStatus } : row);
+          tryoutSubmissionsStatus = `Updated ${[updated.firstName, updated.lastName].filter(Boolean).join(" ") || "tryout submission"} to ${tryoutLabel("status", nextStatus)}.`;
+          showToast("Tryout status updated.", "success");
+        } catch (error) {
+          select.value = previousStatus;
+          tryoutSubmissionsStatus = error?.message || "Could not update tryout status.";
+          showToast(tryoutSubmissionsStatus, "error");
+        } finally {
+          mount();
+          switchView("tryout");
+        }
+      };
+    });
   }
 
   function openEquipmentPhotoDialog(photoSrc, title) {
