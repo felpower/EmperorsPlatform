@@ -473,7 +473,7 @@ async function sendAppwriteInvite({ email, fullName, req }) {
   }
 
   const ensured = await ensureAppwriteUserForInvite({ email, fullName });
-  const redirectTo = `${resolvePublicSiteUrl(req)}/#recovery`;
+  const redirectTo = `${resolvePublicSiteUrl(req)}/recovery`;
   const userId = String(ensured.user?.$id || ensured.user?.id || "").trim();
   if (!userId) {
     throw new Error("Could not resolve Appwrite user ID for invite recovery email.");
@@ -1020,6 +1020,13 @@ app.get("/api/status", (req, res) => {
       : "✓ Backend is configured"
   });
 });
+
+if (SERVE_STATIC_FRONTEND) {
+  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
+  app.get(appRoutePattern, (_req, res) => {
+    res.sendFile(path.join(__dirname, "index.html"));
+  });
+}
 
 app.listen(port, () => {
   console.log(`Emperors local server running at http://localhost:${port}`);

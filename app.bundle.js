@@ -263,6 +263,12 @@
     date: "2026-09-01",
     note: "Location and check-in details will be sent to registered players closer to the date."
   };
+  const ROUTE_ALIASES = {
+    "": "dashboard",
+    "/": "dashboard",
+    index: "dashboard",
+    "index.html": "dashboard"
+  };
 
   const backendClient =
     window.ClubHubDataClient && typeof window.ClubHubDataClient.createClient === "function"
@@ -478,6 +484,59 @@
     }
   }
 
+  function splitRouteQuery(value) {
+    const raw = String(value || "").replace(/^#/, "").replace(/^\//, "").trim();
+    const [routePart, ...queryParts] = raw.split("?");
+    return {
+      route: decodeURIComponent(routePart || "").replace(/^\/+|\/+$/g, "").trim(),
+      query: queryParts.length ? queryParts.join("?") : ""
+    };
+  }
+
+  function normalizeRouteToken(route) {
+    const normalized = String(route || "").replace(/^\/+|\/+$/g, "").trim();
+    const alias = ROUTE_ALIASES[normalized.toLowerCase()];
+    if (alias) return alias;
+    if (/^user(?:\/|$)/i.test(normalized)) return normalized;
+    if (/^recovery(?:\/|$)/i.test(normalized)) return "recovery";
+    return viewIds.includes(normalized) ? normalized : "dashboard";
+  }
+
+  function routePath(route, query = "") {
+    const normalized = normalizeRouteToken(route);
+    const path = normalized === "dashboard" ? "/" : `/${normalized}`;
+    const cleanQuery = String(query || "").replace(/^\?/, "").trim();
+    return cleanQuery ? `${path}?${cleanQuery}` : path;
+  }
+
+  function currentRouteToken() {
+    const pathRoute = splitRouteQuery(window.location.pathname).route;
+    if (pathRoute && !["index", "index.html"].includes(pathRoute.toLowerCase())) {
+      return normalizeRouteToken(pathRoute);
+    }
+    const hashRoute = splitRouteQuery(window.location.hash).route;
+    return normalizeRouteToken(hashRoute);
+  }
+
+  function navigateToRoute(route, options = {}) {
+    const nextPath = routePath(route, options.query || "");
+    if (`${window.location.pathname}${window.location.search}` === nextPath) return;
+    const method = options.replace ? "replaceState" : "pushState";
+    window.history[method]({}, "", nextPath);
+  }
+
+  function redirectLegacyHashRoute() {
+    const hash = String(window.location.hash || "").trim();
+    if (!hash || hash === "#") return;
+    const parsed = splitRouteQuery(hash);
+    if (!parsed.route && !parsed.query) return;
+    const normalized = normalizeRouteToken(parsed.route || "dashboard");
+    if (normalized === "dashboard" && parsed.route && !["dashboard", "/", "index", "index.html"].includes(parsed.route.toLowerCase())) {
+      return;
+    }
+    navigateToRoute(normalized === "user" ? parsed.route : normalized, { query: parsed.query, replace: true });
+  }
+
   function isPermissionDeniedError(error) {
     if (!error) return false;
     const code = Number(error.code ?? error.status ?? error.statusCode);
@@ -497,8 +556,7 @@
   }
 
   function diagnosticRouteLabel() {
-    const hash = String(window.location.hash || "").trim();
-    return hash || "#dashboard";
+    return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/";
   }
 
   function clampDiagnosticText(value, maxLength) {
@@ -1601,6 +1659,7 @@
   }
 
   function hasRecoveryContext() {
+    if (currentRouteToken() === "recovery") return true;
     const hash = String(window.location.hash || "").replace(/^#/, "").trim();
     if (/^recovery/i.test(hash)) return true;
     const params = new URLSearchParams(window.location.search);
@@ -1630,8 +1689,8 @@
       authState.mode = "remote";
       if (needsPasswordSetup()) {
         authState.status = "Set your password to finish activating this account.";
-        if (hasRecoveryContext() && !/^recovery/i.test(String(window.location.hash || "").replace("#", ""))) {
-          window.location.hash = "#recovery";
+        if (hasRecoveryContext() && currentRouteToken() !== "recovery") {
+          navigateToRoute("recovery", { replace: true });
         }
       } else {
         authState.status = `Signed in as ${authDisplayName() || authState.user.full_name}.`;
@@ -1713,7 +1772,7 @@
       throw new Error("Enter your email address first.");
     }
     const redirectTo = window.location.href.startsWith("http")
-      ? `${window.location.origin}${window.location.pathname}#recovery`
+      ? `${window.location.origin}/recovery`
       : undefined;
     const response = await backendClient.auth.resetPasswordForEmail(normalizedEmail, {
       ...(redirectTo ? { redirectTo } : {})
@@ -1775,7 +1834,8 @@
       }
       recoveryState.status = "Password set successfully! Redirecting...";
       setTimeout(() => {
-        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
+        navigateToRoute("dashboard");
+        mount();
       }, 1500);
     } catch (error) {
       recoveryState.status = error.message || "Failed to set password.";
@@ -1851,7 +1911,7 @@
       throw new Error("Invite email is missing for this member.");
     }
 
-    const redirectTo = `${window.location.origin}${window.location.pathname}#recovery`;
+    const redirectTo = `${window.location.origin}/recovery`;
     const sendRecoveryEmailDirectly = async () => {
       const recoveryResponse = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
       if (recoveryResponse?.error) {
@@ -1894,7 +1954,7 @@
           roles,
           memberId,
           sendRecovery,
-          redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
+          redirectTo: `${window.location.origin}/recovery`
         }),
         false
       );
@@ -1995,7 +2055,7 @@
         roles,
         memberId,
         sendRecovery: false,
-        redirectTo: `${window.location.origin}${window.location.pathname}#recovery`
+        redirectTo: `${window.location.origin}/recovery`
       }),
       false
     );
@@ -2844,9 +2904,9 @@
     }
   }
 
-  function userPageMemberIdFromHash() {
-    const hash = String(window.location.hash || "").replace("#", "").trim();
-    const match = hash.match(/^user\/(.+)$/i);
+  function userPageMemberIdFromRoute() {
+    const route = currentRouteToken();
+    const match = String(route || "").match(/^user\/(.+)$/i);
     if (!match) return "";
     const decoded = decodeURIComponent(match[1]);
     if (decoded.toLowerCase() === "me") {
@@ -6553,9 +6613,9 @@
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
     }
-    const hashMemberId = userPageMemberIdFromHash();
-    const hashRoute = String(window.location.hash || "").replace("#", "").trim().toLowerCase();
-    const ownRouteActive = hashRoute === "user/me";
+    const routeToken = currentRouteToken();
+    const hashMemberId = userPageMemberIdFromRoute();
+    const ownRouteActive = String(routeToken || "").toLowerCase() === "user/me";
     const ownMemberId = signedInMemberRecord()?.id || "";
     const useOwnProfile = ownRouteActive || profileRouteMode === "own";
     const memberId = useOwnProfile
@@ -6651,13 +6711,13 @@
       </article>
     `;
     const notesSection = `
-      <article class="card compact-card" style="display:grid; gap: 10px;">
+      <article class="card compact-card profile-notes-card" style="display:grid; gap: 10px;">
         <div>
           <p class="eyebrow">Notes</p>
           <h3 style="margin-top: 4px;">Member notes</h3>
         </div>
         <label>Notes<textarea id="user-notes" rows="3" placeholder="No notes yet" ${notesDisabled}>${escapeHtml(member.notes || "")}</textarea></label>
-        ${canEditNotes ? `<div class="button-row"><button type="button" class="primary-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
+        ${canEditNotes ? `<div class="button-row profile-notes-actions"><button type="button" class="primary-button small-button" id="save-user-notes" data-member-id="${member.id}">Save notes</button></div>` : ""}
       </article>
     `;
     const canViewPassDetails = currentAccessRole === "admin" || isOwnProfile(member);
@@ -8311,13 +8371,14 @@
 
   function bindNavigation() {
     document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
-      link.onclick = function () {
+      link.onclick = function (event) {
+        event.preventDefault();
         const nextView = link.dataset.view;
         if (!canAccessView(nextView)) {
           switchView(resolveAllowedView(nextView));
           return;
         }
-        window.location.hash = nextView;
+        navigateToRoute(nextView);
         switchView(nextView);
       };
     });
@@ -8332,12 +8393,12 @@
             if (!selectedUserMemberId && state.members.length) {
               selectedUserMemberId = String(state.members[0].id || "");
             }
-            window.location.hash = "user";
+            navigateToRoute("user");
             mount();
             switchView("user");
             return;
           }
-          window.location.hash = "dashboard";
+          navigateToRoute("dashboard");
           mount();
           switchView("dashboard");
           const emailInput = document.getElementById("auth-email");
@@ -8347,7 +8408,7 @@
 
         profileRouteMode = "own";
         selectedUserMemberId = "";
-        window.location.hash = "user/me";
+        navigateToRoute("user/me");
         mount();
         switchView("user");
       };
@@ -8363,7 +8424,7 @@
         }
         profileRouteMode = "member";
         selectedUserMemberId = "";
-        window.location.hash = "dashboard";
+        navigateToRoute("dashboard");
         mount();
         switchView("dashboard");
       };
@@ -8407,7 +8468,7 @@
     });
 
     // Close menu when view changes
-    window.addEventListener("hashchange", closeMenu);
+    window.addEventListener("popstate", closeMenu);
   }
 
   function switchView(nextViewId) {
@@ -8436,9 +8497,9 @@
   }
 
   function getRouteView() {
-    const hash = window.location.hash.replace("#", "").trim();
-    if (/^user\//i.test(hash)) return "user";
-    if (/^recovery/i.test(hash)) return "recovery";
+    const route = currentRouteToken();
+    if (/^user(?:\/|$)/i.test(route)) return "user";
+    if (/^recovery/i.test(route)) return "recovery";
     
     // Check for recovery token in URL params (both search and hash)
     const params = new URLSearchParams(window.location.search);
@@ -8450,7 +8511,7 @@
       return "recovery";
     }
     
-    return viewIds.includes(hash) ? hash : "dashboard";
+    return viewIds.includes(route) ? route : "dashboard";
   }
 
   function openMemberDialog(member) {
@@ -8871,7 +8932,7 @@
           const displayName = `${payload.firstName} ${payload.lastName}`.trim();
           authState.status = payload.memberId ? `${displayName} was updated locally.` : `${displayName} was added locally.`;
           dialog.close();
-          window.location.hash = "members";
+          navigateToRoute("members");
           mount();
           switchView("members");
         } catch (error) {
@@ -8898,7 +8959,7 @@
         const memberId = String(button.dataset.memberId || "").trim();
         if (!memberId) return;
         selectedUserMemberId = memberId;
-        window.location.hash = `user/${encodeURIComponent(memberId)}`;
+        navigateToRoute(`user/${encodeURIComponent(memberId)}`);
         mount();
         switchView("user");
       };
@@ -8908,7 +8969,7 @@
     if (backButton) {
       backButton.onclick = function () {
         profileRouteMode = "member";
-        window.location.hash = "members";
+        navigateToRoute("members");
         switchView("members");
       };
     }
@@ -8983,7 +9044,7 @@
           });
           authState.status = "User profile updated.";
           selectedUserMemberId = String(member.id);
-          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          navigateToRoute(`user/${encodeURIComponent(member.id)}`);
           mount();
           switchView("user");
         } catch (error) {
@@ -9020,7 +9081,7 @@
           });
           authState.status = "Sensitive finance fields updated.";
           selectedUserMemberId = String(member.id);
-          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          navigateToRoute(`user/${encodeURIComponent(member.id)}`);
           mount();
           switchView("user");
         } catch (error) {
@@ -9062,7 +9123,7 @@
           });
           authState.status = "Role and position updated.";
           selectedUserMemberId = String(member.id);
-          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          navigateToRoute(`user/${encodeURIComponent(member.id)}`);
           mount();
           switchView("user");
         } catch (error) {
@@ -9099,7 +9160,7 @@
           });
           authState.status = "Notes updated.";
           selectedUserMemberId = String(member.id);
-          window.location.hash = `user/${encodeURIComponent(member.id)}`;
+          navigateToRoute(`user/${encodeURIComponent(member.id)}`);
           mount();
           switchView("user");
         } catch (error) {
@@ -9801,14 +9862,16 @@
     const cancelButton = document.getElementById("recovery-cancel");
     if (cancelButton) {
       cancelButton.onclick = function () {
-        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
+        navigateToRoute("dashboard");
+        mount();
       };
     }
 
     const backToSignInButton = document.getElementById("recovery-back-to-sign-in");
     if (backToSignInButton) {
       backToSignInButton.onclick = function () {
-        window.location.href = window.location.origin + window.location.pathname + "#dashboard";
+        navigateToRoute("dashboard");
+        mount();
       };
     }
   }
@@ -10380,7 +10443,7 @@
     const openSyncReviewButton = document.getElementById("open-pass-sync-review");
     if (openSyncReviewButton) {
       openSyncReviewButton.onclick = function () {
-        window.location.hash = "pass-sync";
+        navigateToRoute("pass-sync");
         switchView("pass-sync");
       };
     }
@@ -10745,7 +10808,7 @@
     if (athleteProfileBtn) {
       athleteProfileBtn.onclick = function () {
         profileRouteMode = "own";
-        window.location.hash = "user/me";
+        navigateToRoute("user/me");
         switchView("user");
       };
     }
@@ -11149,7 +11212,7 @@
     const changePasswordButton = document.getElementById("change-password-button");
     if (changePasswordButton) {
       changePasswordButton.onclick = function () {
-        window.location.hash = "#recovery";
+        navigateToRoute("recovery");
         setTimeout(() => mount(), 100);
       };
     }
@@ -11161,6 +11224,7 @@
     }
   }
 
+  redirectLegacyHashRoute();
   bindNavigation();
   bindButtonFeedback();
   bindMobileMenu();
@@ -11171,6 +11235,14 @@
     recordDiagnostic("error", "promise", "Unhandled promise rejection.", summarizeDiagnosticError(event.reason));
   });
   window.addEventListener("hashchange", function () {
+    redirectLegacyHashRoute();
+    updateNavigationVisibility();
+    switchView(getRouteView());
+    setupMembersStickyHeader();
+    setupFeesStickyHeader();
+    setupPassesStickyHeader();
+  });
+  window.addEventListener("popstate", function () {
     updateNavigationVisibility();
     switchView(getRouteView());
     setupMembersStickyHeader();

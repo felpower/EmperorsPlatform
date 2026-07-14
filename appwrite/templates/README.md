@@ -35,6 +35,6 @@ Replace all occurrences as follows using Appwrite's variable picker:
 
 ## Notes
 
-- Your server invite API already points recovery/invite links to /#recovery.
+- Your server invite API already points recovery/invite links to /recovery.
 - Keep APPWRITE_ACTION_URL in both button href and fallback plain-text URL.
 - If Appwrite requires strict handlebars/liquid syntax in your environment, insert variables only via the Appwrite variable picker to avoid syntax mismatch.

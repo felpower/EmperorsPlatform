@@ -6,6 +6,31 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://emperors.page/tryout</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://emperors.page/roster</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://emperors.page/events</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://emperors.page/hall-of-fame</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://emperors.page/organization</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://emperors.page/impressum.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.2</priority>
