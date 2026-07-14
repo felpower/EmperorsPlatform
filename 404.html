@@ -30,7 +30,7 @@
         "settings",
         "recovery"
       ];
-      var isAppRoute = appRoutes.indexOf(route) !== -1 || /^user\//i.test(route);
+      var isAppRoute = appRoutes.indexOf(route) !== -1 || /^(?:user|tryout)\//i.test(route);
       if (!isAppRoute) return;
       fetch("/index.html", { cache: "no-cache" })
         .then(function (response) {

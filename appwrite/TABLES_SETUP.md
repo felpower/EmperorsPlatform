@@ -154,6 +154,7 @@ Columns:
 - height_cm (integer, optional)
 - weight_kg (integer, optional)
 - availability_notes (string, optional)
+- referred_by (string, optional; roster name or free-form source)
 - contact_consent (boolean, required)
 - tryout_cycle (string, required) example: next
 - status (string, required) example: new, contacted, invited
@@ -165,9 +166,24 @@ Public signup requirement:
 - allow create("any")
 - allow read/update/delete for authenticated users or admins only
 
+## 9) organization
+
+Table ID:
+
+- organization
+
+Columns:
+
+- head_of (string, required)
+- verantwortung (string, optional)
+- co_verantwortung (string, optional)
+- aufgaben (string, optional)
+
+The page is readable by signed-in members. Create, update, and delete permissions should be limited to admins.
+
 ## Permissions recommendation
 
-For now (fastest path), set table read/write permissions so authenticated users can operate while we finish migration and testing.
+For general application tables, authenticated-user permissions are the fastest migration path. Keep the `organization` table's create, update, and delete permissions restricted to admins.
 
 After feature parity is stable, tighten permissions by role with table-level permissions and app logic.
 
@@ -183,5 +199,6 @@ These table IDs are already mapped in src/appwrite-config.js:
 - eventRecipientsTableId
 - invitesTableId
 - tryoutRegistrationsTableId
+- organizationTableId
 
 If you use different IDs, update src/appwrite-config.js accordingly.

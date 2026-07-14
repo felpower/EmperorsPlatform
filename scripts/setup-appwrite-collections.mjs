@@ -129,6 +129,7 @@ const schema = {
       { type: "integer", key: "height_cm", required: false },
       { type: "integer", key: "weight_kg", required: false },
       { type: "string", key: "availability_notes", size: 2048, required: false },
+      { type: "string", key: "referred_by", size: 255, required: false },
       { type: "boolean", key: "contact_consent", required: true },
       { type: "string", key: "tryout_cycle", size: 64, required: true },
       { type: "string", key: "status", size: 32, required: true },
@@ -144,6 +145,15 @@ const schema = {
       { type: "datetime", key: "tryout_date", required: false },
       { type: "string", key: "tryout_note", size: 1024, required: false },
       { type: "datetime", key: "updated_at", required: false }
+    ]
+  },
+  organization: {
+    name: "organization",
+    attributes: [
+      { type: "string", key: "head_of", size: 255, required: true },
+      { type: "string", key: "verantwortung", size: 255, required: false },
+      { type: "string", key: "co_verantwortung", size: 255, required: false },
+      { type: "string", key: "aufgaben", size: 4096, required: false }
     ]
   },
   hall_of_fame: {

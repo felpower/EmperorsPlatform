@@ -24,6 +24,7 @@ window.ClubHubAppwriteConfig = {
   invitesTableId: "invites",
   tryoutRegistrationsTableId: "tryout_registrations",
   tryoutSettingsTableId: "tryout_settings",
+  organizationTableId: "organization",
   equipmentTableId: "equipment_inventory",
   diagnosticsTableId: "diagnostics_logs",
   hallOfFameTableId: "hall_of_fame"

@@ -1022,7 +1022,7 @@ app.get("/api/status", (req, res) => {
 });
 
 if (SERVE_STATIC_FRONTEND) {
-  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
+  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
   app.get(appRoutePattern, (_req, res) => {
     res.sendFile(path.join(__dirname, "index.html"));
   });

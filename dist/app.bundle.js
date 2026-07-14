@@ -498,6 +498,7 @@
     const alias = ROUTE_ALIASES[normalized.toLowerCase()];
     if (alias) return alias;
     if (/^user(?:\/|$)/i.test(normalized)) return normalized;
+    if (/^tryout(?:\/|$)/i.test(normalized)) return normalized;
     if (/^recovery(?:\/|$)/i.test(normalized)) return "recovery";
     return viewIds.includes(normalized) ? normalized : "dashboard";
   }
@@ -1683,7 +1684,9 @@
       if (authState.roles.length) {
         currentAccessRole = primaryRoleFromRoles(authState.roles);
       } else {
-        currentAccessRole = loadStoredValue(ACCESS_KEY, currentAccessRole || "player");
+        // Never trust a locally remembered role for an authenticated account.
+        // Appwrite member data promotes confirmed admins after bootstrap loads.
+        currentAccessRole = "player";
       }
       saveStoredValue(ACCESS_KEY, currentAccessRole);
       authState.mode = "remote";
@@ -3731,27 +3734,35 @@
     return message;
   }
 
-  function ensurePublicRosterLoaded() {
+  function ensurePublicRosterLoaded(returnView = "roster") {
     if (!backendClient || authState.user || publicRosterLoadPromise || publicRosterLoadAttempted) return;
     publicRosterLoadAttempted = true;
     publicRosterStatus = publicRosterStatus || "Loading roster...";
     publicRosterLoadPromise = loadPublicRosterBootstrap()
       .then(() => {
         publicRosterStatus = publicRosterStatus || "";
-        mount();
-        switchView("roster");
+        if (returnView === "tryout") {
+          refreshTryoutReferralOptions();
+        } else {
+          mount();
+          switchView(returnView);
+        }
       })
       .catch((error) => {
         publicRosterStatus = publicRosterErrorMessage(error);
         authState.status = publicRosterStatus;
-        mount();
-        switchView("roster");
+        if (returnView !== "tryout") {
+          mount();
+          switchView(returnView);
+        }
       })
       .finally(() => {
         publicRosterLoadPromise = null;
-      });
-    mount();
-    switchView("roster");
+    });
+    if (returnView !== "tryout") {
+      mount();
+      switchView(returnView);
+    }
   }
 
   async function loadRemoteBootstrap() {
@@ -5873,6 +5884,7 @@
       heightCm: tryoutValue(row, "height_cm", "heightCm") ?? "",
       weightKg: tryoutValue(row, "weight_kg", "weightKg") ?? "",
       availabilityNotes: String(tryoutValue(row, "availability_notes", "availabilityNotes") || "").trim(),
+      referredBy: String(tryoutValue(row, "referred_by", "referredBy") || "").trim(),
       contactConsent: Boolean(tryoutValue(row, "contact_consent", "contactConsent")),
       tryoutCycle: String(tryoutValue(row, "tryout_cycle", "tryoutCycle") || "next").trim(),
       status: String(tryoutValue(row, "status") || "new").trim(),
@@ -5914,6 +5926,57 @@
       }
     };
     return labels[kind]?.[normalized] || normalized || "-";
+  }
+
+  function tryoutReferralRouteSlug() {
+    const route = currentRouteToken();
+    const match = String(route || "").match(/^tryout\/(.+)$/i);
+    return String(match?.[1] || "").trim();
+  }
+
+  function tryoutReferralSuggestions() {
+    return Array.from(new Set([
+      ...(state.members || [])
+        .filter((member) => !member.deletedAt && member.membershipStatus !== "inactive")
+        .map((member) => String(member.name || `${member.firstName || ""} ${member.lastName || ""}`).trim())
+        .filter(Boolean),
+      "Instagram",
+      "University website",
+      "Other"
+    ])).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+  }
+
+  function tryoutReferralRouteValue() {
+    const slug = tryoutReferralRouteSlug();
+    if (!slug) return "";
+    const lookup = normalizeLookupToken(slug);
+    const matchedMember = (state.members || []).find((member) => {
+      if (member.deletedAt || member.membershipStatus === "inactive") return false;
+      const fallback = splitNameParts(member.name || "");
+      const firstName = String(member.firstName || fallback.firstName || "").trim();
+      const lastName = String(member.lastName || fallback.lastName || "").trim();
+      const fullName = String(member.name || `${firstName} ${lastName}`).trim();
+      return [fullName, firstName, lastName].some((value) => normalizeLookupToken(value) === lookup);
+    });
+    if (matchedMember) {
+      return String(matchedMember.name || `${matchedMember.firstName || ""} ${matchedMember.lastName || ""}`).trim();
+    }
+    return slug
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function refreshTryoutReferralOptions() {
+    const options = document.getElementById("tryout-referral-options");
+    if (options) {
+      options.innerHTML = tryoutReferralSuggestions()
+        .map((suggestion) => `<option value="${escapeAttribute(suggestion)}"></option>`)
+        .join("");
+    }
+    const input = document.querySelector('#tryout-form input[name="referredBy"]');
+    if (input?.dataset.referralPrefill === "true") {
+      input.value = tryoutReferralRouteValue();
+    }
   }
 
   function tryoutSubmissionStatusOptions() {
@@ -5981,7 +6044,8 @@
         row.studyProgram,
         row.footballExperienceDetails,
         row.otherSports,
-        row.availabilityNotes
+        row.availabilityNotes,
+        row.referredBy
       ].join(" ").toLowerCase();
       return haystack.includes(search);
     });
@@ -6008,6 +6072,7 @@
       { key: "footballExperienceDetails", label: "Football background details" },
       { key: "otherSports", label: "Other sports" },
       { key: "availabilityNotes", label: "Availability / notes" },
+      { key: "referredBy", label: "Referred by / source" },
       { key: "status", label: "Status" },
       { key: "tryoutCycle", label: "Tryout cycle" },
       { key: "source", label: "Source" }
@@ -6056,6 +6121,7 @@
       height_cm: heightCm,
       weight_kg: weightKg,
       availability_notes: String(formData.get("availabilityNotes") || "").trim(),
+      referred_by: String(formData.get("referredBy") || "").trim(),
       contact_consent: formData.get("contactConsent") === "yes",
       tryout_cycle: "next",
       status: "new",
@@ -6176,7 +6242,7 @@
 
         <div class="tryout-admin-filters">
           <label>Search
-            <input id="tryout-submission-search" value="${escapeAttribute(tryoutSubmissionFilters.search || "")}" placeholder="Name, email, sport, notes" />
+            <input id="tryout-submission-search" value="${escapeAttribute(tryoutSubmissionFilters.search || "")}" placeholder="Name, email, referral, notes" />
           </label>
           ${renderTryoutFilterSelect({
             id: "tryout-filter-uni-wien",
@@ -6247,7 +6313,8 @@
                       ${row.footballExperienceDetails ? `<p><strong>Football:</strong> ${escapeHtml(row.footballExperienceDetails)}</p>` : ""}
                       ${row.otherSports ? `<p><strong>Other sports:</strong> ${escapeHtml(row.otherSports)}</p>` : ""}
                       ${row.availabilityNotes ? `<p><strong>Availability:</strong> ${escapeHtml(row.availabilityNotes)}</p>` : ""}
-                      ${!row.footballExperienceDetails && !row.otherSports && !row.availabilityNotes ? `<p class="meta">No notes</p>` : ""}
+                      ${row.referredBy ? `<p><strong>Referred by / source:</strong> ${escapeHtml(row.referredBy)}</p>` : ""}
+                      ${!row.footballExperienceDetails && !row.otherSports && !row.availabilityNotes && !row.referredBy ? `<p class="meta">No notes</p>` : ""}
                     </details>
                   </td>
                   <td>
@@ -6271,6 +6338,8 @@
   function renderTryout() {
     const tryoutSettings = state.tryoutSettings || DEFAULT_TRYOUT_SETTINGS;
     const canEditTryoutSettings = canManageTryoutSettings();
+    const referralSuggestions = tryoutReferralSuggestions();
+    const referralPrefill = tryoutReferralRouteValue();
     return `
       <section class="tryout-page">
         <div class="tryout-hero">
@@ -6389,6 +6458,13 @@
             <label>Availability or notes
               <textarea name="availabilityNotes" rows="3" placeholder="Training availability, injuries we should know before the tryout, questions, etc."></textarea>
             </label>
+
+            <label>Referred by / How did you hear about us?
+              <input name="referredBy" list="tryout-referral-options" maxlength="255" value="${escapeAttribute(referralPrefill)}" data-referral-prefill="${referralPrefill ? "true" : "false"}" placeholder="Optional - start typing a name or source" autocomplete="off" />
+            </label>
+            <datalist id="tryout-referral-options">
+              ${referralSuggestions.map((suggestion) => `<option value="${escapeAttribute(suggestion)}"></option>`).join("")}
+            </datalist>
 
             <label class="status-check tryout-consent">
               <input type="checkbox" name="contactConsent" value="yes" required />
@@ -8122,6 +8198,10 @@
     `;
   }
 
+  function canManageOrganization() {
+    return Boolean(authState.user) && String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
   function renderOrganization() {
     if (!(authState.user || isLocalPreviewMode())) {
       return `
@@ -8135,7 +8215,7 @@
       `;
     }
     const rows = sortOrganizationRows(state.organization || []);
-    const canEdit = Boolean(authState.user) && currentAccessRole === "admin";
+    const canEdit = canManageOrganization();
     const rootEntry = rows.find((entry) => String(entry.headOf || "").trim().toLowerCase() === "emperors") || rows[0] || null;
     const branchRows = rootEntry ? rows.filter((entry) => String(entry.id) !== String(rootEntry.id)) : rows;
     const renderTaskItems = (tasks) => tasks.length
@@ -8187,7 +8267,7 @@
                   </div>
                 </article>
               `;
-            }).join("") || `<article class="organization-branch"><div class="organization-branch-header">No sections</div><div class="organization-branch-body"><p class="meta">Add your first section once the Appwrite table is ready.</p></div></article>`}
+            }).join("") || `<article class="organization-branch"><div class="organization-branch-header">No sections</div><div class="organization-branch-body"><p class="meta">${canEdit ? "Add the first organization section above." : "No organization sections have been added yet."}</p></div></article>`}
           </div>
         </div>
       </article>
@@ -8195,7 +8275,7 @@
   }
 
   async function saveOrganizationEntry(entry) {
-    if (!authState.user || currentAccessRole !== "admin") {
+    if (!canManageOrganization()) {
       throw new Error("Only admins can update organization entries.");
     }
     const normalized = normalizeOrganizationEntry({
@@ -8217,7 +8297,7 @@
       if (response.error) {
         const message = String(response.error?.message || "");
         if (/authoriz|permission|not authorized|role missing/i.test(message)) {
-          throw new Error("Appwrite denied the write. Please grant create/update/delete permissions on the 'organization' table to authenticated users, then rely on the app's admin-only UI for editing.");
+          throw new Error("Appwrite denied the write. Grant create and update access on the 'organization' table to the admin role.");
         }
         throw response.error;
       }
@@ -8246,7 +8326,7 @@
   }
 
   async function deleteOrganizationEntry(organizationId) {
-    if (!authState.user || currentAccessRole !== "admin") {
+    if (!canManageOrganization()) {
       throw new Error("Only admins can update organization entries.");
     }
     const normalizedId = String(organizationId || "").trim();
@@ -8257,7 +8337,7 @@
       if (response.error) {
         const message = String(response.error?.message || "");
         if (/authoriz|permission|not authorized|role missing/i.test(message)) {
-          throw new Error("Appwrite denied the delete. Please grant delete permissions on the 'organization' table to authenticated users.");
+          throw new Error("Appwrite denied the delete. Grant delete access on the 'organization' table to the admin role.");
         }
         throw response.error;
       }
@@ -8481,6 +8561,7 @@
     }
     if (finalView === "tryout") {
       ensureTryoutSettingsLoaded();
+      ensurePublicRosterLoaded("tryout");
     }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
@@ -8499,6 +8580,7 @@
   function getRouteView() {
     const route = currentRouteToken();
     if (/^user(?:\/|$)/i.test(route)) return "user";
+    if (/^tryout(?:\/|$)/i.test(route)) return "tryout";
     if (/^recovery/i.test(route)) return "recovery";
     
     // Check for recovery token in URL params (both search and hash)
@@ -10862,6 +10944,12 @@
 
     const form = document.getElementById("tryout-form");
     const submitButton = document.getElementById("tryout-submit-button");
+    const referralInput = form?.querySelector('input[name="referredBy"]');
+    if (referralInput) {
+      referralInput.oninput = function () {
+        referralInput.dataset.referralPrefill = "false";
+      };
+    }
     if (form) {
       form.onsubmit = async function (event) {
         event.preventDefault();
@@ -11028,7 +11116,7 @@
     }
     if (addButton) {
       addButton.onclick = function () {
-        if (currentAccessRole !== "admin") return;
+        if (!canManageOrganization()) return;
         openOrganizationDialog(null);
       };
     }
@@ -11054,6 +11142,11 @@
     if (form) {
       form.onsubmit = async function (event) {
         event.preventDefault();
+        if (!canManageOrganization()) {
+          showToast("Only admins can update the organization.", "error");
+          dialog?.close();
+          return;
+        }
         const payload = normalizeOrganizationEntry({
           id: String(form.elements.organizationId.value || organizationDialogEditingId || generateOrganizationId()).trim(),
           headOf: String(form.elements.headOf.value || "").trim(),
@@ -11065,6 +11158,9 @@
           showToast("Section is required.", "error");
           return;
         }
+        const wasEditing = Boolean(organizationDialogEditingId);
+        submitButton.disabled = true;
+        submitButton.textContent = wasEditing ? "Saving changes..." : "Adding section...";
         try {
           await saveOrganizationEntry(payload);
           dialog?.close();
@@ -11074,13 +11170,16 @@
           switchView("organization");
         } catch (error) {
           showToast(error?.message || "Could not save organization section.", "error");
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = wasEditing ? "Save changes" : "Save section";
         }
       };
     }
 
     document.querySelectorAll(".organization-edit-button").forEach((button) => {
       button.onclick = function () {
-        if (currentAccessRole !== "admin") return;
+        if (!canManageOrganization()) return;
         const organizationId = String(button.dataset.organizationId || "").trim();
         const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
         if (!currentRow) return;
@@ -11090,7 +11189,7 @@
 
     document.querySelectorAll(".organization-delete-button").forEach((button) => {
       button.onclick = async function () {
-        if (currentAccessRole !== "admin") return;
+        if (!canManageOrganization()) return;
         const organizationId = String(button.dataset.organizationId || "").trim();
         const currentRow = (state.organization || []).find((row) => String(row.id) === organizationId);
         if (!currentRow) return;

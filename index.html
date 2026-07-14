@@ -313,25 +313,25 @@
         <div class="form-grid">
           <label>
             Section
-            <input name="headOf" placeholder="e.g. Coaching" />
+            <input name="headOf" placeholder="e.g. Coaching" required maxlength="255" />
           </label>
 
           <label>
             Verantwortlicher
-            <input name="verantwortung" list="organization-member-options" placeholder="Name" />
+            <input name="verantwortung" list="organization-member-options" placeholder="Name" maxlength="255" />
           </label>
         </div>
 
         <div class="form-grid">
           <label>
             Co-Verantwortlicher
-            <input name="coVerantwortung" list="organization-member-options" placeholder="Optional" />
+            <input name="coVerantwortung" list="organization-member-options" placeholder="Optional" maxlength="255" />
           </label>
         </div>
 
         <label>
           Aufgaben
-          <textarea name="aufgaben" rows="5" placeholder="One task per line or comma-separated"></textarea>
+          <textarea name="aufgaben" rows="5" maxlength="4096" placeholder="One task per line or comma-separated"></textarea>
         </label>
 
         <div class="dialog-actions">
