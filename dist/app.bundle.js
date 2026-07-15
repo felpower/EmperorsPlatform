@@ -6020,6 +6020,8 @@
         light: "#ffffff"
       }
     });
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
     const context = canvas.getContext("2d");
     applyTryoutQrGradient(canvas, context);
     const logo = await loadTryoutQrLogo();
