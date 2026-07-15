@@ -5844,16 +5844,16 @@
   function loadTryoutSubmissionFilters() {
     try {
       const raw = sessionStorage.getItem(TRYOUT_REGISTRATION_FILTER_KEY);
-      if (!raw) return { search: "", uniWien: "all", experience: "all", status: "all" };
+      if (!raw) return { search: "", uniWien: "all", experience: "all", status: "new" };
       const parsed = JSON.parse(raw);
       return {
         search: String(parsed?.search || ""),
         uniWien: String(parsed?.uniWien || "all"),
         experience: String(parsed?.experience || "all"),
-        status: String(parsed?.status || "all")
+        status: String(parsed?.status || "new")
       };
     } catch {
-      return { search: "", uniWien: "all", experience: "all", status: "all" };
+      return { search: "", uniWien: "all", experience: "all", status: "new" };
     }
   }
 
@@ -5872,7 +5872,33 @@
     return String(currentAccessRole || "").trim().toLowerCase() === "admin";
   }
 
-  function normalizeTryoutInviteUrl(value) {
+  function tryoutReferralMemberName(member) {
+    return String(member?.name || `${member?.firstName || ""} ${member?.lastName || ""}`).trim();
+  }
+
+  function tryoutReferralMemberSlug(member) {
+    return normalizeLookupToken(tryoutReferralMemberName(member));
+  }
+
+  function activeReferralMembers() {
+    return (state.members || []).filter((member) => !member.deletedAt && member.membershipStatus !== "inactive");
+  }
+
+  function findTryoutReferralMember(value) {
+    const lookup = normalizeLookupToken(value);
+    if (!lookup) return { member: null, matches: [] };
+    const matches = activeReferralMembers().filter((member) => {
+      const fallback = splitNameParts(member.name || "");
+      const firstName = String(member.firstName || fallback.firstName || "").trim();
+      const lastName = String(member.lastName || fallback.lastName || "").trim();
+      const fullName = tryoutReferralMemberName(member);
+      const tokens = [fullName, firstName, lastName, tryoutReferralMemberSlug(member)];
+      return tokens.some((token) => normalizeLookupToken(token) === lookup);
+    });
+    return { member: matches.length === 1 ? matches[0] : null, matches };
+  }
+
+  function normalizeTryoutInviteUrl(value, options = {}) {
     const raw = String(value || "").trim();
     if (!raw) throw new Error("Enter a referral name, slug, or tryout URL.");
     let routeValue = raw;
@@ -5908,9 +5934,21 @@
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
     if (!slug) throw new Error("The referral name must contain letters or numbers.");
+    let matchedMember = null;
+    if (options.requireMember) {
+      const match = findTryoutReferralMember(decodedRoute);
+      if (!match.matches.length) {
+        throw new Error("No active member matches that referral name.");
+      }
+      if (match.matches.length > 1) {
+        throw new Error(`Referral name is ambiguous. Use the full name: ${match.matches.map(tryoutReferralMemberName).join(", ")}.`);
+      }
+      matchedMember = match.member;
+    }
     return {
       slug,
-      url: `https://emperors.page/tryout/${slug}`
+      url: `https://emperors.page/tryout/${slug}`,
+      member: matchedMember
     };
   }
 
@@ -6013,34 +6051,9 @@
   function renderTryoutQrGenerator() {
     if (!canGenerateTryoutQr()) return "";
     return `
-      <section class="tryout-qr-panel setup-card">
-        <div class="tryout-admin-head">
-          <div>
-            <p class="eyebrow">Admin tool</p>
-            <h3>Tryout QR code</h3>
-          </div>
-        </div>
-        <div class="tryout-qr-layout">
-          <form id="tryout-qr-form" class="tryout-qr-controls">
-            <label>Referral name or invite URL
-              <input id="tryout-qr-input" value="${escapeAttribute(tryoutQrDraft)}" placeholder="felbauer or emperors.page/tryout/felbauer" autocomplete="off" required />
-            </label>
-            <button type="submit" class="primary-button" id="tryout-qr-generate">Generate QR code</button>
-            <label>Generated URL
-              <input id="tryout-qr-url" value="${escapeAttribute(tryoutQrGeneratedUrl)}" readonly />
-            </label>
-            <div class="button-row">
-              <button type="button" class="ghost-button" id="tryout-qr-copy" ${tryoutQrGeneratedUrl ? "" : "disabled"}>Copy URL</button>
-              <button type="button" class="ghost-button" id="tryout-qr-download" ${tryoutQrGeneratedUrl ? "" : "disabled"}>Download PNG</button>
-            </div>
-            <p id="tryout-qr-status" class="tryout-form-status" aria-live="polite">${escapeHtml(tryoutQrStatus)}</p>
-          </form>
-          <div class="tryout-qr-preview" aria-label="Generated tryout QR code preview">
-            <canvas id="tryout-qr-canvas" width="720" height="720" ${tryoutQrGeneratedUrl ? "" : "hidden"}></canvas>
-            <p id="tryout-qr-placeholder" class="meta" ${tryoutQrGeneratedUrl ? "hidden" : ""}>QR preview</p>
-          </div>
-        </div>
-      </section>
+      <div class="tryout-admin-actions">
+        <button type="button" class="ghost-button" id="open-tryout-qr-dialog">Generate QR code</button>
+      </div>
     `;
   }
 
@@ -6116,9 +6129,8 @@
 
   function tryoutReferralSuggestions() {
     return Array.from(new Set([
-      ...(state.members || [])
-        .filter((member) => !member.deletedAt && member.membershipStatus !== "inactive")
-        .map((member) => String(member.name || `${member.firstName || ""} ${member.lastName || ""}`).trim())
+      ...activeReferralMembers()
+        .map(tryoutReferralMemberName)
         .filter(Boolean),
       "Instagram",
       "University website",
@@ -6129,17 +6141,9 @@
   function tryoutReferralRouteValue() {
     const slug = tryoutReferralRouteSlug();
     if (!slug) return "";
-    const lookup = normalizeLookupToken(slug);
-    const matchedMember = (state.members || []).find((member) => {
-      if (member.deletedAt || member.membershipStatus === "inactive") return false;
-      const fallback = splitNameParts(member.name || "");
-      const firstName = String(member.firstName || fallback.firstName || "").trim();
-      const lastName = String(member.lastName || fallback.lastName || "").trim();
-      const fullName = String(member.name || `${firstName} ${lastName}`).trim();
-      return [fullName, firstName, lastName].some((value) => normalizeLookupToken(value) === lookup);
-    });
-    if (matchedMember) {
-      return String(matchedMember.name || `${matchedMember.firstName || ""} ${matchedMember.lastName || ""}`).trim();
+    const match = findTryoutReferralMember(slug);
+    if (match.member) {
+      return tryoutReferralMemberName(match.member);
     }
     return slug
       .replace(/[-_]+/g, " ")
@@ -6210,7 +6214,7 @@
     const search = String(tryoutSubmissionFilters.search || "").trim().toLowerCase();
     const uniWien = String(tryoutSubmissionFilters.uniWien || "all").trim();
     const experience = String(tryoutSubmissionFilters.experience || "all").trim();
-    const status = String(tryoutSubmissionFilters.status || "all").trim();
+    const status = String(tryoutSubmissionFilters.status || "new").trim();
     return sortedTryoutSubmissions().filter((row) => {
       if (uniWien !== "all" && row.uniWienStudent !== uniWien) return false;
       if (experience !== "all" && row.footballExperience !== experience) return false;
@@ -7828,27 +7832,57 @@
       }));
   }
 
-  function renderBracketTeamSlot({ teamName = "", teamLogo = "", seedLabel = "", note = "", isWinnerSlot = false } = {}) {
+  function renderBracketTeamSlot({ teamName = "", teamLogo = "", seedLabel = "", note = "", score = null, isWinner = false, isWinnerSlot = false } = {}) {
     const normalizedName = String(teamName || "").trim();
     const normalizedSeed = String(seedLabel || "").trim();
     const label = normalizedName || "TBD";
+    const scoreLabel = Number.isFinite(score) ? String(score) : "";
     return `
-      <div class="playoff-team-slot ${isWinnerSlot ? "is-winner-slot" : ""}">
+      <div class="playoff-team-slot ${isWinnerSlot ? "is-winner-slot" : ""} ${isWinner ? "is-result-winner" : ""}">
         <div class="playoff-team-slot-main">
           ${teamLogo
             ? renderLazyImage({ src: teamLogo, alt: label, className: "playoff-team-logo", wrapperClass: "game-logo-lazy-media" })
             : `<div class="playoff-team-logo playoff-team-logo-fallback">${escapeHtml((normalizedName || normalizedSeed || "?").slice(0, 1))}</div>`}
-          <div>
+          <div class="playoff-team-slot-copy">
             <strong>${escapeHtml(label)}</strong>
             <div class="meta">${escapeHtml(normalizedSeed || (isWinnerSlot ? "Winner slot" : "Team"))}</div>
           </div>
+          ${scoreLabel ? `<strong class="playoff-team-score">${escapeHtml(scoreLabel)}</strong>` : ""}
         </div>
         ${note ? `<div class="meta playoff-team-slot-note">${escapeHtml(note)}</div>` : ""}
       </div>
     `;
   }
 
-  function buildPlayoffBracketViewModel() {
+  function bracketTeamFromGame(game, side, seedLabel) {
+    const isHome = side === "home";
+    const teamName = String((isHome ? game?.homeTeam?.name : game?.awayTeam?.name) || "").trim();
+    const score = Number(isHome ? game?.homeScore : game?.awayScore);
+    const opponentScore = Number(isHome ? game?.awayScore : game?.homeScore);
+    return {
+      teamName,
+      teamLogo: teamLogoUrl(teamName),
+      seedLabel,
+      score: Number.isFinite(score) ? score : null,
+      isWinner: Number.isFinite(score) && Number.isFinite(opponentScore) && score > opponentScore
+    };
+  }
+
+  function bracketMatchFromGame(game, { title, subtitle, homeSeedLabel = "", awaySeedLabel = "" } = {}) {
+    return {
+      title,
+      subtitle: game?.subtitle || subtitle || "",
+      displayDateTime: formatDateTime(game?.startsAt || ""),
+      venue: [game?.venueName, game?.venueCity].map((value) => String(value || "").trim()).filter(Boolean).join(" · "),
+      streamLink: String(game?.streamLink || "").trim(),
+      teams: [
+        bracketTeamFromGame(game, "home", homeSeedLabel),
+        bracketTeamFromGame(game, "away", awaySeedLabel)
+      ]
+    };
+  }
+
+  function buildSeededPlayoffBracketViewModel() {
     const ranked = buildRankedStandingsViewModel();
     const byRank = (rank) => ranked.find((row) => row.rank === rank) || null;
     const byId = (id) => LEAGUE_GAMES_SNAPSHOT.find((game) => String(game.id || "") === id) || null;
@@ -7913,6 +7947,61 @@
         venue: venueLabel(thirdPlace),
         streamLink: String(thirdPlace?.streamLink || "").trim()
       }
+    };
+  }
+
+  function buildPlayoffBracketViewModel() {
+    const ranked = buildRankedStandingsViewModel();
+    const byRank = (rank) => ranked.find((row) => row.rank === rank) || null;
+    const byId = (id) => LEAGUE_GAMES_SNAPSHOT.find((game) => String(game.id || "") === id) || null;
+    const wildcardOne = byId("g-2026-05-23-wildcard-1");
+    const wildcardTwo = byId("g-2026-05-23-wildcard-2");
+    const semiOne = byId("g-2026-06-06-semi-1");
+    const semiTwo = byId("g-2026-06-06-semi-2");
+    const thirdPlace = byId("g-2026-06-27-third-place");
+    const final = byId("g-2026-06-27-final");
+
+    return {
+      wildcardGames: [
+        bracketMatchFromGame(wildcardOne, {
+          title: "Wildcard 1",
+          subtitle: wildcardOne?.subtitle || "ACSL #3 vs #6",
+          homeSeedLabel: byRank(3) ? `Seed #${byRank(3).rank}` : "Seed #3",
+          awaySeedLabel: byRank(6) ? `Seed #${byRank(6).rank}` : "Seed #6"
+        }),
+        bracketMatchFromGame(wildcardTwo, {
+          title: "Wildcard 2",
+          subtitle: wildcardTwo?.subtitle || "ACSL #4 vs #5",
+          homeSeedLabel: byRank(4) ? `Seed #${byRank(4).rank}` : "Seed #4",
+          awaySeedLabel: byRank(5) ? `Seed #${byRank(5).rank}` : "Seed #5"
+        })
+      ],
+      semifinalGames: [
+        bracketMatchFromGame(semiOne, {
+          title: "Semifinal 1",
+          subtitle: semiOne?.subtitle || "ACSL #1 vs lowest remaining seed",
+          homeSeedLabel: byRank(1) ? `Seed #${byRank(1).rank}` : "Seed #1",
+          awaySeedLabel: "Wildcard winner"
+        }),
+        bracketMatchFromGame(semiTwo, {
+          title: "Semifinal 2",
+          subtitle: semiTwo?.subtitle || "ACSL #2 vs highest remaining seed",
+          homeSeedLabel: "Wildcard winner",
+          awaySeedLabel: byRank(2) ? `Seed #${byRank(2).rank}` : "Seed #2"
+        })
+      ],
+      finalGame: bracketMatchFromGame(final, {
+        title: "Final",
+        subtitle: final?.subtitle || "ACSL Summer Bowl",
+        homeSeedLabel: "Winner SF2",
+        awaySeedLabel: "Winner SF1"
+      }),
+      thirdPlaceGame: bracketMatchFromGame(thirdPlace, {
+        title: "3rd Place",
+        subtitle: thirdPlace?.subtitle || "ACSL Spiel um Platz 3",
+        homeSeedLabel: "Loser SF1",
+        awaySeedLabel: "Loser SF2"
+      })
     };
   }
 
@@ -7992,8 +8081,7 @@
                     <div class="meta">${escapeHtml(game.displayDateTime)}</div>
                   </div>
                   <div class="playoff-team-stack">
-                    ${renderBracketTeamSlot({ teamName: game.topSeed?.teamName || "", teamLogo: game.topSeed?.teamLogo || "", seedLabel: game.topSeed ? `Seed #${game.topSeed.rank}` : "Seed #3" })}
-                    ${renderBracketTeamSlot({ teamName: game.bottomSeed?.teamName || "", teamLogo: game.bottomSeed?.teamLogo || "", seedLabel: game.bottomSeed ? `Seed #${game.bottomSeed.rank}` : "Seed #6" })}
+                    ${game.teams.map((team) => renderBracketTeamSlot(team)).join("")}
                   </div>
                   <div class="pill-row">
                     ${game.venue ? plainPill(game.venue) : ""}
@@ -8019,8 +8107,7 @@
                     <div class="meta">${escapeHtml(game.displayDateTime)}</div>
                   </div>
                   <div class="playoff-team-stack">
-                    ${renderBracketTeamSlot({ teamName: game.lockedSeed?.teamName || "", teamLogo: game.lockedSeed?.teamLogo || "", seedLabel: game.lockedSeed ? `Seed #${game.lockedSeed.rank}` : "" })}
-                    ${renderBracketTeamSlot({ teamName: "Wildcard Winner", seedLabel: "Seed decided after Wildcard", note: game.winnerNote, isWinnerSlot: true })}
+                    ${game.teams.map((team) => renderBracketTeamSlot(team)).join("")}
                   </div>
                   <div class="pill-row">
                     ${game.venue ? plainPill(game.venue) : ""}
@@ -8045,8 +8132,7 @@
                   <div class="meta">${escapeHtml(bracket.finalGame.displayDateTime)}</div>
                 </div>
                 <div class="playoff-team-stack">
-                  ${renderBracketTeamSlot({ teamName: "Semifinal Winner", seedLabel: "Winner SF1", isWinnerSlot: true })}
-                  ${renderBracketTeamSlot({ teamName: "Semifinal Winner", seedLabel: "Winner SF2", isWinnerSlot: true })}
+                  ${bracket.finalGame.teams.map((team) => renderBracketTeamSlot(team)).join("")}
                 </div>
                 <div class="pill-row">
                   ${bracket.finalGame.venue ? plainPill(bracket.finalGame.venue) : ""}
@@ -8062,8 +8148,7 @@
                   <div class="meta">${escapeHtml(bracket.thirdPlaceGame.displayDateTime)}</div>
                 </div>
                 <div class="playoff-team-stack">
-                  ${renderBracketTeamSlot({ teamName: "Semifinal Loser", seedLabel: "Loser SF1", isWinnerSlot: true })}
-                  ${renderBracketTeamSlot({ teamName: "Semifinal Loser", seedLabel: "Loser SF2", isWinnerSlot: true })}
+                  ${bracket.thirdPlaceGame.teams.map((team) => renderBracketTeamSlot(team)).join("")}
                 </div>
                 <div class="pill-row">
                   ${bracket.thirdPlaceGame.venue ? plainPill(bracket.thirdPlaceGame.venue) : ""}
@@ -11078,31 +11163,82 @@
   }
 
   function bindTryoutActions() {
+    const qrDialog = document.getElementById("tryout-qr-dialog");
+    const qrOpenButton = document.getElementById("open-tryout-qr-dialog");
+    const qrCloseButton = document.getElementById("tryout-qr-dialog-close");
+    const qrReferralOptions = document.getElementById("tryout-qr-referral-options");
     const qrForm = document.getElementById("tryout-qr-form");
     const qrInput = document.getElementById("tryout-qr-input");
     const qrGenerateButton = document.getElementById("tryout-qr-generate");
     const qrStatus = document.getElementById("tryout-qr-status");
+    const qrUrlOutput = document.getElementById("tryout-qr-url");
+    if (qrReferralOptions) {
+      qrReferralOptions.innerHTML = activeReferralMembers()
+        .map(tryoutReferralMemberName)
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))
+        .map((suggestion) => `<option value="${escapeAttribute(suggestion)}"></option>`)
+        .join("");
+    }
+    if (qrOpenButton && qrDialog) {
+      qrOpenButton.onclick = function () {
+        if (qrInput) qrInput.value = tryoutQrDraft;
+        if (qrUrlOutput) qrUrlOutput.value = tryoutQrGeneratedUrl;
+        if (qrStatus) {
+          qrStatus.textContent = tryoutQrStatus;
+          qrStatus.className = `tryout-form-status ${tryoutQrGeneratedUrl && tryoutQrStatus ? "success" : ""}`.trim();
+        }
+        qrDialog.showModal();
+        qrInput?.focus();
+      };
+    }
+    if (qrCloseButton && qrDialog) {
+      qrCloseButton.onclick = function () {
+        qrDialog.close();
+      };
+    }
+    if (qrDialog) {
+      qrDialog.onclick = function (event) {
+        if (event.target === qrDialog) {
+          qrDialog.close();
+        }
+      };
+    }
     if (qrInput) {
       qrInput.oninput = function () {
         tryoutQrDraft = String(qrInput.value || "");
+        tryoutQrGeneratedUrl = "";
+        tryoutQrStatus = "";
+        if (qrUrlOutput) qrUrlOutput.value = "";
+        document.getElementById("tryout-qr-copy")?.setAttribute("disabled", "");
+        document.getElementById("tryout-qr-download")?.setAttribute("disabled", "");
+        const canvas = document.getElementById("tryout-qr-canvas");
+        const placeholder = document.getElementById("tryout-qr-placeholder");
+        if (canvas) canvas.hidden = true;
+        if (placeholder) placeholder.hidden = false;
+        if (qrStatus) {
+          qrStatus.textContent = "";
+          qrStatus.className = "tryout-form-status";
+        }
       };
     }
     if (qrForm) {
       qrForm.onsubmit = async function (event) {
         event.preventDefault();
         if (!canGenerateTryoutQr()) return;
-        qrGenerateButton.disabled = true;
-        qrGenerateButton.textContent = "Generating...";
+        if (qrGenerateButton) {
+          qrGenerateButton.disabled = true;
+          qrGenerateButton.textContent = "Generating...";
+        }
         try {
-          const invite = normalizeTryoutInviteUrl(qrInput.value);
+          const invite = normalizeTryoutInviteUrl(qrInput.value, { requireMember: true });
           tryoutQrDraft = String(qrInput.value || "");
           tryoutQrGeneratedUrl = invite.url;
-          const urlOutput = document.getElementById("tryout-qr-url");
-          if (urlOutput) urlOutput.value = invite.url;
+          if (qrUrlOutput) qrUrlOutput.value = invite.url;
           await renderTryoutQrCode(invite.url);
           document.getElementById("tryout-qr-copy")?.removeAttribute("disabled");
           document.getElementById("tryout-qr-download")?.removeAttribute("disabled");
-          tryoutQrStatus = "QR code ready.";
+          tryoutQrStatus = `QR code ready for ${tryoutReferralMemberName(invite.member)}.`;
           if (qrStatus) {
             qrStatus.textContent = tryoutQrStatus;
             qrStatus.className = "tryout-form-status success";
@@ -11114,12 +11250,14 @@
             qrStatus.className = "tryout-form-status error";
           }
         } finally {
-          qrGenerateButton.disabled = false;
-          qrGenerateButton.textContent = "Generate QR code";
+          if (qrGenerateButton) {
+            qrGenerateButton.disabled = false;
+            qrGenerateButton.textContent = "Generate QR code";
+          }
         }
       };
     }
-    if (tryoutQrGeneratedUrl) {
+    if (tryoutQrGeneratedUrl && qrDialog?.open) {
       renderTryoutQrCode(tryoutQrGeneratedUrl).catch((error) => {
         tryoutQrStatus = error?.message || "Could not restore the QR code preview.";
       });

@@ -1168,6 +1168,14 @@ button {
   margin-top: 16px;
 }
 
+.tryout-qr-dialog {
+  width: min(640px, calc(100vw - 24px));
+}
+
+.tryout-qr-form {
+  gap: 16px;
+}
+
 .tryout-qr-layout {
   display: grid;
   grid-template-columns: minmax(0, 340px) 180px;
@@ -1566,10 +1574,26 @@ button {
   border-style: dashed;
 }
 
+.playoff-team-slot.is-result-winner {
+  border-color: rgba(246, 195, 22, 0.72);
+  background: linear-gradient(135deg, rgba(246, 195, 22, 0.16), rgba(255, 255, 255, 0.92));
+}
+
 .playoff-team-slot-main {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.playoff-team-slot-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.playoff-team-score {
+  margin-left: auto;
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .playoff-team-logo {

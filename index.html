@@ -348,6 +348,40 @@
       </form>
     </dialog>
 
+    <dialog id="tryout-qr-dialog" class="dialog tryout-qr-dialog">
+      <form method="post" id="tryout-qr-form" class="dialog-form tryout-qr-form" novalidate>
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Admin tool</p>
+            <h3>Tryout QR code</h3>
+          </div>
+          <button class="ghost-icon" id="tryout-qr-dialog-close" type="button" value="cancel" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="tryout-qr-layout">
+          <div class="tryout-qr-controls">
+            <label>Referral member
+              <input id="tryout-qr-input" list="tryout-qr-referral-options" value="" placeholder="felbauer or Patrick Felbauer" autocomplete="off" required />
+            </label>
+            <button type="submit" class="primary-button" id="tryout-qr-generate">Generate QR code</button>
+            <label>Generated URL
+              <input id="tryout-qr-url" value="" readonly />
+            </label>
+            <div class="button-row">
+              <button type="button" class="ghost-button" id="tryout-qr-copy" disabled>Copy URL</button>
+              <button type="button" class="ghost-button" id="tryout-qr-download" disabled>Download PNG</button>
+            </div>
+            <p id="tryout-qr-status" class="tryout-form-status" aria-live="polite"></p>
+          </div>
+          <div class="tryout-qr-preview" aria-label="Generated tryout QR code preview">
+            <canvas id="tryout-qr-canvas" width="720" height="720" hidden></canvas>
+            <p id="tryout-qr-placeholder" class="meta">QR preview</p>
+          </div>
+        </div>
+        <datalist id="tryout-qr-referral-options"></datalist>
+      </form>
+    </dialog>
+
     <dialog id="equipment-photo-dialog" class="dialog equipment-photo-dialog">
       <div class="dialog-form">
         <div class="dialog-header">
