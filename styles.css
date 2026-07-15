@@ -1162,6 +1162,70 @@ button {
   gap: 16px;
 }
 
+.tryout-qr-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.tryout-qr-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) 180px;
+  gap: 18px;
+  align-items: start;
+  justify-content: start;
+}
+
+.tryout-qr-controls {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  max-width: 340px;
+}
+
+.tryout-qr-controls label {
+  max-width: 340px;
+}
+
+.tryout-qr-controls input {
+  width: 100%;
+}
+
+.tryout-qr-controls .primary-button {
+  justify-self: start;
+}
+
+.tryout-qr-controls .button-row {
+  gap: 8px;
+}
+
+.tryout-qr-controls .ghost-button,
+.tryout-qr-controls .primary-button {
+  padding: 10px 14px;
+}
+
+.tryout-qr-preview {
+  width: 180px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tryout-qr-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tryout-qr-preview canvas[hidden],
+.tryout-qr-preview [hidden] {
+  display: none;
+}
+
 .tryout-admin-head {
   display: flex;
   justify-content: space-between;
@@ -2210,6 +2274,14 @@ code {
 
   .tryout-admin-filters {
     grid-template-columns: 1fr;
+  }
+
+  .tryout-qr-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tryout-qr-preview {
+    width: 180px;
   }
 
   .playoff-bracket-columns {

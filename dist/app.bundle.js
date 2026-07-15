@@ -309,6 +309,9 @@
   let tryoutSubmissionsStatus = "";
   let tryoutSubmissionsLoading = false;
   let tryoutSubmissionsLoadedAt = 0;
+  let tryoutQrDraft = "";
+  let tryoutQrGeneratedUrl = "";
+  let tryoutQrStatus = "";
   let tryoutSubmissionFilters = loadTryoutSubmissionFilters();
   let tryoutSettingsLoadPromise = null;
   let tryoutSettingsLoadAttempted = false;
@@ -5864,6 +5867,183 @@
     return role === "admin" || role === "coach";
   }
 
+  function canGenerateTryoutQr() {
+    if (!(authState.user || isLocalPreviewMode())) return false;
+    return String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
+  function normalizeTryoutInviteUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) throw new Error("Enter a referral name, slug, or tryout URL.");
+    let routeValue = raw;
+    if (/^https?:\/\//i.test(raw)) {
+      let parsed;
+      try {
+        parsed = new URL(raw);
+      } catch {
+        throw new Error("Enter a valid tryout URL.");
+      }
+      const host = String(parsed.hostname || "").toLowerCase();
+      if (host !== "emperors.page" && host !== "www.emperors.page") {
+        throw new Error("The invite URL must use emperors.page.");
+      }
+      routeValue = parsed.pathname;
+    }
+    const cleanedRoute = String(routeValue || "")
+      .replace(/^\/+|\/+$/g, "")
+      .replace(/^tryout\//i, "");
+    let decodedRoute = cleanedRoute;
+    try {
+      decodedRoute = decodeURIComponent(cleanedRoute);
+    } catch {
+      throw new Error("The referral part of the URL is invalid.");
+    }
+    if (!decodedRoute || decodedRoute.includes("/")) {
+      throw new Error("Use one referral name after /tryout/.");
+    }
+    const slug = decodedRoute
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (!slug) throw new Error("The referral name must contain letters or numbers.");
+    return {
+      slug,
+      url: `https://emperors.page/tryout/${slug}`
+    };
+  }
+
+  function loadTryoutQrLogo() {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Could not load the Emperors logo."));
+      image.src = "/assets/emperors-mark.png";
+    });
+  }
+
+  function drawRoundedCanvasRect(context, x, y, width, height, radius) {
+    const safeRadius = Math.min(radius, width / 2, height / 2);
+    context.beginPath();
+    context.moveTo(x + safeRadius, y);
+    context.arcTo(x + width, y, x + width, y + height, safeRadius);
+    context.arcTo(x + width, y + height, x, y + height, safeRadius);
+    context.arcTo(x, y + height, x, y, safeRadius);
+    context.arcTo(x, y, x + width, y, safeRadius);
+    context.closePath();
+  }
+
+  function applyTryoutQrGradient(canvas, context) {
+    const width = canvas.width;
+    const height = canvas.height;
+    const source = context.getImageData(0, 0, width, height);
+    const blue = [84, 184, 229];
+    const gold = [246, 195, 22];
+
+    for (let index = 0; index < source.data.length; index += 4) {
+      const red = source.data[index];
+      const green = source.data[index + 1];
+      const sourceBlue = source.data[index + 2];
+      const alpha = source.data[index + 3];
+      const isDarkModule = alpha > 0 && red < 128 && green < 128 && sourceBlue < 128;
+      if (isDarkModule) {
+        const pixel = index / 4;
+        const x = pixel % width;
+        const y = Math.floor(pixel / width);
+        const mix = (x + y) / (width + height);
+        source.data[index] = Math.round(blue[0] + (gold[0] - blue[0]) * mix);
+        source.data[index + 1] = Math.round(blue[1] + (gold[1] - blue[1]) * mix);
+        source.data[index + 2] = Math.round(blue[2] + (gold[2] - blue[2]) * mix);
+      } else {
+        source.data[index] = 255;
+        source.data[index + 1] = 255;
+        source.data[index + 2] = 255;
+        source.data[index + 3] = 255;
+      }
+    }
+
+    context.putImageData(source, 0, 0);
+  }
+
+  async function renderTryoutQrCode(inviteUrl) {
+    if (!canGenerateTryoutQr()) throw new Error("Only admins can generate tryout QR codes.");
+    if (!window.QRCode || typeof window.QRCode.toCanvas !== "function") {
+      throw new Error("The QR code generator could not be loaded.");
+    }
+    const canvas = document.getElementById("tryout-qr-canvas");
+    if (!canvas) return;
+    await window.QRCode.toCanvas(canvas, inviteUrl, {
+      width: 720,
+      margin: 4,
+      errorCorrectionLevel: "H",
+      color: {
+        dark: "#111918",
+        light: "#ffffff"
+      }
+    });
+    const context = canvas.getContext("2d");
+    applyTryoutQrGradient(canvas, context);
+    const logo = await loadTryoutQrLogo();
+    const plateSize = Math.round(canvas.width * 0.2);
+    const plateX = Math.round((canvas.width - plateSize) / 2);
+    const plateY = Math.round((canvas.height - plateSize) / 2);
+    context.save();
+    context.fillStyle = "#ffffff";
+    drawRoundedCanvasRect(context, plateX, plateY, plateSize, plateSize, Math.round(plateSize * 0.12));
+    context.fill();
+    const maxLogoWidth = plateSize * 0.78;
+    const maxLogoHeight = plateSize * 0.78;
+    const logoScale = Math.min(maxLogoWidth / logo.naturalWidth, maxLogoHeight / logo.naturalHeight);
+    const logoWidth = logo.naturalWidth * logoScale;
+    const logoHeight = logo.naturalHeight * logoScale;
+    context.drawImage(
+      logo,
+      plateX + (plateSize - logoWidth) / 2,
+      plateY + (plateSize - logoHeight) / 2,
+      logoWidth,
+      logoHeight
+    );
+    context.restore();
+    canvas.hidden = false;
+    const placeholder = document.getElementById("tryout-qr-placeholder");
+    if (placeholder) placeholder.hidden = true;
+  }
+
+  function renderTryoutQrGenerator() {
+    if (!canGenerateTryoutQr()) return "";
+    return `
+      <section class="tryout-qr-panel setup-card">
+        <div class="tryout-admin-head">
+          <div>
+            <p class="eyebrow">Admin tool</p>
+            <h3>Tryout QR code</h3>
+          </div>
+        </div>
+        <div class="tryout-qr-layout">
+          <form id="tryout-qr-form" class="tryout-qr-controls">
+            <label>Referral name or invite URL
+              <input id="tryout-qr-input" value="${escapeAttribute(tryoutQrDraft)}" placeholder="felbauer or emperors.page/tryout/felbauer" autocomplete="off" required />
+            </label>
+            <button type="submit" class="primary-button" id="tryout-qr-generate">Generate QR code</button>
+            <label>Generated URL
+              <input id="tryout-qr-url" value="${escapeAttribute(tryoutQrGeneratedUrl)}" readonly />
+            </label>
+            <div class="button-row">
+              <button type="button" class="ghost-button" id="tryout-qr-copy" ${tryoutQrGeneratedUrl ? "" : "disabled"}>Copy URL</button>
+              <button type="button" class="ghost-button" id="tryout-qr-download" ${tryoutQrGeneratedUrl ? "" : "disabled"}>Download PNG</button>
+            </div>
+            <p id="tryout-qr-status" class="tryout-form-status" aria-live="polite">${escapeHtml(tryoutQrStatus)}</p>
+          </form>
+          <div class="tryout-qr-preview" aria-label="Generated tryout QR code preview">
+            <canvas id="tryout-qr-canvas" width="720" height="720" ${tryoutQrGeneratedUrl ? "" : "hidden"}></canvas>
+            <p id="tryout-qr-placeholder" class="meta" ${tryoutQrGeneratedUrl ? "hidden" : ""}>QR preview</p>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   function tryoutValue(row, ...keys) {
     return publicRosterField(row, ...keys);
   }
@@ -6261,7 +6441,7 @@
           ${renderTryoutFilterSelect({
             id: "tryout-filter-status",
             label: "Status",
-            value: tryoutSubmissionFilters.status || "all",
+            value: tryoutSubmissionFilters.status || "new",
             options: statusOptions,
             kind: "status"
           })}
@@ -6501,6 +6681,7 @@
             </article>
           </aside>
         </div>
+        ${renderTryoutQrGenerator()}
         ${renderTryoutSubmissionsPanel()}
       </section>
     `;
@@ -10897,6 +11078,78 @@
   }
 
   function bindTryoutActions() {
+    const qrForm = document.getElementById("tryout-qr-form");
+    const qrInput = document.getElementById("tryout-qr-input");
+    const qrGenerateButton = document.getElementById("tryout-qr-generate");
+    const qrStatus = document.getElementById("tryout-qr-status");
+    if (qrInput) {
+      qrInput.oninput = function () {
+        tryoutQrDraft = String(qrInput.value || "");
+      };
+    }
+    if (qrForm) {
+      qrForm.onsubmit = async function (event) {
+        event.preventDefault();
+        if (!canGenerateTryoutQr()) return;
+        qrGenerateButton.disabled = true;
+        qrGenerateButton.textContent = "Generating...";
+        try {
+          const invite = normalizeTryoutInviteUrl(qrInput.value);
+          tryoutQrDraft = String(qrInput.value || "");
+          tryoutQrGeneratedUrl = invite.url;
+          const urlOutput = document.getElementById("tryout-qr-url");
+          if (urlOutput) urlOutput.value = invite.url;
+          await renderTryoutQrCode(invite.url);
+          document.getElementById("tryout-qr-copy")?.removeAttribute("disabled");
+          document.getElementById("tryout-qr-download")?.removeAttribute("disabled");
+          tryoutQrStatus = "QR code ready.";
+          if (qrStatus) {
+            qrStatus.textContent = tryoutQrStatus;
+            qrStatus.className = "tryout-form-status success";
+          }
+        } catch (error) {
+          tryoutQrStatus = error?.message || "Could not generate the QR code.";
+          if (qrStatus) {
+            qrStatus.textContent = tryoutQrStatus;
+            qrStatus.className = "tryout-form-status error";
+          }
+        } finally {
+          qrGenerateButton.disabled = false;
+          qrGenerateButton.textContent = "Generate QR code";
+        }
+      };
+    }
+    if (tryoutQrGeneratedUrl) {
+      renderTryoutQrCode(tryoutQrGeneratedUrl).catch((error) => {
+        tryoutQrStatus = error?.message || "Could not restore the QR code preview.";
+      });
+    }
+    const qrCopyButton = document.getElementById("tryout-qr-copy");
+    if (qrCopyButton) {
+      qrCopyButton.onclick = async function () {
+        if (!tryoutQrGeneratedUrl) return;
+        try {
+          await navigator.clipboard.writeText(tryoutQrGeneratedUrl);
+          showToast("Tryout URL copied.", "success");
+        } catch {
+          const output = document.getElementById("tryout-qr-url");
+          output?.select();
+          showToast("Select and copy the tryout URL.", "info");
+        }
+      };
+    }
+    const qrDownloadButton = document.getElementById("tryout-qr-download");
+    if (qrDownloadButton) {
+      qrDownloadButton.onclick = function () {
+        if (!tryoutQrGeneratedUrl) return;
+        const canvas = document.getElementById("tryout-qr-canvas");
+        const slug = normalizeTryoutInviteUrl(tryoutQrGeneratedUrl).slug;
+        canvas?.toBlob((blob) => {
+          if (blob) downloadBlobFile(blob, "image/png", `emperors-tryout-${slug}.png`);
+        }, "image/png");
+      };
+    }
+
     const editButton = document.getElementById("tryout-date-edit-button");
     if (editButton) {
       editButton.onclick = function () {
