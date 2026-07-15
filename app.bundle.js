@@ -6261,7 +6261,7 @@
           ${renderTryoutFilterSelect({
             id: "tryout-filter-status",
             label: "Status",
-            value: tryoutSubmissionFilters.status || "all",
+            value: tryoutSubmissionFilters.status || "new",
             options: statusOptions,
             kind: "status"
           })}

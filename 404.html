@@ -6,11 +6,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
 
-  <title>404 | Uni Wien Emperors</title>
+  <title>Uni Wien Emperors | American Football in Vienna</title>
   <meta
     name="description"
-    content="Page not found on the Uni Wien Emperors website."
+    content="Tryouts, roster, games and club information for the Uni Wien Emperors American Football team."
   />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Uni Wien Emperors" />
+  <meta property="og:title" content="Uni Wien Emperors | American Football in Vienna" />
+  <meta property="og:description" content="Tryouts, roster, games and club information for the Uni Wien Emperors American Football team." />
+  <meta property="og:url" content="https://emperors.page/" />
+  <meta property="og:image" content="https://emperors.page/assets/emperors-social-card.jpg" />
+  <meta property="og:image:secure_url" content="https://emperors.page/assets/emperors-social-card.jpg" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Uni Wien Emperors American Football in Vienna" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Uni Wien Emperors | American Football in Vienna" />
+  <meta name="twitter:description" content="Tryouts, roster, games and club information for the Uni Wien Emperors American Football team." />
+  <meta name="twitter:image" content="https://emperors.page/assets/emperors-social-card.jpg" />
   <script>
     (function () {
       var route = String(window.location.pathname || "").replace(/^\/+|\/+$/g, "");
@@ -32,6 +47,7 @@
       ];
       var isAppRoute = appRoutes.indexOf(route) !== -1 || /^(?:user|tryout)\//i.test(route);
       if (!isAppRoute) return;
+      document.documentElement.classList.add("app-route-loading");
       fetch("/index.html", { cache: "no-cache" })
         .then(function (response) {
           if (!response.ok) throw new Error("Could not load app shell.");
@@ -42,7 +58,9 @@
           document.write(html);
           document.close();
         })
-        .catch(function () {});
+        .catch(function () {
+          document.documentElement.classList.remove("app-route-loading");
+        });
     }());
   </script>
 
@@ -58,6 +76,14 @@
 
     * {
       box-sizing: border-box;
+    }
+
+    html.app-route-loading {
+      background: #171d1d;
+    }
+
+    html.app-route-loading body {
+      visibility: hidden;
     }
 
     html,
