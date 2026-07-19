@@ -1302,6 +1302,115 @@ button {
   font-weight: 700;
 }
 
+.contact-page {
+  display: grid;
+  gap: 18px;
+}
+
+.contact-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px;
+  gap: 18px;
+  align-items: center;
+  padding: 24px;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(21, 27, 28, 0.97), rgba(42, 50, 52, 0.96)),
+    linear-gradient(90deg, rgba(84, 184, 229, 0.2), rgba(246, 195, 22, 0.16));
+  color: #f7fafc;
+  box-shadow: var(--shadow);
+}
+
+.contact-hero h2 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(2rem, 4vw, 3.35rem);
+  line-height: 0.98;
+}
+
+.contact-hero p {
+  margin: 10px 0 0;
+  max-width: 780px;
+  color: rgba(247, 250, 252, 0.78);
+  line-height: 1.45;
+}
+
+.contact-hero-mark {
+  width: 116px;
+  height: 116px;
+  object-fit: contain;
+  justify-self: end;
+  filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.26));
+}
+
+.contact-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.55fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.contact-form {
+  display: grid;
+  gap: 16px;
+  position: relative;
+}
+
+.contact-honeypot {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.contact-privacy-note {
+  margin: -6px 0 0;
+}
+
+.contact-privacy-note a {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.contact-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.contact-form-status {
+  margin: 0;
+  min-height: 20px;
+  color: #5b676c;
+}
+
+.contact-form-status.success {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.contact-form-status.error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.contact-info {
+  display: grid;
+  gap: 12px;
+}
+
+.contact-direct-card {
+  overflow-wrap: anywhere;
+}
+
+.contact-direct-card .ghost-button {
+  justify-self: start;
+  margin-top: 12px;
+  text-decoration: none;
+}
+
 .game-score {
   display: inline-flex;
   align-items: center;
@@ -2279,15 +2388,25 @@ code {
   }
 
   .tryout-hero,
-  .tryout-layout {
+  .tryout-layout,
+  .contact-hero,
+  .contact-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .tryout-hero {
+  .tryout-hero,
+  .contact-hero {
     padding: 20px;
   }
 
-  .tryout-form-actions {
+  .contact-hero-mark {
+    width: 88px;
+    height: 88px;
+    justify-self: start;
+  }
+
+  .tryout-form-actions,
+  .contact-form-actions {
     align-items: stretch;
     flex-direction: column;
   }

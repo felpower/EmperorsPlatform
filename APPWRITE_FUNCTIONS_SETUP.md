@@ -5,6 +5,7 @@ This project now uses Appwrite Functions for the server-side tasks that should n
 ## Functions In Repo
 
 - Invite/account provisioning: `index.js`
+- Contact form email: `appwrite/functions/contact-email/index.js`
 - SEPA export: `appwrite/functions/sepa-export/index.js`
 
 ## Invite Function
@@ -31,6 +32,39 @@ Required environment variables:
 Recommended:
 
 - set execution permissions so your signed-in admins can run it
+
+## Contact Email Function
+
+Purpose:
+
+- receive the public contact form submission
+- send an email notification to `p.felbauer@emperors.at`
+- keep email provider secrets out of frontend files
+
+Frontend config key:
+
+- `contactFunctionId`
+
+Required environment variables:
+
+- `CONTACT_RECIPIENT_EMAIL` defaults to `p.felbauer@emperors.at`
+- either `RESEND_API_KEY` or `CONTACT_WEBHOOK_URL`
+
+Required for Resend delivery:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+
+Optional environment variables:
+
+- `CONTACT_FROM_EMAIL`
+- `CONTACT_SUBJECT_PREFIX`
+
+Notes:
+
+- deploy the function with public execute permission if anonymous visitors should be able to use the contact form
+- `RESEND_FROM_EMAIL` must be a sender/domain verified in Resend
+- `CONTACT_WEBHOOK_URL` can point to a Make, Zapier, or custom webhook that sends the email
 
 ## SEPA Export Function
 
@@ -87,6 +121,8 @@ In Appwrite Console:
 `src/appwrite-config.js` now supports:
 
 - `inviteFunctionId`
+- `contactFunctionId`
+- `contactRecipientEmail`
 - `passSyncFunctionId`
 - `sepaExportFunctionId`
 
@@ -95,5 +131,6 @@ If a function ID is blank, that feature will fall back only where a local/API pa
 ## Recommended Production Setup
 
 - invites via Appwrite Function
+- contact notifications via Appwrite Function
 - SEPA export via Appwrite Function
 - pass sync via Appwrite Function if you want GitHub Pages to handle it without a separate backend
