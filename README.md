@@ -117,7 +117,8 @@ Production with GitHub Pages:
 
 - deploy `appwrite/functions/contact-email/index.js`
 - set `contactFunctionId` in `src/appwrite-config.js`
-- configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL`, or set `CONTACT_WEBHOOK_URL`
+- preferably reuse Mailgun with `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM_EMAIL`
+- alternatively configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL`, or set `CONTACT_WEBHOOK_URL`
 
 Local/server deployments can also use `POST /api/contact` from `server.mjs` with:
 

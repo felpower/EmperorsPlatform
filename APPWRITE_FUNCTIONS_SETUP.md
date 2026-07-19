@@ -48,7 +48,17 @@ Frontend config key:
 Required environment variables:
 
 - `CONTACT_RECIPIENT_EMAIL` defaults to `p.felbauer@emperors.at`
-- either `RESEND_API_KEY` or `CONTACT_WEBHOOK_URL`
+- one delivery provider: Mailgun, Resend, or `CONTACT_WEBHOOK_URL`
+
+Required for Mailgun delivery:
+
+- `MAILGUN_API_KEY`
+- `MAILGUN_DOMAIN`
+- `MAILGUN_FROM_EMAIL`
+
+Optional for Mailgun delivery:
+
+- `MAILGUN_API_BASE_URL` defaults to the EU endpoint `https://api.eu.mailgun.net`; use `https://api.mailgun.net` for a US-region Mailgun domain
 
 Required for Resend delivery:
 
@@ -63,6 +73,7 @@ Optional environment variables:
 Notes:
 
 - deploy the function with public execute permission if anonymous visitors should be able to use the contact form
+- Mailgun can reuse the same verified sending domain as the invite email setup; its API key remains an Appwrite secret
 - `RESEND_FROM_EMAIL` must be a sender/domain verified in Resend
 - `CONTACT_WEBHOOK_URL` can point to a Make, Zapier, or custom webhook that sends the email
 

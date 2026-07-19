@@ -12,6 +12,10 @@ const CONTACT_SUBJECT_TYPE_LABELS = {
 module.exports = async ({ req, res, log }) => {
   const recipientEmail = String(process.env.CONTACT_RECIPIENT_EMAIL || "p.felbauer@emperors.at").trim();
   const subjectPrefix = String(process.env.CONTACT_SUBJECT_PREFIX || "Emperors Contact").trim();
+  const mailgunApiKey = String(process.env.MAILGUN_API_KEY || "").trim();
+  const mailgunDomain = String(process.env.MAILGUN_DOMAIN || "").trim();
+  const mailgunFromEmail = String(process.env.MAILGUN_FROM_EMAIL || process.env.CONTACT_FROM_EMAIL || "").trim();
+  const mailgunApiBaseUrl = String(process.env.MAILGUN_API_BASE_URL || "https://api.eu.mailgun.net").trim().replace(/\/+$/, "");
   const resendApiKey = String(process.env.RESEND_API_KEY || "").trim();
   const resendFromEmail = String(process.env.RESEND_FROM_EMAIL || process.env.CONTACT_FROM_EMAIL || recipientEmail).trim();
   const webhookUrl = String(process.env.CONTACT_WEBHOOK_URL || "").trim();
@@ -157,6 +161,33 @@ module.exports = async ({ req, res, log }) => {
     return { provider: "resend", id: String(payload?.id || "") };
   };
 
+  const sendViaMailgun = async (submission) => {
+    if (!mailgunDomain || !mailgunFromEmail) {
+      throw new Error("MAILGUN_DOMAIN and MAILGUN_FROM_EMAIL are required when MAILGUN_API_KEY is set.");
+    }
+
+    const form = new FormData();
+    form.set("from", mailgunFromEmail);
+    form.set("to", recipientEmail);
+    form.set("h:Reply-To", submission.senderEmail);
+    form.set("subject", notificationSubject(submission));
+    form.set("text", notificationText(submission));
+    form.set("html", notificationHtml(submission));
+
+    const response = await fetch(`${mailgunApiBaseUrl}/v3/${encodeURIComponent(mailgunDomain)}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${mailgunApiKey}`).toString("base64")}`
+      },
+      body: form
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(String(payload?.message || `Mailgun failed (${response.status}).`));
+    }
+    return { provider: "mailgun", id: String(payload?.id || "") };
+  };
+
   const sendViaWebhook = async (submission) => {
     const response = await fetch(webhookUrl, {
       method: "POST",
@@ -188,12 +219,14 @@ module.exports = async ({ req, res, log }) => {
     }
 
     let delivery = null;
-    if (resendApiKey) {
+    if (mailgunApiKey) {
+      delivery = await sendViaMailgun(submission);
+    } else if (resendApiKey) {
       delivery = await sendViaResend(submission);
     } else if (webhookUrl) {
       delivery = await sendViaWebhook(submission);
     } else {
-      return fail("Contact email delivery is not configured. Set RESEND_API_KEY or CONTACT_WEBHOOK_URL.", 500);
+      return fail("Contact email delivery is not configured. Set MAILGUN_API_KEY, RESEND_API_KEY, or CONTACT_WEBHOOK_URL.", 500);
     }
 
     log(`Contact email sent to ${recipientEmail} via ${delivery.provider}.`);
