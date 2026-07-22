@@ -1411,6 +1411,109 @@ button {
   text-decoration: none;
 }
 
+.sponsors-page {
+  display: grid;
+  gap: 18px;
+}
+
+.landing-page {
+  display: grid;
+  gap: 18px;
+}
+
+.landing-hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.landing-hero-actions .primary-button,
+.landing-hero-actions .ghost-button {
+  text-decoration: none;
+}
+
+.landing-tryout-teaser {
+  margin: 14px 0 0;
+  color: rgba(247, 250, 252, 0.85);
+}
+
+.landing-tryout-teaser strong {
+  color: var(--brand-2);
+}
+
+.landing-quicklinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.landing-quicklinks a {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+}
+
+.landing-quicklinks a:hover {
+  border-color: var(--brand-3);
+}
+
+.sponsor-tiers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
+.sponsor-tier-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.sponsor-tier-card.featured {
+  border-color: var(--brand-2);
+  box-shadow: 0 20px 45px rgba(246, 195, 22, 0.22);
+}
+
+.sponsor-tier-price {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.sponsor-tier-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #3d474a;
+}
+
+.sponsor-tier-card .primary-button {
+  justify-self: start;
+  text-decoration: none;
+}
+
+.sponsor-custom-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sponsor-custom-card .ghost-button {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .game-score {
   display: inline-flex;
   align-items: center;
@@ -2390,8 +2493,14 @@ code {
   .tryout-hero,
   .tryout-layout,
   .contact-hero,
-  .contact-layout {
+  .contact-layout,
+  .sponsor-tiers {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sponsor-custom-card {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .tryout-hero,

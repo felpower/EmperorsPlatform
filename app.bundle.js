@@ -252,7 +252,43 @@
     { value: "website", label: "Website or Data Issue" },
     { value: "other", label: "Other" }
   ];
-  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const SPONSOR_TIERS = [
+    {
+      name: "Bronze",
+      price: "€150 / season",
+      tagline: "A simple way for local businesses to back the team.",
+      benefits: [
+        "Logo on the club website sponsors page",
+        "Shoutout on our social media channels",
+        "Mention in the matchday program"
+      ]
+    },
+    {
+      name: "Silver",
+      price: "€400 / season",
+      tagline: "Solid visibility at every home game.",
+      benefits: [
+        "Everything in Bronze",
+        "Stadium banner at home games",
+        "Logo on sideline/team materials",
+        "Two tickets to a home game with sideline access"
+      ],
+      featured: true
+    },
+    {
+      name: "Gold",
+      price: "€900 / season",
+      tagline: "Our top partnership tier.",
+      benefits: [
+        "Everything in Silver",
+        "Jersey or helmet patch",
+        "Dedicated social media feature post",
+        "Named partner in press/media requests",
+        "Invitation to team events"
+      ]
+    }
+  ];
+  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "sponsors", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -1852,7 +1888,7 @@
       }
       recoveryState.status = "Password set successfully! Redirecting...";
       setTimeout(() => {
-        navigateToRoute("dashboard");
+        navigateToRoute("dashboard", { query: "login=1" });
         mount();
       }, 1500);
     } catch (error) {
@@ -5297,9 +5333,39 @@
       </div>
     `;
   }
+  function renderPublicLanding() {
+    const tryoutSettings = state.tryoutSettings || DEFAULT_TRYOUT_SETTINGS;
+    return `
+      <section class="landing-page">
+        <div class="contact-hero">
+          <div>
+            <p class="eyebrow">Uni Wien Emperors</p>
+            <h2>American Football in Vienna</h2>
+            <p>We are the University of Vienna's American football team. No experience needed &mdash; come to a tryout and see what it's like.</p>
+            <div class="landing-hero-actions">
+              <a class="primary-button" href="/tryout">Join a tryout</a>
+              <a class="ghost-button" href="/?login=1">Team &amp; staff login</a>
+            </div>
+            ${tryoutSettings?.date ? `<p class="landing-tryout-teaser">Next tryout: <strong>${escapeHtml(formatDate(tryoutSettings.date))}</strong></p>` : ""}
+          </div>
+          <img src="./assets/emperors-mark.png" alt="" class="contact-hero-mark" loading="lazy" />
+        </div>
+
+        <nav class="landing-quicklinks" aria-label="Explore the team">
+          <a href="/roster">Roster</a>
+          <a href="/hall-of-fame">Hall of Fame</a>
+          <a href="/events">Games</a>
+          <a href="/sponsors">Sponsors</a>
+        </nav>
+      </section>
+    `;
+  }
+
   function renderDashboard() {
     if (shouldRequireAuth() && !authState.user) {
-      return renderAuthGate();
+      const wantsLogin = new URLSearchParams(window.location.search).get("login") === "1";
+      if (wantsLogin) return renderAuthGate();
+      return renderPublicLanding();
     }
     const userMember = signedInMemberRecord();
     const quarterToken = currentQuarterToken();
@@ -6877,14 +6943,20 @@
     return CONTACT_SUBJECT_TYPES.find((option) => option.value === normalized)?.label || normalized || "General Question";
   }
 
-  function renderContactSubjectOptions() {
+  function renderContactSubjectOptions(selectedValue) {
     return CONTACT_SUBJECT_TYPES
-      .map((option) => `<option value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</option>`)
+      .map((option) => `<option value="${escapeAttribute(option.value)}"${option.value === selectedValue ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
       .join("");
   }
 
   function renderContact() {
     const recipientEmail = CONTACT_RECIPIENT_EMAIL || "p.felbauer@emperors.at";
+    const contactQueryParams = new URLSearchParams(window.location.search);
+    const prefillTopic = String(contactQueryParams.get("topic") || "").trim();
+    const prefillTier = String(contactQueryParams.get("tier") || "").trim();
+    const prefillSubject = prefillTopic === "sponsorship" && prefillTier
+      ? `${prefillTier.charAt(0).toUpperCase()}${prefillTier.slice(1)} tier sponsorship`
+      : "";
     return `
       <section class="contact-page">
         <div class="contact-hero">
@@ -6920,12 +6992,12 @@
             <label>Topic
               <select name="subjectType" required>
                 <option value="">Select one</option>
-                ${renderContactSubjectOptions()}
+                ${renderContactSubjectOptions(prefillTopic)}
               </select>
             </label>
 
             <label>Subject
-              <input name="subject" maxlength="140" required placeholder="Short summary" />
+              <input name="subject" maxlength="140" required placeholder="Short summary" value="${escapeAttribute(prefillSubject)}" />
             </label>
 
             <label>Message
@@ -6958,6 +7030,45 @@
             </article>
           </aside>
         </div>
+      </section>
+    `;
+  }
+
+  function renderSponsors() {
+    return `
+      <section class="sponsors-page">
+        <div class="contact-hero">
+          <div>
+            <p class="eyebrow">Sponsorship</p>
+            <h2>Back the Emperors</h2>
+            <p>We can't offer merch drops, but we can offer real visibility with Vienna's student and American football community &mdash; at games, online and in our matchday materials. Pick a tier below or talk to us about a custom partnership.</p>
+          </div>
+          <img src="./assets/emperors-mark.png" alt="" class="contact-hero-mark" loading="lazy" />
+        </div>
+
+        <div class="sponsor-tiers">
+          ${SPONSOR_TIERS.map((tier) => `
+            <article class="setup-card sponsor-tier-card${tier.featured ? " featured" : ""}">
+              <p class="eyebrow">${tier.featured ? "Most popular" : "Tier"}</p>
+              <h3>${escapeHtml(tier.name)}</h3>
+              <p class="sponsor-tier-price">${escapeHtml(tier.price)}</p>
+              <p class="muted">${escapeHtml(tier.tagline)}</p>
+              <ul class="sponsor-tier-list">
+                ${tier.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join("")}
+              </ul>
+              <a class="primary-button" href="/contact?topic=sponsorship&amp;tier=${encodeURIComponent(tier.name.toLowerCase())}">Ask about ${escapeHtml(tier.name)}</a>
+            </article>
+          `).join("")}
+        </div>
+
+        <article class="setup-card sponsor-custom-card">
+          <div>
+            <p class="eyebrow">Custom</p>
+            <h3>Something else in mind?</h3>
+            <p class="muted">Equipment sponsorship, one-off event support or a multi-year partnership &mdash; tell us what works for you and we will figure out the details together.</p>
+          </div>
+          <a class="ghost-button" href="/contact?topic=sponsorship">Contact us about sponsoring</a>
+        </article>
       </section>
     `;
   }
@@ -9031,7 +9142,7 @@
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "contact" || normalizedViewId === "events";
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "contact" || normalizedViewId === "sponsors" || normalizedViewId === "events";
   }
 
   function canAccessView(viewId) {
@@ -9123,7 +9234,7 @@
             switchView("user");
             return;
           }
-          navigateToRoute("dashboard");
+          navigateToRoute("dashboard", { query: "login=1" });
           mount();
           switchView("dashboard");
           const emailInput = document.getElementById("auth-email");
@@ -9197,8 +9308,65 @@
     window.addEventListener("popstate", closeMenu);
   }
 
+  const ROUTE_SEO = {
+    dashboard: {
+      path: "/",
+      title: "Uni Wien Emperors – American Football Team der Universität Wien | Tryouts, Roster & Games",
+      description: "Uni Wien Emperors – das American-Football-Team der Universität Wien. Tryout-Anmeldung, Roster, Spielplan, Hall of Fame und Team-Organisation. Join the Emperors and play American football in Vienna!"
+    },
+    tryout: {
+      path: "/tryout",
+      title: "Tryout – Uni Wien Emperors American Football",
+      description: "Register for a Uni Wien Emperors tryout. No experience required — join American football training in Vienna and see if the team is right for you."
+    },
+    roster: {
+      path: "/roster",
+      title: "Roster – Uni Wien Emperors American Football",
+      description: "Meet the current roster of the Uni Wien Emperors, the University of Vienna's American football team."
+    },
+    "hall-of-fame": {
+      path: "/hall-of-fame",
+      title: "Hall of Fame – Uni Wien Emperors American Football",
+      description: "Celebrating standout players and alumni of the Uni Wien Emperors American football team."
+    },
+    events: {
+      path: "/events",
+      title: "Games – Uni Wien Emperors American Football",
+      description: "Upcoming and past games for the Uni Wien Emperors American football team in Vienna."
+    },
+    contact: {
+      path: "/contact",
+      title: "Contact – Uni Wien Emperors American Football",
+      description: "Get in touch with the Uni Wien Emperors — questions, sponsorship ideas, media requests or event topics."
+    },
+    sponsors: {
+      path: "/sponsors",
+      title: "Sponsorship – Uni Wien Emperors American Football",
+      description: "Sponsor the Uni Wien Emperors American football team. Tiered sponsorship packages for local businesses in Vienna."
+    }
+  };
+
+  function updateSeoMeta(viewId) {
+    const info = ROUTE_SEO[viewId] || ROUTE_SEO.dashboard;
+    const fullUrl = `https://emperors.page${info.path}`;
+    document.title = info.title;
+    const setMetaContent = (selector, value) => {
+      const el = document.querySelector(selector);
+      if (el) el.setAttribute("content", value);
+    };
+    setMetaContent('meta[name="description"]', info.description);
+    setMetaContent('meta[property="og:title"]', info.title);
+    setMetaContent('meta[property="og:description"]', info.description);
+    setMetaContent('meta[property="og:url"]', fullUrl);
+    setMetaContent('meta[name="twitter:title"]', info.title);
+    setMetaContent('meta[name="twitter:description"]', info.description);
+    const canonicalLink = document.querySelector('link[rel="canonical"]');
+    if (canonicalLink) canonicalLink.setAttribute("href", fullUrl);
+  }
+
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
+    updateSeoMeta(finalView);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
     }
@@ -10622,7 +10790,7 @@
     const backToSignInButton = document.getElementById("recovery-back-to-sign-in");
     if (backToSignInButton) {
       backToSignInButton.onclick = function () {
-        navigateToRoute("dashboard");
+        navigateToRoute("dashboard", { query: "login=1" });
         mount();
       };
     }
@@ -12090,23 +12258,28 @@
       selectedFeeMemberIds = selectedFeeMemberIds.filter((memberId) => visibleIds.has(String(memberId)));
       renderHeroNotice();
       bindLocalPreviewActions();
-      document.getElementById("dashboard").innerHTML = renderDashboard();
+      const setViewHtml = (viewId, html) => {
+        const section = document.getElementById(viewId);
+        if (section) section.innerHTML = html;
+      };
+      setViewHtml("dashboard", renderDashboard());
       bindDashboardActions();
-      document.getElementById("roster").innerHTML = renderRoster();
-      document.getElementById("hall-of-fame").innerHTML = renderHallOfFame();
-      document.getElementById("tryout").innerHTML = renderTryout();
-      document.getElementById("contact").innerHTML = renderContact();
-      document.getElementById("members").innerHTML = renderMembers();
-      document.getElementById("fees").innerHTML = renderFees();
-      document.getElementById("user").innerHTML = renderUserPage();
-      document.getElementById("passes").innerHTML = renderPasses();
-      document.getElementById("organization").innerHTML = renderOrganization();
-      document.getElementById("equipment").innerHTML = renderEquipment();
-      document.getElementById("pass-sync").innerHTML = renderPassSyncReview();
-      document.getElementById("events").innerHTML = renderGamesBoard();
-      document.getElementById("invites").innerHTML = renderInvites();
-      document.getElementById("settings").innerHTML = renderSettings();
-      document.getElementById("recovery").innerHTML = renderRecoveryGate();
+      setViewHtml("roster", renderRoster());
+      setViewHtml("hall-of-fame", renderHallOfFame());
+      setViewHtml("tryout", renderTryout());
+      setViewHtml("contact", renderContact());
+      setViewHtml("sponsors", renderSponsors());
+      setViewHtml("members", renderMembers());
+      setViewHtml("fees", renderFees());
+      setViewHtml("user", renderUserPage());
+      setViewHtml("passes", renderPasses());
+      setViewHtml("organization", renderOrganization());
+      setViewHtml("equipment", renderEquipment());
+      setViewHtml("pass-sync", renderPassSyncReview());
+      setViewHtml("events", renderGamesBoard());
+      setViewHtml("invites", renderInvites());
+      setViewHtml("settings", renderSettings());
+      setViewHtml("recovery", renderRecoveryGate());
       bindMemberActions();
       bindTryoutActions();
       bindContactActions();

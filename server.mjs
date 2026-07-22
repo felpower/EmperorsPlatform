@@ -41,6 +41,10 @@ let localDbApi = null;
 let localDbUnavailableReason = "";
 const contactRateLimitBuckets = new Map();
 
+function isLocalDbEnabled() {
+  return Boolean(localDbApi);
+}
+
 async function initializeOptionalLocalDatabase() {
   if (!ENABLE_LOCAL_DB) {
     localDbUnavailableReason = "ENABLE_LOCAL_DB is disabled for this deployment.";
@@ -1487,7 +1491,7 @@ app.get("/api/status", (req, res) => {
     localDb: {
       enabled: localDbStatus,
       available: localDbApi ? true : false,
-      reason: localDbAvailableReason || ""
+      reason: localDbUnavailableReason || ""
     },
     appwrite: {
       endpoint: APPWRITE_ENDPOINT,
@@ -1504,7 +1508,7 @@ app.get("/api/status", (req, res) => {
 });
 
 if (SERVE_STATIC_FRONTEND) {
-  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|contact|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
+  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|contact|sponsors|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
   app.get(appRoutePattern, (_req, res) => {
     res.sendFile(path.join(__dirname, "index.html"));
   });
