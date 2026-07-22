@@ -87,21 +87,9 @@ http://localhost:4173
 
 Local development still supports the Node server for convenience, including API-backed tasks like SEPA export and Clubee pass sync preview/apply.
 
-## Build
-
-Create the static frontend bundle:
-
-```bash
-npm run build
-```
-
-This writes the deployable frontend to:
-
-- `dist/`
-
 ## GitHub Pages
 
-Deploy the frontend from `dist/` or via your existing GitHub Actions workflow.
+There is no build step. `.github/workflows/deploy-pages.yml` deploys the repo root directly to GitHub Pages on every push to `main` (`app.bundle.js`, `index.html`, `styles.css`, `src/`, `assets/`, etc. are served as-is).
 
 For GitHub Pages production:
 

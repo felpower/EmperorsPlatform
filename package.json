@@ -3,11 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "build": "node scripts/build.mjs",
     "start": "node server.mjs",
     "setup:appwrite": "node scripts/setup-appwrite-collections.mjs",
     "auth:create-user": "node scripts/create-appwrite-auth-user.mjs",
-    "backfill:members-iban": "node scripts/backfill-members-iban-from-fees.mjs",
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
     "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
     "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs",
@@ -16,8 +14,6 @@
   "dependencies": {
     "csv-parse": "^6.2.1",
     "express": "^5.2.1",
-    "qrcode": "^1.5.4",
-    "rg": "^0.0.2",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"
   }

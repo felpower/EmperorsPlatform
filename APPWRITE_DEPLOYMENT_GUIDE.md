@@ -37,17 +37,9 @@ Set the Appwrite values for your real project:
 
 `apiBaseUrl` is optional now and should only be used if you intentionally still run the Node server somewhere.
 
-## 2. Build Frontend
+## 2. Deploy Frontend
 
-```bash
-npm run build
-```
-
-Deploy the contents of:
-
-- `dist/`
-
-to GitHub Pages.
+There is no build step. `.github/workflows/deploy-pages.yml` deploys the repo root directly to GitHub Pages on every push to `main`.
 
 ## 3. Appwrite Permissions
 
