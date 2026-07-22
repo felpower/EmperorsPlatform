@@ -297,6 +297,7 @@
   let feeEditMode = false;
   let feeInlineEditId = null;
   let memberMergeMode = false;
+  let memberInlineDrafts = new Map();
   let memberFiltersExpanded = false;
   let feeFiltersExpanded = false;
   let passFiltersExpanded = false;
@@ -2663,6 +2664,109 @@
       if (side === "both" || entrySide === "both") return true;
       return side === entrySide;
     }) || null;
+  }
+
+  function memberInlineRowInputs(memberId) {
+    const id = String(memberId || "");
+    return {
+      firstNameInput: document.querySelector(`.member-inline-first-name[data-member-id="${id}"]`),
+      lastNameInput: document.querySelector(`.member-inline-last-name[data-member-id="${id}"]`),
+      emailInput: document.querySelector(`.member-inline-email[data-member-id="${id}"]`),
+      jerseyInput: document.querySelector(`.member-inline-jersey[data-member-id="${id}"]`),
+      sideInput: document.querySelector(`.member-inline-side[data-member-id="${id}"]`),
+      loanJerseyInput: document.querySelector(`.member-inline-loan-jersey[data-member-id="${id}"]`),
+      membershipInput: document.querySelector(`.member-inline-membership[data-member-id="${id}"]`),
+      passStatusInput: document.querySelector(`.member-inline-pass-status[data-member-id="${id}"]`),
+      passExpiryInput: document.querySelector(`.member-inline-pass-expiry[data-member-id="${id}"]`)
+    };
+  }
+
+  function memberInlineSelectedValues(memberId, kind) {
+    const id = String(memberId || "");
+    return Array.from(document.querySelectorAll(`.member-inline-option[data-member-id="${id}"][data-member-multi="${kind}"]:checked`))
+      .map((input) => String(input.value || "").trim())
+      .filter(Boolean);
+  }
+
+  function updateMemberSaveAllButton() {
+    const button = document.getElementById("save-all-member-changes");
+    if (!button) return;
+    const count = memberInlineDrafts.size;
+    button.disabled = count === 0;
+    button.textContent = count ? `Save all changes (${count})` : "Save all changes";
+  }
+
+  function captureMemberInlineDraft(memberId) {
+    const id = String(memberId || "");
+    if (!id) return;
+    const inputs = memberInlineRowInputs(id);
+    if (!inputs.firstNameInput || !inputs.lastNameInput || !inputs.emailInput || !inputs.jerseyInput || !inputs.sideInput || !inputs.loanJerseyInput || !inputs.membershipInput || !inputs.passStatusInput || !inputs.passExpiryInput) {
+      return;
+    }
+    memberInlineDrafts.set(id, {
+      firstName: inputs.firstNameInput.value,
+      lastName: inputs.lastNameInput.value,
+      email: inputs.emailInput.value,
+      jerseyNumber: inputs.jerseyInput.value,
+      sideOfBall: inputs.sideInput.value,
+      loanJersey: inputs.loanJerseyInput.checked,
+      membershipStatus: inputs.membershipInput.value,
+      passStatus: inputs.passStatusInput.value,
+      passExpiry: inputs.passExpiryInput.value,
+      positions: memberInlineSelectedValues(id, "positions").map((value) => value.toUpperCase()),
+      roles: memberInlineSelectedValues(id, "roles")
+    });
+    updateMemberSaveAllButton();
+    const row = inputs.firstNameInput.closest("tr");
+    if (row) row.classList.add("member-inline-row-dirty");
+  }
+
+  function confirmDiscardMemberChanges(actionLabel) {
+    const count = memberInlineDrafts.size;
+    if (!count) return true;
+    return window.confirm(`You have ${count} unsaved member change${count === 1 ? "" : "s"}. Are you sure you want to ${actionLabel}?`);
+  }
+
+  function isMembersViewActive() {
+    const section = document.getElementById("members");
+    return Boolean(section && section.classList.contains("active"));
+  }
+
+  async function saveMemberInlineRow(memberId) {
+    const id = String(memberId || "");
+    const member = memberById(id);
+    if (!member) return { ok: false, name: "", error: new Error("Member not found.") };
+    const inputs = memberInlineRowInputs(id);
+    if (!inputs.firstNameInput || !inputs.lastNameInput || !inputs.emailInput || !inputs.jerseyInput || !inputs.sideInput || !inputs.loanJerseyInput || !inputs.membershipInput || !inputs.passStatusInput || !inputs.passExpiryInput) {
+      return { ok: false, name: member.name, error: new Error("Could not save this row because required inline fields are missing. Try reopening Members view.") };
+    }
+    const selectedPositions = memberInlineSelectedValues(id, "positions").map((value) => value.toUpperCase());
+    const selectedRoles = memberInlineSelectedValues(id, "roles");
+    const normalizedPassStatus = String(inputs.passStatusInput.value || "missing").trim().toLowerCase();
+    const normalizedPassExpiry = normalizedPassStatus === "missing"
+      ? ""
+      : normalizeToIsoDate(inputs.passExpiryInput.value || member.passExpiry || "");
+    try {
+      await saveMember({
+        memberId: id,
+        firstName: String(inputs.firstNameInput.value || "").trim(),
+        lastName: String(inputs.lastNameInput.value || "").trim(),
+        email: String(inputs.emailInput.value || "").trim(),
+        positions: Array.from(new Set(selectedPositions)),
+        roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
+        jerseyNumber: String(inputs.jerseyInput.value || "").trim(),
+        sideOfBall: String(inputs.sideInput.value || "").trim(),
+        loanJersey: Boolean(inputs.loanJerseyInput.checked),
+        membershipStatus: String(inputs.membershipInput.value || "active").trim(),
+        passStatus: normalizedPassStatus,
+        passExpiry: normalizedPassExpiry,
+        notes: member.notes || ""
+      });
+      memberInlineDrafts.delete(id);
+      return { ok: true, name: member.name, error: null };
+    } catch (error) {
+      return { ok: false, name: member.name, error };
+    }
   }
 
   function signedInUserEmail() {
@@ -6943,8 +7047,12 @@
     const mergeControls = currentAccessRole === "admin"
       ? `<button class="ghost-button" id="toggle-member-admin-mode" type="button">${memberMergeMode ? "Disable admin mode" : "Enable admin mode"}</button>`
       : "";
+    const dirtyMemberCount = memberInlineDrafts.size;
+    const saveAllButton = adminActionsEnabled
+      ? `<button class="primary-button" id="save-all-member-changes" type="button" ${dirtyMemberCount ? "" : "disabled"}>Save all changes${dirtyMemberCount ? ` (${dirtyMemberCount})` : ""}</button>`
+      : "";
     const mergeHint = currentAccessRole === "admin"
-      ? `<p class="muted">${memberMergeMode ? "Admin mode is active. Merge and deleted-member tools are enabled." : "Enable admin mode for critical tools like merge and deleted-member visibility."}</p>`
+      ? `<p class="muted">${memberMergeMode ? "Admin mode is active. Edit as many rows as you like, then use “Save all changes” (or a row's own Save button) to persist them." : "Enable admin mode for critical tools like merge and deleted-member visibility."}${adminActionsEnabled && dirtyMemberCount ? ` <strong>${dirtyMemberCount} row${dirtyMemberCount === 1 ? "" : "s"} have unsaved changes.</strong>` : ""}</p>`
       : "";
     const showMergeButton = adminActionsEnabled;
     const showMemberIdColumn = showMergeButton;
@@ -6974,6 +7082,7 @@
             </div>
           </details>
           ${canManageMembers ? `<button class="primary-button" id="open-member-dialog" type="button">Add member</button>` : ""}
+          ${saveAllButton}
           ${mergeControls}
         </div>
       </div>
@@ -7050,54 +7159,68 @@
         <table>
           <thead><tr>${showProfileColumn ? `<th>Profile</th>` : ""}${showMemberIdColumn ? `<th>${renderSortButton("members", "id", "ID")}</th>` : ""}<th>${renderSortButton("members", "firstName", "First name")}</th><th>${renderSortButton("members", "lastName", "Last name")}</th><th>Positions</th><th>Roles</th><th>${renderSortButton("members", "jerseyNumber", "Jersey")}</th><th>Side</th><th>Leihjersey</th>${canSeeSensitiveMemberColumns ? `<th>Membership</th><th>${renderSortButton("members", "passStatus", "Pass")}</th>` : ""}${showActionColumn ? `<th>Actions</th>` : ""}</tr></thead>
           <tbody>
-            ${rows.map((member) => `
-              <tr>
+            ${rows.map((member) => {
+              const draft = memberInlineDrafts.get(String(member.id));
+              const rowIsDirty = Boolean(draft);
+              const draftFirstName = draft ? draft.firstName : (member.firstName || "");
+              const draftLastName = draft ? draft.lastName : (member.lastName || "");
+              const draftEmail = draft ? draft.email : (member.email || "");
+              const draftJersey = draft ? draft.jerseyNumber : (member.jerseyNumber ?? "");
+              const draftSide = draft ? draft.sideOfBall : (member.sideOfBall || "");
+              const draftLoanJersey = draft ? draft.loanJersey : Boolean(member.loanJersey);
+              const draftMembership = draft ? draft.membershipStatus : (member.membershipStatus || "active");
+              const draftPassStatus = draft ? draft.passStatus : displayPassStatus(member.passStatus);
+              const draftPassExpiry = draft ? draft.passExpiry : (normalizeToIsoDate(member.passExpiry) || "");
+              const draftPositions = draft ? draft.positions : (member.positions || []);
+              const draftRoles = draft ? draft.roles : (member.roles || []);
+              return `
+              <tr class="${rowIsDirty ? "member-inline-row-dirty" : ""}">
                 ${showProfileColumn ? `<td><button class="ghost-button small-button profile-icon-button open-user-page-button" type="button" data-member-id="${member.id}" aria-label="Open profile"></button></td>` : ""}
                 ${showMemberIdColumn ? `<td><span class="meta">${member.id}</span></td>` : ""}
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${escapeAttribute(member.firstName || "")}" />`
+                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${escapeAttribute(draftFirstName)}" />`
                     : `<strong>${escapeHtml(member.firstName || "-")}</strong>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${escapeAttribute(member.lastName || "")}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${escapeAttribute(member.email || "")}" placeholder="email" /></div>`
+                    ? `<input class="member-inline-input member-inline-last-name" data-member-id="${member.id}" value="${escapeAttribute(draftLastName)}" /><div class="meta"><input class="member-inline-input member-inline-email" data-member-id="${member.id}" value="${escapeAttribute(draftEmail)}" placeholder="email" /></div>`
                     : `<strong>${escapeHtml(member.lastName || "-")}</strong><div class="meta">${(currentAccessRole === "admin" || isOwnProfile(member)) ? escapeHtml(member.email || "") : ""}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<details class="member-inline-multiselect" data-member-id="${member.id}" data-member-multi="positions"><summary>${(member.positions || []).length ? `${(member.positions || []).length} selected` : "Select positions"}</summary><div class="member-inline-multiselect-options">${Array.from(new Set([...memberPositionOptions, ...(member.positions || [])])).map((value) => `<label class="status-check"><input type="checkbox" class="member-inline-option" data-member-id="${member.id}" data-member-multi="positions" value="${value}" ${(member.positions || []).includes(value) ? "checked" : ""} /><span>${value}</span></label>`).join("")}</div></details>`
+                    ? `<details class="member-inline-multiselect" data-member-id="${member.id}" data-member-multi="positions"><summary>${draftPositions.length ? `${draftPositions.length} selected` : "Select positions"}</summary><div class="member-inline-multiselect-options">${Array.from(new Set([...memberPositionOptions, ...draftPositions])).map((value) => `<label class="status-check"><input type="checkbox" class="member-inline-option" data-member-id="${member.id}" data-member-multi="positions" value="${value}" ${draftPositions.includes(value) ? "checked" : ""} /><span>${value}</span></label>`).join("")}</div></details>`
                     : `<div class="pill-row dense-row">${member.positions.length ? member.positions.map(plainPill).join(" ") : `<span class="meta">-</span>`}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<details class="member-inline-multiselect" data-member-id="${member.id}" data-member-multi="roles"><summary>${(member.roles || []).length ? `${(member.roles || []).length} selected` : "Select roles"}</summary><div class="member-inline-multiselect-options">${Array.from(new Set([...memberRoleOptions, ...(member.roles || [])])).map((value) => `<label class="status-check"><input type="checkbox" class="member-inline-option" data-member-id="${member.id}" data-member-multi="roles" value="${value}" ${(member.roles || []).includes(value) ? "checked" : ""} /><span>${roleLabel(value)}</span></label>`).join("")}</div></details>`
+                    ? `<details class="member-inline-multiselect" data-member-id="${member.id}" data-member-multi="roles"><summary>${draftRoles.length ? `${draftRoles.length} selected` : "Select roles"}</summary><div class="member-inline-multiselect-options">${Array.from(new Set([...memberRoleOptions, ...draftRoles])).map((value) => `<label class="status-check"><input type="checkbox" class="member-inline-option" data-member-id="${member.id}" data-member-multi="roles" value="${value}" ${draftRoles.includes(value) ? "checked" : ""} /><span>${roleLabel(value)}</span></label>`).join("")}</div></details>`
                     : `<div class="pill-row dense-row">${member.roles.length ? member.roles.map(rolePill).join(" ") : `<span class="meta">-</span>`}</div>`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input type="number" min="0" class="member-inline-input member-inline-jersey" data-member-id="${member.id}" value="${member.jerseyNumber ?? ""}" />`
+                    ? `<input type="number" min="0" class="member-inline-input member-inline-jersey" data-member-id="${member.id}" value="${escapeAttribute(String(draftJersey ?? ""))}" />`
                     : (member.jerseyNumber ?? "-")}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<select class="member-inline-input member-inline-side" data-member-id="${member.id}"><option value="" ${!member.sideOfBall ? "selected" : ""}>Not set</option><option value="offense" ${member.sideOfBall === "offense" ? "selected" : ""}>Offense</option><option value="defense" ${member.sideOfBall === "defense" ? "selected" : ""}>Defense</option><option value="both" ${member.sideOfBall === "both" ? "selected" : ""}>Both</option></select>`
+                    ? `<select class="member-inline-input member-inline-side" data-member-id="${member.id}"><option value="" ${!draftSide ? "selected" : ""}>Not set</option><option value="offense" ${draftSide === "offense" ? "selected" : ""}>Offense</option><option value="defense" ${draftSide === "defense" ? "selected" : ""}>Defense</option><option value="both" ${draftSide === "both" ? "selected" : ""}>Both</option></select>`
                     : escapeHtml(sideOfBallLabel(member.sideOfBall))}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input type="checkbox" class="member-inline-checkbox member-inline-loan-jersey" data-member-id="${member.id}" ${member.loanJersey ? "checked" : ""} />`
+                    ? `<input type="checkbox" class="member-inline-checkbox member-inline-loan-jersey" data-member-id="${member.id}" ${draftLoanJersey ? "checked" : ""} />`
                     : (member.loanJersey ? "Yes" : "No")}
                 </td>
                 ${canSeeSensitiveMemberColumns ? `
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${member.membershipStatus === "active" ? "selected" : ""}>active</option><option value="pending" ${member.membershipStatus === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${member.membershipStatus === "inactive" ? "selected" : ""}>inactive</option></select>`
+                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${draftMembership === "active" ? "selected" : ""}>active</option><option value="pending" ${draftMembership === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${draftMembership === "inactive" ? "selected" : ""}>inactive</option></select>`
                       : (member.deletedAt ? statusPill("deleted", "deleted") : statusPill(member.membershipStatus))}
                   </td>
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${displayPassStatus(member.passStatus) === "valid" ? "selected" : ""}>valid</option><option value="missing" ${displayPassStatus(member.passStatus) === "missing" ? "selected" : ""}>missing</option><option value="expired" ${displayPassStatus(member.passStatus) === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${normalizeToIsoDate(member.passExpiry) || ""}" /></div>`
+                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${draftPassStatus === "valid" ? "selected" : ""}>valid</option><option value="missing" ${draftPassStatus === "missing" ? "selected" : ""}>missing</option><option value="expired" ${draftPassStatus === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(draftPassExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${draftPassExpiry}" /></div>`
                       : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : escapeHtml(member.licenseName || "No pass data")}</div></div>`}
                   </td>
                 ` : ""}
@@ -7105,7 +7228,7 @@
                   <td>
                     <div class="pill-row dense-row" style="margin-bottom: 6px;">${renderMemberInvitePill(member)}</div>
                     <div class="action-row">
-                      ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button member-inline-save-button" type="button" data-member-id="${member.id}">Save</button>` : `<button class="ghost-button small-button edit-member-button" type="button" data-member-id="${member.id}">Edit</button>`}
+                      ${adminActionsEnabled && !member.deletedAt ? `<button class="ghost-button small-button member-inline-save-button" type="button" data-member-id="${member.id}">Save${rowIsDirty ? "*" : ""}</button>` : `<button class="ghost-button small-button edit-member-button" type="button" data-member-id="${member.id}">Edit</button>`}
                       ${renderMemberInviteAction(member)}
                       ${showMergeButton ? `<button class="ghost-button small-button merge-member-button" type="button" data-member-id="${member.id}">Merge</button>` : ""}
                       ${adminActionsEnabled && member.deletedAt ? `<button class="ghost-button small-button undelete-member-button" type="button" data-member-id="${member.id}">Undelete</button>` : ""}
@@ -7114,7 +7237,8 @@
                   </td>
                 ` : ""}
               </tr>
-            `).join("") || `<tr><td colspan="${visibleColumnCount}" class="meta">No members match the selected filters.</td></tr>`}
+            `;
+            }).join("") || `<tr><td colspan="${visibleColumnCount}" class="meta">No members match the selected filters.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -8971,6 +9095,9 @@
       link.onclick = function (event) {
         event.preventDefault();
         const nextView = link.dataset.view;
+        if (nextView !== "members" && isMembersViewActive() && !confirmDiscardMemberChanges("leave the Members page")) {
+          return;
+        }
         if (!canAccessView(nextView)) {
           switchView(resolveAllowedView(nextView));
           return;
@@ -8984,6 +9111,7 @@
     const logoutNavButton = document.getElementById("logout-nav-button");
     if (profileNavButton) {
       profileNavButton.onclick = function () {
+        if (isMembersViewActive() && !confirmDiscardMemberChanges("leave the Members page")) return;
         if (!authState.user) {
           if (isLocalPreviewMode()) {
             profileRouteMode = "member";
@@ -9013,6 +9141,7 @@
     if (logoutNavButton) {
       logoutNavButton.onclick = async function () {
         if (!authState.user) return;
+        if (isMembersViewActive() && !confirmDiscardMemberChanges("log out")) return;
         try {
           await signOut();
           authState.status = "Signed out.";
@@ -9167,7 +9296,33 @@
     }
     if (toggleMergeModeButton) {
       toggleMergeModeButton.onclick = function () {
+        if (memberMergeMode && !confirmDiscardMemberChanges("disable admin mode")) return;
         memberMergeMode = !memberMergeMode;
+        mount();
+        switchView("members");
+      };
+    }
+    const saveAllMemberChangesButton = document.getElementById("save-all-member-changes");
+    if (saveAllMemberChangesButton) {
+      saveAllMemberChangesButton.onclick = async function () {
+        const ids = Array.from(memberInlineDrafts.keys());
+        if (!ids.length) return;
+        saveAllMemberChangesButton.disabled = true;
+        saveAllMemberChangesButton.textContent = "Saving...";
+        const results = [];
+        for (const id of ids) {
+          results.push(await saveMemberInlineRow(id));
+        }
+        const failed = results.filter((entry) => !entry.ok);
+        const succeeded = results.filter((entry) => entry.ok);
+        if (failed.length) {
+          const message = `Saved ${succeeded.length} of ${results.length} member${results.length === 1 ? "" : "s"}. Could not save: ${failed.map((entry) => `${entry.name || "member"} (${entry.error?.message || "error"})`).join("; ")}`;
+          authState.status = message;
+          showToast(message, "error");
+        } else {
+          authState.status = `Saved ${succeeded.length} member${succeeded.length === 1 ? "" : "s"}.`;
+          showToast(authState.status, "success");
+        }
         mount();
         switchView("members");
       };
@@ -9245,67 +9400,41 @@
     });
     document.querySelectorAll(".member-inline-save-button").forEach((button) => {
       button.onclick = async function () {
-        const member = state.members.find((entry) => String(entry.id) === String(button.dataset.memberId));
-        if (!member) return;
-        const memberId = String(member.id);
-        const firstNameInput = document.querySelector(`.member-inline-first-name[data-member-id="${memberId}"]`);
-        const lastNameInput = document.querySelector(`.member-inline-last-name[data-member-id="${memberId}"]`);
-        const emailInput = document.querySelector(`.member-inline-email[data-member-id="${memberId}"]`);
-        const jerseyInput = document.querySelector(`.member-inline-jersey[data-member-id="${memberId}"]`);
-        const sideInput = document.querySelector(`.member-inline-side[data-member-id="${memberId}"]`);
-        const loanJerseyInput = document.querySelector(`.member-inline-loan-jersey[data-member-id="${memberId}"]`);
-        const membershipInput = document.querySelector(`.member-inline-membership[data-member-id="${memberId}"]`);
-        const passStatusInput = document.querySelector(`.member-inline-pass-status[data-member-id="${memberId}"]`);
-        const passExpiryInput = document.querySelector(`.member-inline-pass-expiry[data-member-id="${memberId}"]`);
-        if (!firstNameInput || !lastNameInput || !emailInput || !jerseyInput || !sideInput || !loanJerseyInput || !membershipInput || !passStatusInput || !passExpiryInput) {
-          authState.status = "Could not save this row because required inline fields are missing. Try reopening Members view.";
-          mount();
-          switchView("members");
-          return;
-        }
-        const selectedPositions = Array.from(document.querySelectorAll(`.member-inline-option[data-member-id="${memberId}"][data-member-multi="positions"]:checked`))
-          .map((input) => String(input.value || "").trim().toUpperCase())
-          .filter(Boolean);
-        const selectedRoles = Array.from(document.querySelectorAll(`.member-inline-option[data-member-id="${memberId}"][data-member-multi="roles"]:checked`))
-          .map((input) => String(input.value || "").trim())
-          .filter(Boolean);
-        const normalizedPassStatus = String(passStatusInput.value || "missing").trim().toLowerCase();
-        const normalizedPassExpiry = normalizedPassStatus === "missing"
-          ? ""
-          : normalizeToIsoDate(passExpiryInput.value || member.passExpiry || "");
-        try {
-          await saveMember({
-            memberId,
-            firstName: String(firstNameInput.value || "").trim(),
-            lastName: String(lastNameInput.value || "").trim(),
-            email: String(emailInput.value || "").trim(),
-            positions: Array.from(new Set(selectedPositions)),
-            roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
-            jerseyNumber: String(jerseyInput.value || "").trim(),
-            sideOfBall: String(sideInput.value || "").trim(),
-            loanJersey: Boolean(loanJerseyInput.checked),
-            membershipStatus: String(membershipInput.value || "active").trim(),
-            passStatus: normalizedPassStatus,
-            passExpiry: normalizedPassExpiry,
-            notes: member.notes || ""
-          });
-          authState.status = `${member.name} was updated.`;
-          mount();
-          switchView("members");
-        } catch (error) {
-          const errorMessage = error?.message || String(error);
+        const memberId = String(button.dataset.memberId || "");
+        if (!memberId) return;
+        button.disabled = true;
+        const result = await saveMemberInlineRow(memberId);
+        if (result.ok) {
+          authState.status = `${result.name} was updated.`;
+        } else {
+          const errorMessage = result.error?.message || String(result.error || "Could not save this row.");
           authState.status = errorMessage;
           showToast(errorMessage, "error");
-          mount();
-          switchView("members");
         }
+        mount();
+        switchView("members");
       };
+    });
+    ["member-inline-first-name", "member-inline-last-name", "member-inline-email", "member-inline-jersey"].forEach((className) => {
+      document.querySelectorAll(`.${className}`).forEach((input) => {
+        input.oninput = function () {
+          captureMemberInlineDraft(input.dataset.memberId);
+        };
+      });
+    });
+    ["member-inline-side", "member-inline-loan-jersey", "member-inline-membership", "member-inline-pass-expiry"].forEach((className) => {
+      document.querySelectorAll(`.${className}`).forEach((input) => {
+        input.onchange = function () {
+          captureMemberInlineDraft(input.dataset.memberId);
+        };
+      });
     });
     document.querySelectorAll(".member-inline-option").forEach((input) => {
       input.onchange = function () {
         const memberId = String(input.dataset.memberId || "");
         const kind = String(input.dataset.memberMulti || "");
         if (!memberId || !kind) return;
+        captureMemberInlineDraft(memberId);
         const selectedCount = document.querySelectorAll(`.member-inline-option[data-member-id="${memberId}"][data-member-multi="${kind}"]:checked`).length;
         const details = document.querySelector(`.member-inline-multiselect[data-member-id="${memberId}"][data-member-multi="${kind}"]`);
         const summary = details ? details.querySelector("summary") : null;
@@ -9325,11 +9454,13 @@
         if (status === "missing") {
           expiryInput.value = "";
           expiryInput.classList.remove("is-expiring-soon");
+          captureMemberInlineDraft(memberId);
           return;
         }
         if (status === "valid" && !String(expiryInput.value || "").trim()) {
           expiryInput.value = defaultPassExpiryDate();
         }
+        captureMemberInlineDraft(memberId);
       };
     });
     document.querySelectorAll(".delete-member-button").forEach((button) => {
@@ -9340,6 +9471,7 @@
         if (!confirmed) return;
         try {
           await removeMember(member.id);
+          memberInlineDrafts.delete(String(member.id));
           authState.status = `${member.name} was marked as deleted.`;
           mount();
         } catch (error) {
@@ -9419,6 +9551,7 @@
             firstName: keepMember.firstName,
             lastName: keepMember.lastName
           });
+          memberInlineDrafts.delete(String(removeMember.id));
           authState.status = `Merged ${removeMember.name} into ${keepMember.name}.`;
           mount();
           switchView("members");
@@ -12031,6 +12164,12 @@
   bindNavigation();
   bindButtonFeedback();
   bindMobileMenu();
+  window.addEventListener("beforeunload", function (event) {
+    if (memberInlineDrafts.size) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
   window.addEventListener("error", function (event) {
     recordDiagnostic("error", "window", "Unhandled browser error.", summarizeDiagnosticError(event.error || event.message));
   });
