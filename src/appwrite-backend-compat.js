@@ -223,6 +223,8 @@
       roles_json: rowValue(row, "roles_json") || rowValue(row, "rolesJson") || ["player"],
       rosterImage: String(rowValue(row, "rosterImage") || rowValue(row, "roster_image") || "").trim(),
       jersey_number: rowValue(row, "jersey_number") !== undefined ? rowValue(row, "jersey_number") : rowValue(row, "jerseyNumber"),
+      loan_jersey: Boolean(rowValue(row, "loan_jersey") !== undefined ? rowValue(row, "loan_jersey") : rowValue(row, "loanJersey")),
+      side_of_ball: String((rowValue(row, "side_of_ball") !== undefined ? rowValue(row, "side_of_ball") : rowValue(row, "sideOfBall")) || "").trim(),
       membership_status: String(rowValue(row, "membership_status") || rowValue(row, "membershipStatus") || "active"),
       notes: String(rowValue(row, "notes") || ""),
       profile_id: rowValue(row, "profile_id") || rowValue(row, "profileId") || null,
@@ -258,6 +260,9 @@
       const jerseyNumber = jerseyRaw === null || jerseyRaw === "" || jerseyRaw === undefined ? null : Number(jerseyRaw);
       sanitized.jerseyNumber = Number.isFinite(jerseyNumber) ? jerseyNumber : null;
     }
+
+    if (hasOwn(input, "loan_jersey")) sanitized.loan_jersey = Boolean(input.loan_jersey);
+    if (hasOwn(input, "side_of_ball")) sanitized.side_of_ball = input.side_of_ball ? String(input.side_of_ball).trim() : null;
 
     if (hasOwn(input, "email")) sanitized.email = input.email ? String(input.email).trim() : null;
     if (hasOwn(input, "iban")) sanitized.iban = input.iban ? String(input.iban).trim() : null;

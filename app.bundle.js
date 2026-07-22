@@ -4736,9 +4736,18 @@
   async function saveMember(memberPayload) {
     const jerseyRaw = String(memberPayload.jerseyNumber ?? "").trim();
     if (jerseyRaw !== "") {
-      const conflict = findJerseyNumberConflict(state.members, jerseyRaw, memberPayload.sideOfBall, memberPayload.memberId);
-      if (conflict) {
-        throw new Error(`Jersey number ${jerseyRaw} is already assigned to ${conflict.name || "another player"} (${sideOfBallLabel(conflict.sideOfBall)}). Choose a different number, or set both players' side of the ball to offense/defense to share it.`);
+      const existingMember = memberPayload.memberId ? memberById(memberPayload.memberId) : null;
+      const previousJerseyRaw = existingMember?.jerseyNumber === null || existingMember?.jerseyNumber === undefined
+        ? ""
+        : String(existingMember.jerseyNumber);
+      const previousSide = String(existingMember?.sideOfBall || "").trim().toLowerCase();
+      const nextSide = String(memberPayload.sideOfBall || "").trim().toLowerCase();
+      const jerseyOrSideChanged = jerseyRaw !== previousJerseyRaw || nextSide !== previousSide;
+      if (jerseyOrSideChanged) {
+        const conflict = findJerseyNumberConflict(state.members, jerseyRaw, memberPayload.sideOfBall, memberPayload.memberId);
+        if (conflict) {
+          throw new Error(`Jersey number ${jerseyRaw} is already assigned to ${conflict.name || "another player"} (${sideOfBallLabel(conflict.sideOfBall)}). Choose a different number, or set both players' side of the ball to offense/defense to share it.`);
+        }
       }
     }
     if (shouldUseRemoteData()) {
@@ -9284,7 +9293,9 @@
           mount();
           switchView("members");
         } catch (error) {
-          authState.status = error.message;
+          const errorMessage = error?.message || String(error);
+          authState.status = errorMessage;
+          showToast(errorMessage, "error");
           mount();
           switchView("members");
         }
