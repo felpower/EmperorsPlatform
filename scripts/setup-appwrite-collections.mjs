@@ -120,6 +120,7 @@ const schema = {
       { type: "string", key: "last_name", size: 255, required: true },
       { type: "string", key: "email", size: 320, required: true },
       { type: "string", key: "phone", size: 64, required: false },
+      { type: "integer", key: "age", required: true },
       { type: "string", key: "uni_wien_student", size: 64, required: true },
       { type: "string", key: "study_program", size: 255, required: false },
       { type: "string", key: "previous_football_experience", size: 64, required: true },

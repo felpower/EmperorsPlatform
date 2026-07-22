@@ -145,6 +145,7 @@ Columns:
 - last_name (string, required)
 - email (string, required)
 - phone (string, optional)
+- age (integer, required)
 - uni_wien_student (string, required) values: yes, accepted_or_starting, no, prefer_to_discuss
 - study_program (string, optional)
 - previous_football_experience (string, required)

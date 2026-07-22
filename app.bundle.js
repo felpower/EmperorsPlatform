@@ -6070,6 +6070,7 @@
       lastName: String(tryoutValue(row, "last_name", "lastName") || "").trim(),
       email: String(tryoutValue(row, "email") || "").trim(),
       phone: String(tryoutValue(row, "phone") || "").trim(),
+      age: tryoutValue(row, "age") ?? "",
       uniWienStudent: String(tryoutValue(row, "uni_wien_student", "uniWienStudent") || "").trim(),
       studyProgram: String(tryoutValue(row, "study_program", "studyProgram") || "").trim(),
       footballExperience: String(tryoutValue(row, "previous_football_experience", "previousFootballExperience") || "").trim(),
@@ -6249,6 +6250,7 @@
       { key: "lastName", label: "Last name" },
       { key: "email", label: "Email" },
       { key: "phone", label: "Phone" },
+      { key: "age", label: "Age" },
       { key: "uniWienStudent", label: "Uni Wien status" },
       { key: "studyProgram", label: "Study program" },
       { key: "footballExperience", label: "Football experience" },
@@ -6293,11 +6295,13 @@
     const formData = new FormData(form);
     const heightCm = optionalInteger(formData.get("heightCm"));
     const weightKg = optionalInteger(formData.get("weightKg"));
+    const age = optionalInteger(formData.get("age"));
     return compactPayload({
       first_name: String(formData.get("firstName") || "").trim(),
       last_name: String(formData.get("lastName") || "").trim(),
       email: String(formData.get("email") || "").trim(),
       phone: String(formData.get("phone") || "").trim(),
+      age,
       uni_wien_student: String(formData.get("uniWienStudent") || "").trim(),
       study_program: String(formData.get("studyProgram") || "").trim(),
       previous_football_experience: String(formData.get("footballExperience") || "").trim(),
@@ -6320,6 +6324,7 @@
     if (!payload.first_name || !payload.last_name) return "Please enter your first and last name.";
     if (!payload.email) return "Please enter your email address.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return "Please enter a valid email address.";
+    if (!payload.age || payload.age < 1 || payload.age > 120) return "Please enter your current age.";
     if (!payload.uni_wien_student) return "Please tell us whether you are a student at the University of Vienna.";
     if (!payload.previous_football_experience) return "Please select your American Football experience level.";
     if (!payload.contact_consent) return "Please confirm that we may contact you about tryouts.";
@@ -6490,6 +6495,7 @@
                     ${row.preferredPosition ? `<div class="meta">${escapeHtml(tryoutLabel("preferredPosition", row.preferredPosition))}</div>` : ""}
                   </td>
                   <td>
+                    ${row.age ? `<div>${escapeHtml(row.age)} yrs</div>` : `<div class="meta">Age -</div>`}
                     ${row.heightCm ? `<div>${escapeHtml(row.heightCm)} cm</div>` : `<div class="meta">Height -</div>`}
                     ${row.weightKg ? `<div>${escapeHtml(row.weightKg)} kg</div>` : `<div class="meta">Weight -</div>`}
                   </td>
@@ -6582,6 +6588,12 @@
               </label>
               <label>Phone
                 <input name="phone" type="tel" autocomplete="tel" placeholder="Optional" />
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <label>Age
+                <input name="age" type="number" min="1" max="120" required />
               </label>
             </div>
 
