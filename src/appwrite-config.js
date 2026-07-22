@@ -4,6 +4,8 @@ window.ClubHubAppwriteConfig = {
   databaseId: "69dd11140002e2b4254a",
   apiBaseUrl: "",
   inviteFunctionId: "CreateAuthAccount",
+  contactFunctionId: "ContactEmail",
+  contactRecipientEmail: "p.felbauer@emperors.at",
   passSyncFunctionId: "PassSyncFunction",
   sepaExportFunctionId: "SepaExport",
   diagnosticsFunctionId: "69fe0260003aa6db005b",

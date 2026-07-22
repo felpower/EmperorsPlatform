@@ -241,7 +241,18 @@
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
-  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const CONTACT_RECIPIENT_EMAIL = String(APPWRITE_CONFIG?.contactRecipientEmail || "p.felbauer@emperors.at").trim();
+  const CONTACT_SUBJECT_TYPES = [
+    { value: "general", label: "General Question" },
+    { value: "sponsorship", label: "Sponsorship Inquiry" },
+    { value: "partnership", label: "Partnership / Collaboration" },
+    { value: "tryout", label: "Tryout / Joining the Team" },
+    { value: "game_event", label: "Game or Event Request" },
+    { value: "media", label: "Media / Press Request" },
+    { value: "website", label: "Website or Data Issue" },
+    { value: "other", label: "Other" }
+  ];
+  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -6705,6 +6716,169 @@
     `;
   }
 
+  function contactSubjectLabel(value) {
+    const normalized = String(value || "").trim();
+    return CONTACT_SUBJECT_TYPES.find((option) => option.value === normalized)?.label || normalized || "General Question";
+  }
+
+  function renderContactSubjectOptions() {
+    return CONTACT_SUBJECT_TYPES
+      .map((option) => `<option value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</option>`)
+      .join("");
+  }
+
+  function renderContact() {
+    const recipientEmail = CONTACT_RECIPIENT_EMAIL || "p.felbauer@emperors.at";
+    return `
+      <section class="contact-page">
+        <div class="contact-hero">
+          <div>
+            <p class="eyebrow">Contact</p>
+            <h2>Talk to the Emperors</h2>
+            <p>Send questions, sponsorship ideas, media requests or event topics directly to the team.</p>
+          </div>
+          <img src="./assets/emperors-mark.png" alt="" class="contact-hero-mark" loading="lazy" />
+        </div>
+
+        <div class="contact-layout">
+          <form id="contact-form" class="contact-form setup-card" novalidate>
+            <div>
+              <p class="eyebrow">Message</p>
+              <h3>Send us a note</h3>
+              <p class="muted">Your message is sent to ${escapeHtml(recipientEmail)} so the right person can follow up.</p>
+            </div>
+
+            <label class="contact-honeypot" aria-hidden="true">Website
+              <input name="website" tabindex="-1" autocomplete="off" />
+            </label>
+
+            <div class="form-grid">
+              <label>Your name
+                <input name="senderName" autocomplete="name" maxlength="120" placeholder="Optional" />
+              </label>
+              <label>Your email
+                <input name="senderEmail" type="email" autocomplete="email" maxlength="320" required />
+              </label>
+            </div>
+
+            <label>Topic
+              <select name="subjectType" required>
+                <option value="">Select one</option>
+                ${renderContactSubjectOptions()}
+              </select>
+            </label>
+
+            <label>Subject
+              <input name="subject" maxlength="140" required placeholder="Short summary" />
+            </label>
+
+            <label>Message
+              <textarea name="message" rows="8" maxlength="4000" required placeholder="Tell us what you would like to discuss."></textarea>
+            </label>
+
+            <p class="meta contact-privacy-note">Your contact details are used only to answer this message. See <a href="./datenschutz.html">Datenschutz</a>.</p>
+
+            <div class="contact-form-actions">
+              <button type="submit" class="primary-button" id="contact-submit-button" data-no-toast="true">Send message</button>
+              <p id="contact-form-status" class="contact-form-status" aria-live="polite"></p>
+            </div>
+          </form>
+
+          <aside class="contact-info">
+            <article class="setup-card">
+              <p class="eyebrow">Sponsorship</p>
+              <h3>Support the team</h3>
+              <p class="muted">Use Sponsorship Inquiry for jersey, game day, equipment, event or long-term partnership ideas.</p>
+            </article>
+            <article class="setup-card">
+              <p class="eyebrow">Team</p>
+              <h3>Joining and tryouts</h3>
+              <p class="muted">Player questions still fit here, but the tryout form is best when you want to register interest directly.</p>
+            </article>
+            <article class="setup-card contact-direct-card">
+              <p class="eyebrow">Direct email</p>
+              <h3>${escapeHtml(recipientEmail)}</h3>
+              <a class="ghost-button" href="mailto:${escapeAttribute(recipientEmail)}">Open mail app</a>
+            </article>
+          </aside>
+        </div>
+      </section>
+    `;
+  }
+
+  function collectContactPayload(form) {
+    const formData = new FormData(form);
+    return {
+      subjectType: String(formData.get("subjectType") || "").trim(),
+      subject: String(formData.get("subject") || "").trim(),
+      message: String(formData.get("message") || "").trim(),
+      senderName: String(formData.get("senderName") || "").trim(),
+      senderEmail: String(formData.get("senderEmail") || "").trim(),
+      website: String(formData.get("website") || "").trim(),
+      pageUrl: String(window.location.href || "").trim()
+    };
+  }
+
+  function validateContactPayload(payload) {
+    if (payload.website) return "Your message could not be sent.";
+    if (!payload.senderEmail) return "Please enter your email address.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.senderEmail)) return "Please enter a valid email address.";
+    if (!payload.subjectType || !CONTACT_SUBJECT_TYPES.some((option) => option.value === payload.subjectType)) return "Please select a topic.";
+    if (!payload.subject || payload.subject.length < 3) return "Please add a short subject.";
+    if (!payload.message || payload.message.length < 10) return "Please add a message with a little more detail.";
+    return "";
+  }
+
+  function contactFormStatusMessage(message, tone = "info") {
+    const status = document.getElementById("contact-form-status");
+    if (!status) return;
+    status.textContent = String(message || "");
+    status.className = `contact-form-status ${tone === "success" ? "success" : tone === "error" ? "error" : ""}`.trim();
+  }
+
+  async function submitContactMessage(payload) {
+    const functionId = String(APPWRITE_CONFIG?.contactFunctionId || "").trim();
+    let functionError = "";
+
+    if (functionId) {
+      try {
+        const result = await executeAppwriteFunction(functionId, { contact: payload }, { maxPolls: 10, pollDelayMs: 350 });
+        const body = result.body || {};
+        if (body.error || body.ok === false) {
+          throw new Error(String(body.error || "Contact email function failed."));
+        }
+        return { ...body, provider: body.provider || "appwrite-function" };
+      } catch (error) {
+        functionError = error?.message || "Contact email function failed.";
+        console.warn("[Contact]", functionError);
+        if (!hasConfiguredApiBaseUrl() && !isLocalDevHost()) {
+          throw new Error(functionError);
+        }
+      }
+    }
+
+    if (!hasConfiguredApiBaseUrl() && !isLocalDevHost()) {
+      throw new Error("Contact email service is not configured.");
+    }
+
+    const response = await fetch(apiUrl("/api/contact"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const responseText = await response.text();
+    let result = {};
+    try {
+      result = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      result = {};
+    }
+    if (!response.ok) {
+      throw new Error(result?.error || responseText || functionError || "Could not send the message.");
+    }
+    return result;
+  }
+
   function renderMembers() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
@@ -8670,7 +8844,7 @@
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "events";
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "contact" || normalizedViewId === "events";
   }
 
   function canAccessView(viewId) {
@@ -11176,6 +11350,46 @@
     }
   }
 
+  function bindContactActions() {
+    const form = document.getElementById("contact-form");
+    const submitButton = document.getElementById("contact-submit-button");
+    if (!form) return;
+
+    form.onsubmit = async function (event) {
+      event.preventDefault();
+      const payload = collectContactPayload(form);
+      const validationMessage = validateContactPayload(payload);
+      if (validationMessage) {
+        contactFormStatusMessage(validationMessage, "error");
+        showToast(validationMessage, "error");
+        return;
+      }
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = "Sending...";
+      }
+      contactFormStatusMessage("Sending your message...", "info");
+
+      try {
+        await submitContactMessage(payload);
+        form.reset();
+        const message = "Thanks. Your message was sent to the Emperors team.";
+        contactFormStatusMessage(message, "success");
+        showToast(message, "success");
+      } catch (error) {
+        const message = error?.message || "Could not send the message.";
+        contactFormStatusMessage(message, "error");
+        showToast(message, "error");
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = "Send message";
+        }
+      }
+    };
+  }
+
   function bindTryoutActions() {
     const qrDialog = document.getElementById("tryout-qr-dialog");
     const qrOpenButton = document.getElementById("open-tryout-qr-dialog");
@@ -11665,6 +11879,7 @@
       document.getElementById("roster").innerHTML = renderRoster();
       document.getElementById("hall-of-fame").innerHTML = renderHallOfFame();
       document.getElementById("tryout").innerHTML = renderTryout();
+      document.getElementById("contact").innerHTML = renderContact();
       document.getElementById("members").innerHTML = renderMembers();
       document.getElementById("fees").innerHTML = renderFees();
       document.getElementById("user").innerHTML = renderUserPage();
@@ -11678,6 +11893,7 @@
       document.getElementById("recovery").innerHTML = renderRecoveryGate();
       bindMemberActions();
       bindTryoutActions();
+      bindContactActions();
       bindUserPageActions();
       bindOrganizationActions();
       bindEquipmentActions();

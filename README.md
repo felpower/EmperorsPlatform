@@ -107,7 +107,24 @@ For GitHub Pages production:
 
 - frontend stays static
 - Appwrite handles auth and data
-- Appwrite Functions handle invite and SEPA server-side work
+- Appwrite Functions handle invite, contact email and SEPA server-side work
+
+## Contact Form
+
+The public `/contact` page sends notifications to `p.felbauer@emperors.at`.
+
+Production with GitHub Pages:
+
+- deploy `appwrite/functions/contact-email/index.js`
+- set `contactFunctionId` in `src/appwrite-config.js`
+- preferably reuse Mailgun with `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, and `MAILGUN_FROM_EMAIL`
+- alternatively configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL`, or set `CONTACT_WEBHOOK_URL`
+
+Local/server deployments can also use `POST /api/contact` from `server.mjs` with:
+
+- Resend: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
+- SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`
+- Webhook: `CONTACT_WEBHOOK_URL`
 
 ## Authentication and Invites
 

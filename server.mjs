@@ -1,7 +1,9 @@
 import express from "express";
 import fs from "node:fs/promises";
+import net from "node:net";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import xlsx from "xlsx";
 
@@ -22,9 +24,22 @@ const CORS_ORIGIN = String(process.env.CORS_ORIGIN || "").trim();
 const ENABLE_LOCAL_DB = String(process.env.ENABLE_LOCAL_DB || "true").toLowerCase() !== "false";
 const SERVE_STATIC_FRONTEND = String(process.env.SERVE_STATIC_FRONTEND || "true").toLowerCase() !== "false";
 const CLUBEE_XLSX_PATH = String(process.env.CLUBEE_XLSX_PATH || path.join(__dirname, "assets", "uni-wien-emperors_dfcbbd998dee66426d1889d1fd42cc61.xlsx")).trim();
+const CONTACT_RECIPIENT_EMAIL = String(process.env.CONTACT_RECIPIENT_EMAIL || "p.felbauer@emperors.at").trim();
+const CONTACT_SUBJECT_PREFIX = String(process.env.CONTACT_SUBJECT_PREFIX || "Emperors Contact").trim();
+const CONTACT_FROM_EMAIL = String(process.env.CONTACT_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || CONTACT_RECIPIENT_EMAIL).trim();
+const CONTACT_WEBHOOK_URL = String(process.env.CONTACT_WEBHOOK_URL || "").trim();
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || "").trim();
+const RESEND_FROM_EMAIL = String(process.env.RESEND_FROM_EMAIL || CONTACT_FROM_EMAIL).trim();
+const SMTP_HOST = String(process.env.SMTP_HOST || "").trim();
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = String(process.env.SMTP_USER || "").trim();
+const SMTP_PASS = String(process.env.SMTP_PASS || "").trim();
+const SMTP_SECURE = String(process.env.SMTP_SECURE || "").trim().toLowerCase();
+const SMTP_TLS_REJECT_UNAUTHORIZED = String(process.env.SMTP_TLS_REJECT_UNAUTHORIZED || "true").toLowerCase() !== "false";
 
 let localDbApi = null;
 let localDbUnavailableReason = "";
+const contactRateLimitBuckets = new Map();
 
 async function initializeOptionalLocalDatabase() {
   if (!ENABLE_LOCAL_DB) {
@@ -54,6 +69,444 @@ function requireLocalDb(res, featureLabel = "This endpoint") {
     error: `${featureLabel} is unavailable on this deployment. ${localDbUnavailableReason || "Local SQLite module is not available."}`
   });
   return false;
+}
+
+const CONTACT_SUBJECT_TYPE_LABELS = {
+  general: "General Question",
+  sponsorship: "Sponsorship Inquiry",
+  partnership: "Partnership / Collaboration",
+  tryout: "Tryout / Joining the Team",
+  game_event: "Game or Event Request",
+  media: "Media / Press Request",
+  website: "Website or Data Issue",
+  other: "Other"
+};
+
+function contactError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function clampText(value, maxLength) {
+  const text = String(value || "").trim();
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function isEmailAddress(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function contactSubjectTypeLabel(value) {
+  return CONTACT_SUBJECT_TYPE_LABELS[String(value || "").trim()] || "General Question";
+}
+
+function contactClientIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || String(req.ip || req.socket?.remoteAddress || "unknown").trim();
+}
+
+function enforceContactRateLimit(req) {
+  const key = contactClientIp(req) || "unknown";
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const maxRequests = 5;
+  const bucket = contactRateLimitBuckets.get(key) || { count: 0, resetAt: now + windowMs };
+  if (bucket.resetAt <= now) {
+    bucket.count = 0;
+    bucket.resetAt = now + windowMs;
+  }
+  bucket.count += 1;
+  contactRateLimitBuckets.set(key, bucket);
+
+  for (const [bucketKey, value] of contactRateLimitBuckets.entries()) {
+    if (value.resetAt <= now) contactRateLimitBuckets.delete(bucketKey);
+  }
+
+  if (bucket.count > maxRequests) {
+    throw contactError("Too many contact submissions. Please try again in a few minutes.", 429);
+  }
+}
+
+function normalizeContactSubmission(input, req) {
+  const body = input && typeof input === "object" ? input : {};
+  if (String(body.website || "").trim()) {
+    return { bot: true };
+  }
+
+  const subjectType = clampText(body.subjectType, 80);
+  const subject = clampText(body.subject, 140);
+  const message = clampText(body.message, 4000);
+  const senderName = clampText(body.senderName, 120);
+  const senderEmail = clampText(body.senderEmail, 320).toLowerCase();
+  const pageUrl = clampText(body.pageUrl, 500);
+
+  if (!senderEmail) throw contactError("Please enter your email address.");
+  if (!isEmailAddress(senderEmail)) throw contactError("Please enter a valid email address.");
+  if (!Object.prototype.hasOwnProperty.call(CONTACT_SUBJECT_TYPE_LABELS, subjectType)) {
+    throw contactError("Please select a valid topic.");
+  }
+  if (subject.length < 3) throw contactError("Please add a short subject.");
+  if (message.length < 10) throw contactError("Please add a message with a little more detail.");
+
+  return {
+    bot: false,
+    subjectType,
+    subject,
+    message,
+    senderName,
+    senderEmail,
+    pageUrl,
+    submittedAt: new Date().toISOString(),
+    userAgent: clampText(req.headers["user-agent"], 500),
+    ipAddress: clampText(contactClientIp(req), 120)
+  };
+}
+
+function escapeHtmlServer(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function contactNotificationSubject(submission) {
+  const label = contactSubjectTypeLabel(submission.subjectType);
+  return `[${CONTACT_SUBJECT_PREFIX}] ${label}: ${submission.subject}`.slice(0, 220);
+}
+
+function contactNotificationText(submission) {
+  return [
+    "New Uni Wien Emperors contact form submission",
+    "",
+    `Topic: ${contactSubjectTypeLabel(submission.subjectType)}`,
+    `Subject: ${submission.subject}`,
+    `From: ${submission.senderName || "Not provided"} <${submission.senderEmail}>`,
+    `Submitted: ${submission.submittedAt}`,
+    submission.pageUrl ? `Page: ${submission.pageUrl}` : "",
+    submission.ipAddress ? `IP: ${submission.ipAddress}` : "",
+    "",
+    "Message:",
+    submission.message
+  ].filter((line) => line !== "").join("\n");
+}
+
+function contactNotificationHtml(submission) {
+  const rows = [
+    ["Topic", contactSubjectTypeLabel(submission.subjectType)],
+    ["Subject", submission.subject],
+    ["From", `${submission.senderName || "Not provided"} <${submission.senderEmail}>`],
+    ["Submitted", submission.submittedAt],
+    ["Page", submission.pageUrl || "-"],
+    ["IP", submission.ipAddress || "-"]
+  ];
+
+  return `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#151b1c;">
+      <h2 style="margin:0 0 16px;">New Uni Wien Emperors contact message</h2>
+      <table style="border-collapse:collapse;margin-bottom:18px;">
+        ${rows.map(([label, value]) => `
+          <tr>
+            <th style="text-align:left;padding:6px 12px 6px 0;color:#5b676c;">${escapeHtmlServer(label)}</th>
+            <td style="padding:6px 0;">${escapeHtmlServer(value)}</td>
+          </tr>
+        `).join("")}
+      </table>
+      <div style="white-space:pre-wrap;border-left:4px solid #f6c316;padding:12px 16px;background:#f8fafb;">${escapeHtmlServer(submission.message)}</div>
+    </div>
+  `;
+}
+
+function emailProviderError(provider, responseStatus, payload, fallback) {
+  const message = String(payload?.message || payload?.error || payload?.errors?.[0]?.message || fallback || "Email provider request failed.").trim();
+  return new Error(`${provider} failed (${responseStatus}): ${message}`);
+}
+
+async function sendContactViaResend(submission) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: RESEND_FROM_EMAIL,
+      to: [CONTACT_RECIPIENT_EMAIL],
+      reply_to: submission.senderEmail,
+      subject: contactNotificationSubject(submission),
+      text: contactNotificationText(submission),
+      html: contactNotificationHtml(submission)
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw emailProviderError("Resend", response.status, payload, "Could not send contact email.");
+  }
+  return { provider: "resend", id: String(payload?.id || "") };
+}
+
+async function sendContactViaWebhook(submission) {
+  const response = await fetch(CONTACT_WEBHOOK_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      recipientEmail: CONTACT_RECIPIENT_EMAIL,
+      subject: contactNotificationSubject(submission),
+      text: contactNotificationText(submission),
+      html: contactNotificationHtml(submission),
+      submission
+    })
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Contact webhook failed (${response.status}): ${text || "Request was rejected."}`);
+  }
+  return { provider: "webhook" };
+}
+
+function smtpUsesImplicitTls() {
+  if (SMTP_SECURE) {
+    return ["1", "true", "yes", "ssl", "tls"].includes(SMTP_SECURE);
+  }
+  return SMTP_PORT === 465;
+}
+
+function smtpUsesStartTls() {
+  if (smtpUsesImplicitTls()) return false;
+  if (["0", "false", "no", "none"].includes(SMTP_SECURE)) return false;
+  return true;
+}
+
+function smtpReadySocket(secure) {
+  return new Promise((resolve, reject) => {
+    const socket = secure
+      ? tls.connect({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        servername: SMTP_HOST,
+        rejectUnauthorized: SMTP_TLS_REJECT_UNAUTHORIZED
+      })
+      : net.connect({ host: SMTP_HOST, port: SMTP_PORT });
+    const readyEvent = secure ? "secureConnect" : "connect";
+    const cleanup = () => {
+      socket.off(readyEvent, onReady);
+      socket.off("error", onError);
+      socket.off("timeout", onTimeout);
+    };
+    const onReady = () => {
+      cleanup();
+      socket.setTimeout(15000);
+      resolve(socket);
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const onTimeout = () => {
+      cleanup();
+      socket.destroy();
+      reject(new Error("SMTP connection timed out."));
+    };
+    socket.setTimeout(15000);
+    socket.once(readyEvent, onReady);
+    socket.once("error", onError);
+    socket.once("timeout", onTimeout);
+  });
+}
+
+function readSmtpResponse(socket) {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("SMTP response timed out."));
+    }, 15000);
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.off("data", onData);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+    };
+    const onData = (chunk) => {
+      buffer += String(chunk || "");
+      const lines = buffer.split(/\r?\n/).filter(Boolean);
+      const lastLine = lines[lines.length - 1] || "";
+      if (/^\d{3} /.test(lastLine)) {
+        cleanup();
+        resolve({
+          code: Number(lastLine.slice(0, 3)),
+          text: lines.join("\n")
+        });
+      }
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error("SMTP connection closed unexpectedly."));
+    };
+    socket.on("data", onData);
+    socket.once("error", onError);
+    socket.once("close", onClose);
+  });
+}
+
+function assertSmtpResponse(response, expectedCodes, action) {
+  if (!expectedCodes.includes(Number(response.code))) {
+    throw new Error(`${action} failed: ${response.text || `SMTP code ${response.code}`}`);
+  }
+}
+
+async function sendSmtpCommand(socket, command, expectedCodes, action) {
+  socket.write(`${command}\r\n`);
+  const response = await readSmtpResponse(socket);
+  assertSmtpResponse(response, expectedCodes, action || command);
+  return response;
+}
+
+function upgradeSmtpSocketToTls(socket) {
+  return new Promise((resolve, reject) => {
+    const secureSocket = tls.connect({
+      socket,
+      servername: SMTP_HOST,
+      rejectUnauthorized: SMTP_TLS_REJECT_UNAUTHORIZED
+    });
+    const cleanup = () => {
+      secureSocket.off("secureConnect", onReady);
+      secureSocket.off("error", onError);
+      secureSocket.off("timeout", onTimeout);
+    };
+    const onReady = () => {
+      cleanup();
+      secureSocket.setTimeout(15000);
+      resolve(secureSocket);
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const onTimeout = () => {
+      cleanup();
+      secureSocket.destroy();
+      reject(new Error("SMTP STARTTLS timed out."));
+    };
+    secureSocket.setTimeout(15000);
+    secureSocket.once("secureConnect", onReady);
+    secureSocket.once("error", onError);
+    secureSocket.once("timeout", onTimeout);
+  });
+}
+
+function sanitizeMailHeader(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
+}
+
+function encodeMailHeader(value) {
+  const safe = sanitizeMailHeader(value);
+  if (/^[\x20-\x7e]*$/.test(safe)) return safe;
+  return `=?UTF-8?B?${Buffer.from(safe, "utf8").toString("base64")}?=`;
+}
+
+function wrapBase64(value) {
+  return String(value || "").match(/.{1,76}/g)?.join("\r\n") || "";
+}
+
+function buildSmtpMimeMessage(submission) {
+  const boundary = `contact-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const text = contactNotificationText(submission);
+  const html = contactNotificationHtml(submission);
+  const messageId = `<contact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@emperors.page>`;
+
+  return [
+    `From: ${encodeMailHeader("Uni Wien Emperors Contact")} <${CONTACT_FROM_EMAIL}>`,
+    `To: <${CONTACT_RECIPIENT_EMAIL}>`,
+    `Reply-To: <${submission.senderEmail}>`,
+    `Subject: ${encodeMailHeader(contactNotificationSubject(submission))}`,
+    `Date: ${new Date().toUTCString()}`,
+    `Message-ID: ${messageId}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(Buffer.from(text, "utf8").toString("base64")),
+    `--${boundary}`,
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(Buffer.from(html, "utf8").toString("base64")),
+    `--${boundary}--`
+  ].join("\r\n");
+}
+
+function smtpEnvelopeAddress(value) {
+  const email = String(value || "").trim();
+  if (!isEmailAddress(email)) {
+    throw new Error(`Invalid SMTP email address: ${email || "(empty)"}`);
+  }
+  return email;
+}
+
+async function sendContactViaSmtp(submission) {
+  let socket = await smtpReadySocket(smtpUsesImplicitTls());
+  try {
+    assertSmtpResponse(await readSmtpResponse(socket), [220], "SMTP greeting");
+    const ehloHost = String(process.env.SMTP_EHLO_HOST || "emperors.page").trim() || "emperors.page";
+    await sendSmtpCommand(socket, `EHLO ${ehloHost}`, [250], "SMTP EHLO");
+
+    if (smtpUsesStartTls()) {
+      await sendSmtpCommand(socket, "STARTTLS", [220], "SMTP STARTTLS");
+      socket = await upgradeSmtpSocketToTls(socket);
+      await sendSmtpCommand(socket, `EHLO ${ehloHost}`, [250], "SMTP EHLO after STARTTLS");
+    }
+
+    if (SMTP_USER || SMTP_PASS) {
+      if (!SMTP_USER || !SMTP_PASS) {
+        throw new Error("Set both SMTP_USER and SMTP_PASS for SMTP authentication.");
+      }
+      await sendSmtpCommand(socket, "AUTH LOGIN", [334], "SMTP AUTH LOGIN");
+      await sendSmtpCommand(socket, Buffer.from(SMTP_USER, "utf8").toString("base64"), [334], "SMTP username");
+      await sendSmtpCommand(socket, Buffer.from(SMTP_PASS, "utf8").toString("base64"), [235], "SMTP password");
+    }
+
+    const from = smtpEnvelopeAddress(CONTACT_FROM_EMAIL);
+    const to = smtpEnvelopeAddress(CONTACT_RECIPIENT_EMAIL);
+    await sendSmtpCommand(socket, `MAIL FROM:<${from}>`, [250], "SMTP MAIL FROM");
+    await sendSmtpCommand(socket, `RCPT TO:<${to}>`, [250, 251], "SMTP RCPT TO");
+    await sendSmtpCommand(socket, "DATA", [354], "SMTP DATA");
+
+    const message = buildSmtpMimeMessage(submission)
+      .replace(/\r?\n/g, "\r\n")
+      .replace(/^\./gm, "..");
+    socket.write(`${message}\r\n.\r\n`);
+    assertSmtpResponse(await readSmtpResponse(socket), [250], "SMTP message send");
+    await sendSmtpCommand(socket, "QUIT", [221], "SMTP QUIT").catch(() => {});
+    return { provider: "smtp" };
+  } finally {
+    socket.end();
+  }
+}
+
+async function deliverContactNotification(submission) {
+  if (!CONTACT_RECIPIENT_EMAIL || !isEmailAddress(CONTACT_RECIPIENT_EMAIL)) {
+    throw contactError("CONTACT_RECIPIENT_EMAIL is missing or invalid.", 500);
+  }
+  if (RESEND_API_KEY) {
+    return sendContactViaResend(submission);
+  }
+  if (SMTP_HOST) {
+    return sendContactViaSmtp(submission);
+  }
+  if (CONTACT_WEBHOOK_URL) {
+    return sendContactViaWebhook(submission);
+  }
+  throw contactError("Contact email delivery is not configured. Set RESEND_API_KEY, SMTP_HOST, or CONTACT_WEBHOOK_URL.", 503);
 }
 
 function readClubeeWorkbook(filePath) {
@@ -657,6 +1110,35 @@ app.get("/healthz", (_req, res) => {
   res.status(200).send("ok");
 });
 
+app.post("/api/contact", async (req, res) => {
+  try {
+    const requestBody = req.body && typeof req.body === "object" ? req.body : {};
+    const submission = normalizeContactSubmission(
+      requestBody.contact && typeof requestBody.contact === "object" ? requestBody.contact : requestBody,
+      req
+    );
+    if (submission.bot) {
+      res.json({ ok: true, ignored: true });
+      return;
+    }
+    enforceContactRateLimit(req);
+    const delivery = await deliverContactNotification(submission);
+    res.json({
+      ok: true,
+      recipientEmail: CONTACT_RECIPIENT_EMAIL,
+      provider: delivery.provider,
+      id: delivery.id || ""
+    });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode || 500);
+    console.error("[POST /api/contact] Error:", error instanceof Error ? error.message : error);
+    res.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not send contact message."
+    });
+  }
+});
+
 app.get("/api/bootstrap", async (_req, res) => {
   try {
     if (!requireLocalDb(res, "Bootstrap API")) return;
@@ -1022,7 +1504,7 @@ app.get("/api/status", (req, res) => {
 });
 
 if (SERVE_STATIC_FRONTEND) {
-  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
+  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|contact|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
   app.get(appRoutePattern, (_req, res) => {
     res.sendFile(path.join(__dirname, "index.html"));
   });
