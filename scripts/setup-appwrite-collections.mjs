@@ -34,6 +34,8 @@ const schema = {
     attributes: [
       { type: "string", key: "displayName", size: 255, required: true },
       { type: "integer", key: "jerseyNumber", required: false },
+      { type: "boolean", key: "loan_jersey", required: false, default: false },
+      { type: "string", key: "side_of_ball", size: 16, required: false },
       { type: "string", key: "email", size: 255, required: false },
       { type: "string", key: "first_name", size: 255, required: false },
       { type: "string", key: "last_name", size: 255, required: false },
@@ -267,6 +269,9 @@ async function ensureAttribute(collectionId, attribute) {
     required: Boolean(attribute.required),
     array: false
   };
+  if (!base.required && attribute.default !== undefined) {
+    base.default = attribute.default;
+  }
 
   if (attribute.type === "string") {
     await request(`/databases/${DATABASE_ID}/collections/${collectionId}/attributes/string`, {

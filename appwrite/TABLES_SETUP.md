@@ -20,6 +20,8 @@ Columns:
 
 - displayName (string, required)
 - jerseyNumber (integer, optional)
+- loan_jersey (boolean, optional, default false) - true when the player is wearing a club loaner (Leihjersey)
+- side_of_ball (string, optional) values: offense, defense, both - lets two players share a jersey number as long as they're not on the same side of the ball
 
 Recommended extra columns for better parity:
 

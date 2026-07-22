@@ -2144,6 +2144,8 @@
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
       rosterImage: String(member.rosterImage || member.roster_image || "").trim(),
       jerseyNumber: member.jerseyNumber === null || member.jerseyNumber === undefined || member.jerseyNumber === "" ? null : Number(member.jerseyNumber),
+      loanJersey: Boolean(member.loanJersey),
+      sideOfBall: String(member.sideOfBall || "").trim(),
       active: Boolean(member.active),
       rookie: Boolean(member.rookie),
       inClubee: Boolean(member.inClubee),
@@ -2639,6 +2641,28 @@
 
   function memberById(memberId) {
     return state.members.find((item) => String(item.id) === String(memberId)) || null;
+  }
+
+  function sideOfBallLabel(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    const labels = { offense: "Offense", defense: "Defense", both: "Both / Special teams" };
+    return labels[normalized] || "Not set";
+  }
+
+  function findJerseyNumberConflict(members, jerseyNumber, sideOfBall, excludeMemberId) {
+    const jersey = Number(jerseyNumber);
+    if (!Number.isFinite(jersey)) return null;
+    const side = String(sideOfBall || "").trim().toLowerCase();
+    return (members || []).find((entry) => {
+      if (String(entry.id) === String(excludeMemberId || "")) return false;
+      if (entry.deletedAt) return false;
+      if (entry.jerseyNumber === null || entry.jerseyNumber === undefined) return false;
+      if (Number(entry.jerseyNumber) !== jersey) return false;
+      const entrySide = String(entry.sideOfBall || "").trim().toLowerCase();
+      if (!side || !entrySide) return true;
+      if (side === "both" || entrySide === "both") return true;
+      return side === entrySide;
+    }) || null;
   }
 
   function signedInUserEmail() {
@@ -3324,6 +3348,8 @@
       positions: (member.positions || []).join(", "),
       roles: (member.roles || []).map((role) => roleLabel(role)).join(", "),
       jerseyNumber: member.jerseyNumber ?? "",
+      sideOfBall: sideOfBallLabel(member.sideOfBall),
+      loanJersey: member.loanJersey ? "Yes" : "No",
       membershipStatus: member.membershipStatus || "",
       passStatus: member.passStatus || "",
       passExpiry: member.passExpiry || "",
@@ -3808,7 +3834,10 @@
       return response.data || [];
     };
 
-    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    let memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, loan_jersey, side_of_ball, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    if (memberRowsResponse.error && /(loan_jersey|side_of_ball)/i.test(String(memberRowsResponse.error?.message || ""))) {
+      memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, rosterImage, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
+    }
     if (memberRowsResponse.error && /rosterImage/i.test(String(memberRowsResponse.error?.message || ""))) {
       memberRowsResponse = await backendClient.from("members").select("id, profile_id, first_name, last_name, display_name, email, iban, positions_json, roles_json, jersey_number, membership_status, notes, deleted_at, invite_sent_at, activated_at");
     }
@@ -3922,6 +3951,8 @@
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
         jerseyNumber: row.jersey_number === null || row.jersey_number === undefined ? null : Number(row.jersey_number),
+        loanJersey: Boolean(row.loan_jersey),
+        sideOfBall: String(row.side_of_ball || "").trim(),
         active: String(row.membership_status || "") === "active",
         rookie: false,
         inClubee: Boolean(row.profile_id),
@@ -4416,6 +4447,7 @@
         : ["player"];
       const jerseyRaw = String(memberPayload.jerseyNumber ?? "").trim();
       const jerseyNumber = jerseyRaw === "" ? null : Number(jerseyRaw);
+      const sideOfBall = String(memberPayload.sideOfBall || "").trim().toLowerCase();
       const passFieldsProvided = Object.prototype.hasOwnProperty.call(memberPayload, "passStatus") || Object.prototype.hasOwnProperty.call(memberPayload, "passExpiry");
       const normalizedPassStatus = (() => {
         const value = String(memberPayload.passStatus || "").trim().toLowerCase();
@@ -4435,6 +4467,8 @@
         positions_json: positions,
         roles_json: roles.length ? roles : ["player"],
         jersey_number: Number.isFinite(jerseyNumber) ? jerseyNumber : null,
+        loan_jersey: Boolean(memberPayload.loanJersey),
+        side_of_ball: sideOfBall || null,
         membership_status: String(memberPayload.membershipStatus || "pending").trim() || "pending",
         notes: String(memberPayload.notes || "").trim(),
         deleted_at: null
@@ -4700,6 +4734,13 @@
   }
 
   async function saveMember(memberPayload) {
+    const jerseyRaw = String(memberPayload.jerseyNumber ?? "").trim();
+    if (jerseyRaw !== "") {
+      const conflict = findJerseyNumberConflict(state.members, jerseyRaw, memberPayload.sideOfBall, memberPayload.memberId);
+      if (conflict) {
+        throw new Error(`Jersey number ${jerseyRaw} is already assigned to ${conflict.name || "another player"} (${sideOfBallLabel(conflict.sideOfBall)}). Choose a different number, or set both players' side of the ball to offense/defense to share it.`);
+      }
+    }
     if (shouldUseRemoteData()) {
       await saveMemberViaRemote(memberPayload);
       return;
@@ -4717,6 +4758,8 @@
         positions: memberPayload.positions,
         roles: memberPayload.roles,
         jerseyNumber: memberPayload.jerseyNumber,
+        loanJersey: memberPayload.loanJersey,
+        sideOfBall: memberPayload.sideOfBall,
         membershipStatus: memberPayload.membershipStatus,
         passStatus: memberPayload.passStatus,
         passExpiry: memberPayload.passExpiry,
@@ -6906,6 +6949,7 @@
       1 +
       1 +
       (showProfileColumn ? 1 : 0) +
+      2 +
       (canSeeSensitiveMemberColumns ? 1 : 0) +
       (canSeeSensitiveMemberColumns ? 1 : 0) +
       (showActionColumn ? 1 : 0);
@@ -6995,7 +7039,7 @@
       </article>
       <div class="table-wrap">
         <table>
-          <thead><tr>${showProfileColumn ? `<th>Profile</th>` : ""}${showMemberIdColumn ? `<th>${renderSortButton("members", "id", "ID")}</th>` : ""}<th>${renderSortButton("members", "firstName", "First name")}</th><th>${renderSortButton("members", "lastName", "Last name")}</th><th>Positions</th><th>Roles</th><th>${renderSortButton("members", "jerseyNumber", "Jersey")}</th>${canSeeSensitiveMemberColumns ? `<th>Membership</th><th>${renderSortButton("members", "passStatus", "Pass")}</th>` : ""}${showActionColumn ? `<th>Actions</th>` : ""}</tr></thead>
+          <thead><tr>${showProfileColumn ? `<th>Profile</th>` : ""}${showMemberIdColumn ? `<th>${renderSortButton("members", "id", "ID")}</th>` : ""}<th>${renderSortButton("members", "firstName", "First name")}</th><th>${renderSortButton("members", "lastName", "Last name")}</th><th>Positions</th><th>Roles</th><th>${renderSortButton("members", "jerseyNumber", "Jersey")}</th><th>Side</th><th>Leihjersey</th>${canSeeSensitiveMemberColumns ? `<th>Membership</th><th>${renderSortButton("members", "passStatus", "Pass")}</th>` : ""}${showActionColumn ? `<th>Actions</th>` : ""}</tr></thead>
           <tbody>
             ${rows.map((member) => `
               <tr>
@@ -7025,6 +7069,16 @@
                   ${adminActionsEnabled && !member.deletedAt
                     ? `<input type="number" min="0" class="member-inline-input member-inline-jersey" data-member-id="${member.id}" value="${member.jerseyNumber ?? ""}" />`
                     : (member.jerseyNumber ?? "-")}
+                </td>
+                <td>
+                  ${adminActionsEnabled && !member.deletedAt
+                    ? `<select class="member-inline-input member-inline-side" data-member-id="${member.id}"><option value="" ${!member.sideOfBall ? "selected" : ""}>Not set</option><option value="offense" ${member.sideOfBall === "offense" ? "selected" : ""}>Offense</option><option value="defense" ${member.sideOfBall === "defense" ? "selected" : ""}>Defense</option><option value="both" ${member.sideOfBall === "both" ? "selected" : ""}>Both</option></select>`
+                    : escapeHtml(sideOfBallLabel(member.sideOfBall))}
+                </td>
+                <td>
+                  ${adminActionsEnabled && !member.deletedAt
+                    ? `<input type="checkbox" class="member-inline-checkbox member-inline-loan-jersey" data-member-id="${member.id}" ${member.loanJersey ? "checked" : ""} />`
+                    : (member.loanJersey ? "Yes" : "No")}
                 </td>
                 ${canSeeSensitiveMemberColumns ? `
                   <td>
@@ -9071,6 +9125,8 @@
       input.checked = positionSet.has(input.value);
     });
     form.elements.jerseyNumber.value = member?.jerseyNumber ?? "";
+    form.elements.sideOfBall.value = member?.sideOfBall || "";
+    form.elements.loanJersey.checked = Boolean(member?.loanJersey);
     form.elements.membershipStatus.value = member?.membershipStatus || "active";
     form.elements.passStatus.value = displayPassStatus(member?.passStatus || "valid");
     form.elements.passExpiry.value = normalizeToIsoDate(member?.passExpiry || "") || (!member ? defaultPassExpiryDate() : "");
@@ -9187,10 +9243,12 @@
         const lastNameInput = document.querySelector(`.member-inline-last-name[data-member-id="${memberId}"]`);
         const emailInput = document.querySelector(`.member-inline-email[data-member-id="${memberId}"]`);
         const jerseyInput = document.querySelector(`.member-inline-jersey[data-member-id="${memberId}"]`);
+        const sideInput = document.querySelector(`.member-inline-side[data-member-id="${memberId}"]`);
+        const loanJerseyInput = document.querySelector(`.member-inline-loan-jersey[data-member-id="${memberId}"]`);
         const membershipInput = document.querySelector(`.member-inline-membership[data-member-id="${memberId}"]`);
         const passStatusInput = document.querySelector(`.member-inline-pass-status[data-member-id="${memberId}"]`);
         const passExpiryInput = document.querySelector(`.member-inline-pass-expiry[data-member-id="${memberId}"]`);
-        if (!firstNameInput || !lastNameInput || !emailInput || !jerseyInput || !membershipInput || !passStatusInput || !passExpiryInput) {
+        if (!firstNameInput || !lastNameInput || !emailInput || !jerseyInput || !sideInput || !loanJerseyInput || !membershipInput || !passStatusInput || !passExpiryInput) {
           authState.status = "Could not save this row because required inline fields are missing. Try reopening Members view.";
           mount();
           switchView("members");
@@ -9215,6 +9273,8 @@
             positions: Array.from(new Set(selectedPositions)),
             roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
             jerseyNumber: String(jerseyInput.value || "").trim(),
+            sideOfBall: String(sideInput.value || "").trim(),
+            loanJersey: Boolean(loanJerseyInput.checked),
             membershipStatus: String(membershipInput.value || "active").trim(),
             passStatus: normalizedPassStatus,
             passExpiry: normalizedPassExpiry,
@@ -9442,6 +9502,8 @@
           roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
           positions: Array.from(new Set(selectedPositions)),
           jerseyNumber: String(formData.get("jerseyNumber") || "").trim(),
+          sideOfBall: String(formData.get("sideOfBall") || "").trim(),
+          loanJersey: formData.get("loanJersey") === "yes",
           membershipStatus: String(formData.get("membershipStatus") || "active"),
           passStatus: String(formData.get("passStatus") || "missing").trim(),
           passExpiry: String(formData.get("passExpiry") || "").trim(),
@@ -9575,6 +9637,8 @@
             positions: member.positions || [],
             roles: member.roles && member.roles.length ? member.roles : ["player"],
             jerseyNumber: String(jerseyInput.value || "").trim(),
+            sideOfBall: member.sideOfBall || "",
+            loanJersey: Boolean(member.loanJersey),
             membershipStatus: member.membershipStatus || "active",
             notes: member.notes || ""
           });
@@ -9654,6 +9718,8 @@
             positions: Array.from(new Set(selectedPositions)),
             roles: selectedRoles.length ? Array.from(new Set(selectedRoles)) : ["player"],
             jerseyNumber: member.jerseyNumber ?? "",
+            sideOfBall: member.sideOfBall || "",
+            loanJersey: Boolean(member.loanJersey),
             membershipStatus: member.membershipStatus || "active",
             notes: member.notes || ""
           });
@@ -9691,6 +9757,8 @@
             positions: member.positions || [],
             roles: member.roles && member.roles.length ? member.roles : ["player"],
             jerseyNumber: member.jerseyNumber ?? "",
+            sideOfBall: member.sideOfBall || "",
+            loanJersey: Boolean(member.loanJersey),
             membershipStatus: member.membershipStatus || "active",
             notes: String(notesInput?.value || "").trim()
           });
@@ -10124,6 +10192,8 @@
           { key: "positions", label: "Positions" },
           { key: "roles", label: "Roles" },
           { key: "jerseyNumber", label: "Jersey" },
+          { key: "sideOfBall", label: "Side of ball" },
+          { key: "loanJersey", label: "Leihjersey" },
           { key: "membershipStatus", label: "Membership" },
           { key: "passStatus", label: "Pass status" },
           { key: "passExpiry", label: "Pass expiry" },
@@ -10144,6 +10214,8 @@
           { key: "positions", label: "Positions" },
           { key: "roles", label: "Roles" },
           { key: "jerseyNumber", label: "Jersey" },
+          { key: "sideOfBall", label: "Side of ball" },
+          { key: "loanJersey", label: "Leihjersey" },
           { key: "membershipStatus", label: "Membership" },
           { key: "passStatus", label: "Pass status" },
           { key: "passExpiry", label: "Pass expiry" },
