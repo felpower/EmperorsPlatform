@@ -39,7 +39,22 @@ async function createRow(collectionId, data) {
 }
 
 function currentQuarter(date = new Date()) {
-  return { quarter: Math.floor(date.getMonth() / 3) + 1, year: date.getFullYear() };
+  const month = date.getMonth() + 1;
+  let year = date.getFullYear();
+  let quarter;
+  if (month === 1) {
+    quarter = 4;
+    year -= 1;
+  } else if (month <= 4) {
+    quarter = 1;
+  } else if (month <= 7) {
+    quarter = 2;
+  } else if (month <= 10) {
+    quarter = 3;
+  } else {
+    quarter = 4;
+  }
+  return { quarter, year };
 }
 
 function quarterSequence(startQuarter, startYear, count) {

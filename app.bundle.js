@@ -3542,9 +3542,50 @@
   }
 
   function currentQuarterToken() {
-    const now = new Date();
-    const quarter = Math.floor(now.getMonth() / 3) + 1;
-    return `Q${quarter}_${now.getFullYear()}`;
+    return fiscalQuarterToken(new Date());
+  }
+
+  function fiscalQuarterToken(date) {
+    const month = date.getMonth() + 1;
+    let year = date.getFullYear();
+    let quarter;
+    if (month === 1) {
+      quarter = 4;
+      year -= 1;
+    } else if (month <= 4) {
+      quarter = 1;
+    } else if (month <= 7) {
+      quarter = 2;
+    } else if (month <= 10) {
+      quarter = 3;
+    } else {
+      quarter = 4;
+    }
+    return `Q${quarter}_${year}`;
+  }
+
+  function nextQuarterToken(token) {
+    const match = /^Q([1-4])_(\d{4})$/.exec(String(token || "").trim());
+    if (!match) return "";
+    let quarter = Number(match[1]) + 1;
+    let year = Number(match[2]);
+    if (quarter > 4) {
+      quarter = 1;
+      year += 1;
+    }
+    return `Q${quarter}_${year}`;
+  }
+
+  function feeQuarterCandidates(count) {
+    const existing = new Set(getFeePeriods());
+    const candidates = [];
+    let token = currentQuarterToken();
+    const limit = count || 6;
+    while (candidates.length < limit) {
+      if (!existing.has(token)) candidates.push(token);
+      token = nextQuarterToken(token);
+    }
+    return candidates;
   }
 
   function ensureValidFeeFilter() {
@@ -4872,6 +4913,70 @@
       }
       throw error;
     }
+  }
+
+  function eligibleFeeMembers() {
+    return state.members.filter((member) => {
+      if (member.deletedAt) return false;
+      if (String(member.membershipStatus || "").trim().toLowerCase() === "exited") return false;
+      return (member.roles || []).includes("player");
+    });
+  }
+
+  async function generateFeeRowsForQuarter(period) {
+    const normalizedPeriod = String(period || "").trim();
+    if (!normalizedPeriod) throw new Error("Please choose a quarter.");
+    if (!shouldUseRemoteData() || !backendClient) {
+      throw new Error("Creating a new quarter requires the Appwrite-backed deployment.");
+    }
+    if (getFeePeriods().includes(normalizedPeriod)) {
+      throw new Error(`${formatFeePeriod(normalizedPeriod)} already exists.`);
+    }
+
+    const eligibleMembers = eligibleFeeMembers();
+    if (!eligibleMembers.length) throw new Error("No eligible players found.");
+
+    const rows = eligibleMembers.map((member) => ({
+      member_id: member.id,
+      season_label: normalizedPeriod.split("_")[1] || "",
+      fee_period: normalizedPeriod,
+      amount_cents: 8250,
+      paid_cents: 0,
+      status: "not_collected",
+      iban: String(memberIban(member.id) || "").trim() || null,
+      status_note: null
+    }));
+
+    const response = await backendClient.from("membership_fees").insert(rows);
+    if (response.error) throw response.error;
+
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
+    await loadBootstrapData();
+    selectedFeePeriod = normalizedPeriod;
+    saveStoredValue(FEE_FILTER_KEY, selectedFeePeriod);
+    recordActivity("fees", `Generated ${rows.length} fee row(s) for ${formatFeePeriod(normalizedPeriod)}.`, {
+      action: "fee_quarter_generated",
+      feePeriod: normalizedPeriod,
+      rowCount: rows.length
+    });
+  }
+
+  async function deleteFeeRowsForQuarter(period) {
+    const normalizedPeriod = String(period || "").trim();
+    if (!normalizedPeriod) throw new Error("Please choose a quarter.");
+    if (!shouldUseRemoteData() || !backendClient) {
+      throw new Error("Deleting a quarter requires the Appwrite-backed deployment.");
+    }
+
+    const response = await backendClient.from("membership_fees").delete().eq("fee_period", normalizedPeriod);
+    if (response.error) throw response.error;
+
+    invalidateCache(BOOTSTRAP_CACHE_KEY);
+    await loadBootstrapData();
+    recordActivity("fees", `Deleted all fee rows for ${formatFeePeriod(normalizedPeriod)}.`, {
+      action: "fee_quarter_deleted",
+      feePeriod: normalizedPeriod
+    });
   }
 
   async function saveMember(memberPayload) {
@@ -7557,6 +7662,7 @@
     const missingCount = Math.max(collectibleCount - collectedCount, 0);
     const selectedLabel = currentFeePeriod();
     const currentQuarter = currentQuarterToken();
+    const quarterCandidates = feeQuarterCandidates(6);
     const selectedSet = new Set(selectedFeeMemberIds.map(String));
     const visibleMemberIds = Array.from(new Set(visibleFees.map((fee) => String(fee.memberId))));
     const selectedVisibleCount = visibleMemberIds.filter((memberId) => selectedSet.has(memberId)).length;
@@ -7595,6 +7701,13 @@
         <article class="card finance-summary-card">
           <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target. <strong>${collectedCount}/${collectibleCount} collected</strong> (${missingCount} missing)</p>
           <label class="filter-label" style="margin-top: 8px;">Choose fee quarter<select id="fee-period-select">${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
+          ${periods.length ? `<div class="button-row" style="margin-top: 10px;"><button id="delete-quarter-button" class="ghost-button small-button" type="button">Delete ${formatFeePeriod(selectedLabel)}</button></div>` : ""}
+          <label class="filter-label" style="margin-top: 10px;">Create new quarter
+            <div class="inline-form">
+              <select id="create-quarter-select">${quarterCandidates.map((period) => `<option value="${period}">${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select>
+              <button id="create-quarter-button" class="primary-button small-button" type="button">Create quarter</button>
+            </div>
+          </label>
         </article>
       </div>
       <article class="card filter-card fees-filter-sticky fees-filter-card" style="margin-bottom: 14px;">
@@ -10509,6 +10622,48 @@
     });
   }
 
+  function bindFeeQuarterActions() {
+    const deleteButton = document.getElementById("delete-quarter-button");
+    if (deleteButton) {
+      deleteButton.onclick = async function () {
+        const period = currentFeePeriod();
+        if (!period) return;
+        const rowCount = state.fees.filter((fee) => fee.feePeriod === period).length;
+        const confirmed = window.confirm(`Delete all ${rowCount} fee row(s) for ${formatFeePeriod(period)}? This cannot be undone.`);
+        if (!confirmed) return;
+        try {
+          await deleteFeeRowsForQuarter(period);
+          authState.status = `Deleted ${formatFeePeriod(period)}.`;
+          mount();
+          switchView("fees");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("fees");
+        }
+      };
+    }
+
+    const createButton = document.getElementById("create-quarter-button");
+    if (createButton) {
+      createButton.onclick = async function () {
+        const select = document.getElementById("create-quarter-select");
+        const period = select ? select.value : "";
+        if (!period) return;
+        try {
+          await generateFeeRowsForQuarter(period);
+          authState.status = `Created ${formatFeePeriod(period)}.`;
+          mount();
+          switchView("fees");
+        } catch (error) {
+          authState.status = error.message;
+          mount();
+          switchView("fees");
+        }
+      };
+    }
+  }
+
   function bindTableExports() {
     const exportMembersCsvButton = document.getElementById("export-members-csv-option");
     if (exportMembersCsvButton) {
@@ -12309,6 +12464,7 @@
       bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();
+      bindFeeQuarterActions();
       bindPassFilters();
       bindPassSyncActions();
       bindFeeEditModeActions();

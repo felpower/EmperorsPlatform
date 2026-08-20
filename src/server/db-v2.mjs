@@ -83,8 +83,21 @@ function parseJerseyNumber(value) {
 
 function quarterFromDate(date = new Date()) {
   const month = date.getMonth() + 1;
-  const quarter = Math.floor((month - 1) / 3) + 1;
-  return `Q${quarter} ${date.getFullYear()}`;
+  let year = date.getFullYear();
+  let quarter;
+  if (month === 1) {
+    quarter = 4;
+    year -= 1;
+  } else if (month <= 4) {
+    quarter = 1;
+  } else if (month <= 7) {
+    quarter = 2;
+  } else if (month <= 10) {
+    quarter = 3;
+  } else {
+    quarter = 4;
+  }
+  return `Q${quarter} ${year}`;
 }
 
 function periodScore(periodToken) {
