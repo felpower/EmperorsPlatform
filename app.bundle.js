@@ -4944,9 +4944,15 @@
     if (counter) counter.textContent = `${done} / ${total}`;
     const note = document.getElementById("blocking-progress-note");
     if (note) {
-      note.textContent = info && info.waitingMs
-        ? `Appwrite rate limit hit — waiting ${Math.round(info.waitingMs / 1000)}s before retrying (attempt ${info.attempt})…`
-        : "";
+      if (info && info.waitingMs) {
+        note.textContent = `Appwrite rate limit hit — waiting ${Math.round(info.waitingMs / 1000)}s before retrying (attempt ${info.attempt})…`;
+      } else if (info && info.phase === "committing") {
+        note.textContent = "Committing…";
+      } else if (info && info.phase === "staging") {
+        note.textContent = "";
+      } else {
+        note.textContent = "";
+      }
     }
   }
 

@@ -114,6 +114,44 @@
     return;
   }
 
+  const bulkService = tablesService || databasesService;
+  const bulkTableField = tablesService ? "tableId" : "collectionId";
+  const bulkRowField = tablesService ? "rowId" : "documentId";
+  const bulkApi = bulkService && typeof bulkService.createTransaction === "function"
+    ? {
+        supported: true,
+        createTransaction: function () {
+          return bulkService.createTransaction({ ttl: 120 });
+        },
+        stageOperations: function (transactionId, operations) {
+          return bulkService.createOperations({ transactionId: transactionId, operations: operations });
+        },
+        commit: function (transactionId) {
+          return bulkService.updateTransaction({ transactionId: transactionId, commit: true });
+        },
+        buildOperation: function (action, tableId, rowId, data) {
+          const operation = { action: action, databaseId: String(config.databaseId) };
+          operation[bulkTableField] = tableId;
+          operation[bulkRowField] = rowId;
+          if (data) operation.data = data;
+          return operation;
+        }
+      }
+    : { supported: false };
+
+  const BULK_OPERATIONS_PER_STAGE_CALL = 200;
+
+  async function runBulkWrite(operations, onProgress) {
+    const tx = await bulkApi.createTransaction();
+    for (let i = 0; i < operations.length; i += BULK_OPERATIONS_PER_STAGE_CALL) {
+      const chunk = operations.slice(i, i + BULK_OPERATIONS_PER_STAGE_CALL);
+      await bulkApi.stageOperations(tx.$id, chunk);
+      if (onProgress) onProgress(Math.min(i + chunk.length, operations.length), operations.length, { phase: "staging" });
+    }
+    if (onProgress) onProgress(operations.length, operations.length, { phase: "committing" });
+    await bulkApi.commit(tx.$id);
+  }
+
   const authListeners = new Set();
 
   function membersTableId() {
@@ -441,66 +479,100 @@
           data = await this.fetchRows();
         } else if (this.action === "insert") {
           const tableId = tableIdFor(this.tableName);
-          const created = [];
           const totalToInsert = (this.payload || []).length;
-          for (const row of this.payload || []) {
-            const rawRow = row || {};
-            const payload = this.tableName === "members"
-              ? sanitizeMembersPayload(rawRow, { forInsert: true })
-              : sanitizeNonMembersPayload(rawRow);
-            const requestedDocumentId = String(rawRow.id || rawRow.$id || "").trim();
-            const inserted = await withRateLimitRetry(
-              function () {
-                return dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
-              },
-              (attempt, waitMs) => {
-                if (this.progressCallback) this.progressCallback(created.length, totalToInsert, { waitingMs: waitMs, attempt: attempt });
-              }
-            );
-            created.push(this.tableName === "members" ? normalizeMembersRow(inserted) : Object.assign({}, inserted, { id: inserted.$id || inserted.id }));
-            if (this.progressCallback) this.progressCallback(created.length, totalToInsert);
-            if (created.length < totalToInsert) await sleep(ROW_LOOP_THROTTLE_MS);
+          let created;
+          if (bulkApi.supported && totalToInsert > 1) {
+            const preparedRows = (this.payload || []).map(function (row) {
+              const rawRow = row || {};
+              const payload = this.tableName === "members"
+                ? sanitizeMembersPayload(rawRow, { forInsert: true })
+                : sanitizeNonMembersPayload(rawRow);
+              const rowId = String(rawRow.id || rawRow.$id || "").trim() || ID.unique();
+              return { rowId: rowId, payload: payload };
+            }, this);
+            const operations = preparedRows.map((item) => bulkApi.buildOperation("create", tableId, item.rowId, item.payload));
+            await runBulkWrite(operations, this.progressCallback);
+            created = preparedRows.map((item) => this.tableName === "members"
+              ? normalizeMembersRow(Object.assign({ $id: item.rowId }, item.payload))
+              : Object.assign({}, item.payload, { id: item.rowId, $id: item.rowId }));
+          } else {
+            created = [];
+            for (const row of this.payload || []) {
+              const rawRow = row || {};
+              const payload = this.tableName === "members"
+                ? sanitizeMembersPayload(rawRow, { forInsert: true })
+                : sanitizeNonMembersPayload(rawRow);
+              const requestedDocumentId = String(rawRow.id || rawRow.$id || "").trim();
+              const inserted = await withRateLimitRetry(
+                function () {
+                  return dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
+                },
+                (attempt, waitMs) => {
+                  if (this.progressCallback) this.progressCallback(created.length, totalToInsert, { waitingMs: waitMs, attempt: attempt });
+                }
+              );
+              created.push(this.tableName === "members" ? normalizeMembersRow(inserted) : Object.assign({}, inserted, { id: inserted.$id || inserted.id }));
+              if (this.progressCallback) this.progressCallback(created.length, totalToInsert);
+              if (created.length < totalToInsert) await sleep(ROW_LOOP_THROTTLE_MS);
+            }
           }
           data = created;
         } else if (this.action === "update") {
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
-          const updated = [];
-          for (const row of rows) {
+          let updated;
+          if (bulkApi.supported && rows.length > 1) {
             const payload = this.tableName === "members"
               ? sanitizeMembersPayload(this.payload || {})
               : sanitizeNonMembersPayload(this.payload || {});
-            const rowId = String(row.$id || row.id);
-            const next = await withRateLimitRetry(
-              function () {
-                return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
-              },
-              (attempt, waitMs) => {
-                if (this.progressCallback) this.progressCallback(updated.length, rows.length, { waitingMs: waitMs, attempt: attempt });
-              }
-            );
-            updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
-            if (this.progressCallback) this.progressCallback(updated.length, rows.length);
-            if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
+            const operations = rows.map((row) => bulkApi.buildOperation("update", tableId, String(row.$id || row.id), payload));
+            await runBulkWrite(operations, this.progressCallback);
+            updated = rows.map((row) => this.tableName === "members"
+              ? normalizeMembersRow(Object.assign({}, row, payload))
+              : Object.assign({}, row, payload, { id: row.$id || row.id }));
+          } else {
+            updated = [];
+            for (const row of rows) {
+              const payload = this.tableName === "members"
+                ? sanitizeMembersPayload(this.payload || {})
+                : sanitizeNonMembersPayload(this.payload || {});
+              const rowId = String(row.$id || row.id);
+              const next = await withRateLimitRetry(
+                function () {
+                  return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
+                },
+                (attempt, waitMs) => {
+                  if (this.progressCallback) this.progressCallback(updated.length, rows.length, { waitingMs: waitMs, attempt: attempt });
+                }
+              );
+              updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
+              if (this.progressCallback) this.progressCallback(updated.length, rows.length);
+              if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
+            }
           }
           data = updated;
         } else if (this.action === "delete") {
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
-          let deletedCount = 0;
-          for (const row of rows) {
-            const rowId = String(row.$id || row.id);
-            await withRateLimitRetry(
-              function () {
-                return dbApi.deleteRow(String(config.databaseId), tableId, rowId);
-              },
-              (attempt, waitMs) => {
-                if (this.progressCallback) this.progressCallback(deletedCount, rows.length, { waitingMs: waitMs, attempt: attempt });
-              }
-            );
-            deletedCount += 1;
-            if (this.progressCallback) this.progressCallback(deletedCount, rows.length);
-            if (deletedCount < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
+          if (bulkApi.supported && rows.length > 1) {
+            const operations = rows.map((row) => bulkApi.buildOperation("delete", tableId, String(row.$id || row.id)));
+            await runBulkWrite(operations, this.progressCallback);
+          } else {
+            let deletedCount = 0;
+            for (const row of rows) {
+              const rowId = String(row.$id || row.id);
+              await withRateLimitRetry(
+                function () {
+                  return dbApi.deleteRow(String(config.databaseId), tableId, rowId);
+                },
+                (attempt, waitMs) => {
+                  if (this.progressCallback) this.progressCallback(deletedCount, rows.length, { waitingMs: waitMs, attempt: attempt });
+                }
+              );
+              deletedCount += 1;
+              if (this.progressCallback) this.progressCallback(deletedCount, rows.length);
+              if (deletedCount < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
+            }
           }
           data = [];
         } else if (this.action === "upsert") {
