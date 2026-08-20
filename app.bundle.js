@@ -4130,6 +4130,7 @@
         email: String(row.email || ""),
         iban: String(row.iban || latestFee?.iban || "").trim(),
         memberIban: String(row.iban || "").trim(),
+        mandateDate: String(row.mandate_date || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
@@ -5301,7 +5302,8 @@
       firstName: String(member.firstName || "").trim(),
       lastName: String(member.lastName || "").trim(),
       name: String(member.name || "").trim(),
-      iban: String(memberIban(member.id) || "").trim()
+      iban: String(memberIban(member.id) || "").trim(),
+      mandateDate: String(member.mandateDate || "").trim()
     }));
     const feesPayload = state.fees.map((fee) => ({
       id: String(fee.id || "").trim(),
@@ -5405,13 +5407,14 @@
     return labels[String(field || "")] || String(field || "");
   }
 
-  async function updateMemberSensitiveFinance({ memberId, iban, statusByFeeId }) {
+  async function updateMemberSensitiveFinance({ memberId, iban, mandateDate, statusByFeeId }) {
     if (profileFinanceModule && typeof profileFinanceModule.updateMemberSensitiveFinance === "function") {
       await profileFinanceModule.updateMemberSensitiveFinance({
         currentAccessRole,
         backendClient,
         memberId,
         iban,
+        mandateDate,
         statusByFeeId,
         fees: state.fees,
         updateFeeRow
@@ -5422,10 +5425,11 @@
       throw new Error("Only admins can change IBAN or quarter payment statuses.");
     }
     const normalizedIban = normalizeIbanText(iban);
+    const normalizedMandateDate = String(mandateDate || "").trim();
     if (backendClient) {
       const memberUpdate = await backendClient
         .from("members")
-        .update({ iban: normalizedIban || null })
+        .update({ iban: normalizedIban || null, mandate_date: normalizedMandateDate || null })
         .eq("id", String(memberId || ""));
       if (memberUpdate.error && !/column|attribute|unknown|schema/i.test(String(memberUpdate.error?.message || ""))) {
         throw memberUpdate.error;
@@ -5447,6 +5451,7 @@
       action: "member_finance_updated",
       memberId: String(memberId || "").trim(),
       ibanUpdated: Boolean(ibanValue),
+      mandateDateUpdated: Boolean(normalizedMandateDate),
       affectedFeeIds: Object.keys(statusByFeeId || {})
     });
   }
@@ -7553,6 +7558,9 @@
         ${canEditSensitive
           ? `<label>IBAN:<input id="user-sensitive-iban" value="${firstIbanDisplay}" ${sensitiveDisabled} /></label>`
           : `<div><p class="muted" style="margin-bottom: 4px;">IBAN</p><p>${firstIbanDisplay || "No IBAN on file"}</p></div>`}
+        ${canEditSensitive
+          ? `<label>SEPA mandate signed on:<input type="date" id="user-sensitive-mandate-date" value="${String(member.mandateDate || "").trim()}" ${sensitiveDisabled} /></label><p class="meta">Only set this once, to the real date the member signed the SEPA mandate. Leave blank if unknown - the SEPA export will fall back to an estimated date and flag it.</p>`
+          : ""}
         <div class="table-wrap">
           <table>
             <thead><tr><th>Quarter</th><th>Status</th></tr></thead>
@@ -7716,12 +7724,14 @@
     const sepaExportAvailable = hasSepaExportCapability();
     const sepaIncluded = Array.isArray(sepaExportPreview?.included) ? sepaExportPreview.included : [];
     const sepaSkipped = Array.isArray(sepaExportPreview?.skipped) ? sepaExportPreview.skipped : [];
+    const sepaEstimatedDateCount = sepaIncluded.filter((item) => item.mandateDateEstimated).length;
     const sepaSummaryCard = sepaExportPreview
       ? `
         <article class="card" style="margin-bottom: 14px;">
           <p class="eyebrow">SEPA Preview</p>
           <h3>Last export summary</h3>
           <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
+          ${sepaEstimatedDateCount ? `<p class="meta" style="color: var(--warning);">${sepaEstimatedDateCount} of ${sepaIncluded.length} used an estimated mandate signature date (no real date on file yet). Set the real date under that member's "Sensitive finance" section when you have it.</p>` : ""}
           ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${escapeHtml(item.name || "")} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
           ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${escapeHtml(item.name || "Unknown")}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
         </article>
@@ -10155,6 +10165,7 @@
           return;
         }
         const ibanInput = document.getElementById("user-sensitive-iban");
+        const mandateDateInput = document.getElementById("user-sensitive-mandate-date");
         const statusInputs = Array.from(document.querySelectorAll(".user-sensitive-fee-status"));
         const statusByFeeId = {};
         statusInputs.forEach((input) => {
@@ -10165,6 +10176,7 @@
           await updateMemberSensitiveFinance({
             memberId: member.id,
             iban: String(ibanInput?.value || "").trim(),
+            mandateDate: String(mandateDateInput?.value || "").trim(),
             statusByFeeId
           });
           authState.status = "Sensitive finance fields updated.";

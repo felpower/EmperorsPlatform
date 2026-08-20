@@ -36,6 +36,7 @@
       backendClient,
       memberId,
       iban,
+      mandateDate,
       statusByFeeId,
       fees,
       updateFeeRow
@@ -46,10 +47,11 @@
     }
 
     const normalizedIban = normalizeIbanText(iban);
+    const normalizedMandateDate = String(mandateDate || "").trim();
     if (backendClient) {
       const memberUpdate = await backendClient
         .from("members")
-        .update({ iban: normalizedIban || null })
+        .update({ iban: normalizedIban || null, mandate_date: normalizedMandateDate || null })
         .eq("id", String(memberId || ""));
       if (memberUpdate.error && !/column|attribute|unknown|schema/i.test(String(memberUpdate.error?.message || ""))) {
         throw memberUpdate.error;

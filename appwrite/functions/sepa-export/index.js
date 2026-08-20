@@ -141,7 +141,8 @@ module.exports = async ({ req, res, log }) => {
       first_name: String(member?.firstName || "").trim(),
       last_name: String(member?.lastName || "").trim(),
       display_name: String(member?.name || "").trim(),
-      iban: String(member?.iban || "").trim()
+      iban: String(member?.iban || "").trim(),
+      mandate_date: String(member?.mandateDate || "").trim()
     }));
 
     const normalizePayloadFees = (rows) => rows.map((fee) => ({
@@ -243,6 +244,9 @@ module.exports = async ({ req, res, log }) => {
       }
 
       const debtorName = memberName;
+      const realMandateDate = normalizeDate(member?.mandate_date || fee?.mandate_date || fallbackFee?.mandate_date);
+      const mandateDate = realMandateDate || mandateDateOverride || todayIso();
+      const mandateDateEstimated = !realMandateDate;
 
       transactions.push({
         memberId,
@@ -251,7 +255,7 @@ module.exports = async ({ req, res, log }) => {
         debtorIban,
         debtorBic: String(fee?.bic || fallbackFee?.bic || "").trim().toUpperCase(),
         mandateId,
-        mandateDate: normalizeDate(fee?.mandate_date || fallbackFee?.mandate_date) || mandateDateOverride || todayIso(),
+        mandateDate,
         amountCents: outstandingCents,
         dueDate: normalizeDate(fee?.due_date) || "",
         description: `${requestedPeriod} membership fee`
@@ -264,7 +268,9 @@ module.exports = async ({ req, res, log }) => {
         amount: amountString(amountCents),
         paidAmount: amountString(paidCents),
         outstandingAmount: amountString(outstandingCents),
-        iban: debtorIban
+        iban: debtorIban,
+        mandateDate,
+        mandateDateEstimated
       });
     }
 
@@ -390,7 +396,8 @@ ${transactionXml}
         totalAmount: amountString(controlSum),
         collectionDate,
         skippedRows: skippedMembers.length,
-        sourceRows: periodFees.length
+        sourceRows: periodFees.length,
+        estimatedMandateDates: includedMembers.filter((item) => item.mandateDateEstimated).length
       },
       preview: {
         feePeriod: requestedPeriod,
