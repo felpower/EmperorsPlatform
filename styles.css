@@ -1865,6 +1865,7 @@ button {
 .status.due,
 .status.expiring,
 .status.not_collected,
+.status.partial,
 .status.maybe {
   background: rgba(179, 108, 16, 0.12);
   color: var(--warning);

@@ -237,6 +237,7 @@
     { key: "technik", label: "Technik" }
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
+  const MEMBERSHIP_STATUSES = ["active", "pending", "inactive", "exited"];
   const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"];
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
@@ -3604,9 +3605,9 @@
 
   function memberFilterOptions() {
     return {
-      positions: Array.from(new Set(state.members.flatMap((member) => member.positions || []).filter(Boolean))).sort(),
-      roles: Array.from(new Set(state.members.flatMap((member) => member.roles || []).filter(Boolean))).sort(),
-      membership: Array.from(new Set(state.members.map((member) => member.membershipStatus).filter(Boolean))).sort(),
+      positions: Array.from(new Set([...memberPositionOptions, ...state.members.flatMap((member) => member.positions || [])].filter(Boolean))).sort(),
+      roles: Array.from(new Set([...memberRoleOptions, ...state.members.flatMap((member) => member.roles || [])].filter(Boolean))).sort(),
+      membership: Array.from(new Set([...MEMBERSHIP_STATUSES, ...state.members.map((member) => member.membershipStatus)].filter(Boolean))).sort(),
       passStatuses: ["valid", "missing", "expired"]
     };
   }
@@ -3653,8 +3654,8 @@
     const playerMembers = state.members.filter((member) => (member.roles || []).includes("player") && (includeDeleted || !member.deletedAt));
     return {
       statuses: ["valid", "missing", "expired"],
-      positions: Array.from(new Set(playerMembers.flatMap((member) => member.positions || []).filter(Boolean))).sort(),
-      membership: Array.from(new Set(playerMembers.map((member) => member.membershipStatus).filter(Boolean))).sort()
+      positions: Array.from(new Set([...memberPositionOptions, ...playerMembers.flatMap((member) => member.positions || [])].filter(Boolean))).sort(),
+      membership: Array.from(new Set([...MEMBERSHIP_STATUSES, ...playerMembers.map((member) => member.membershipStatus)].filter(Boolean))).sort()
     };
   }
 
@@ -7326,7 +7327,7 @@
                 ${canSeeSensitiveMemberColumns ? `
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${draftMembership === "active" ? "selected" : ""}>active</option><option value="pending" ${draftMembership === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${draftMembership === "inactive" ? "selected" : ""}>inactive</option><option value="exited" ${draftMembership === "exited" ? "selected" : ""}>exited</option></select>`
+                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}">${MEMBERSHIP_STATUSES.map((status) => `<option value="${status}" ${draftMembership === status ? "selected" : ""}>${status}</option>`).join("")}</select>`
                       : (member.deletedAt ? statusPill("deleted", "deleted") : statusPill(member.membershipStatus))}
                   </td>
                   <td>
@@ -9457,6 +9458,22 @@
     const positionsClearAll = document.getElementById("positions-clear-all");
     const dialogPassStatusInput = form?.elements?.passStatus || null;
     const dialogPassExpiryInput = form?.elements?.passExpiry || null;
+
+    if (form && !form.dataset.enumsRendered) {
+      const membershipSelect = form.elements.membershipStatus;
+      if (membershipSelect) {
+        membershipSelect.innerHTML = MEMBERSHIP_STATUSES.map((status) => `<option value="${status}">${status.charAt(0).toUpperCase()}${status.slice(1)}</option>`).join("");
+      }
+      const rolesContainer = form.querySelector('input[name="roles"]')?.closest(".status-filter-options");
+      if (rolesContainer) {
+        rolesContainer.innerHTML = memberRoleOptions.map((role) => `<label class="status-check"><input type="checkbox" name="roles" value="${role}" ${role === "player" ? "checked" : ""} /><span>${roleLabel(role)}</span></label>`).join("");
+      }
+      const positionsContainer = form.querySelector('input[name="positions"]')?.closest(".status-filter-options");
+      if (positionsContainer) {
+        positionsContainer.innerHTML = memberPositionOptions.map((position) => `<label class="status-check"><input type="checkbox" name="positions" value="${position}" /><span>${position}</span></label>`).join("");
+      }
+      form.dataset.enumsRendered = "true";
+    }
     if (openButton) {
       openButton.onclick = function () {
         openMemberDialog(null);
