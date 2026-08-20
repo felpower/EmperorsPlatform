@@ -9,11 +9,13 @@
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",
     "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
     "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs",
-    "import:roster-pictures": "node scripts/import-roster-pictures.mjs"
+    "import:roster-pictures": "node scripts/import-roster-pictures.mjs",
+    "generate:quarterly-fees": "node scripts/generate-quarter-fees-appwrite.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",
     "express": "^5.2.1",
+    "node-appwrite": "^14.2.0",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"
   }

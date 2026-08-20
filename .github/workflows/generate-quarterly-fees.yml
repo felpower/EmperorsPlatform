@@ -1,0 +1,41 @@
+name: Generate Quarterly Fees
+
+on:
+  schedule:
+    # 03:00 UTC on the 1st of January, April, July, and October
+    - cron: "0 3 1 1,4,7,10 *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only, no writes to Appwrite"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --omit=dev --no-save node-appwrite
+
+      - name: Generate missing fee rows
+        env:
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_DATABASE_ID: ${{ vars.APPWRITE_DATABASE_ID }}
+          APPWRITE_MEMBERS_COLLECTION_ID: ${{ vars.APPWRITE_MEMBERS_COLLECTION_ID }}
+          APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID: ${{ vars.APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: node scripts/generate-quarter-fees-appwrite.mjs

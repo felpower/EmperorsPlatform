@@ -1123,7 +1123,8 @@ export async function applyClubeePassSync({ clubeeXlsxPath, memberIds }) {
 }
 
 export async function ensureFeeCoverage() {
-  const members = await all("select id from members");
+  const members = (await all("select id, membership_status as membershipStatus from members"))
+    .filter((member) => String(member.membershipStatus || "").trim().toLowerCase() !== "exited");
   if (!members.length) return;
 
   const targetPeriods = quarterSequence(normalizePeriodToken(quarterFromDate()), 4);

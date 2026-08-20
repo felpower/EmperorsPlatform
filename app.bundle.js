@@ -3506,7 +3506,7 @@
       amount: Number(fee.amount || 0).toFixed(2),
       paidAmount: Number(fee.paidAmount || 0).toFixed(2),
       status: statusLabel(fee.status),
-      iban: fee.iban || ""
+      iban: memberIban(fee.memberId) || fee.iban || ""
     }));
   }
 
@@ -7326,7 +7326,7 @@
                 ${canSeeSensitiveMemberColumns ? `
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${draftMembership === "active" ? "selected" : ""}>active</option><option value="pending" ${draftMembership === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${draftMembership === "inactive" ? "selected" : ""}>inactive</option></select>`
+                      ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}"><option value="active" ${draftMembership === "active" ? "selected" : ""}>active</option><option value="pending" ${draftMembership === "pending" ? "selected" : ""}>pending</option><option value="inactive" ${draftMembership === "inactive" ? "selected" : ""}>inactive</option><option value="exited" ${draftMembership === "exited" ? "selected" : ""}>exited</option></select>`
                       : (member.deletedAt ? statusPill("deleted", "deleted") : statusPill(member.membershipStatus))}
                   </td>
                   <td>

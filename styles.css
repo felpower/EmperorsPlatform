@@ -1880,7 +1880,8 @@ button {
   color: #216899;
 }
 
-.status.exit {
+.status.exit,
+.status.exited {
   background: rgba(80, 89, 97, 0.18);
   color: #4c5a63;
 }
