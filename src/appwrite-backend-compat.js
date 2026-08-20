@@ -23,7 +23,12 @@
     return JSON.parse(JSON.stringify(value));
   }
 
-  const ROW_LOOP_THROTTLE_MS = 150;
+  // Appwrite's default abuse-prevention limit is roughly 60 requests per 60-second
+  // window. Pacing every row write comfortably under that (primary defense) means
+  // the limit should never actually be hit; the retry below is only a short-lived
+  // safety net for transient blips, not something the user should have to wait out.
+  const ROW_LOOP_THROTTLE_MS = 1100;
+  const RATE_LIMIT_RETRY_DELAYS_MS = [3000, 6000, 12000];
 
   function sleep(ms) {
     return new Promise(function (resolve) {
@@ -35,16 +40,17 @@
     return Number(error && error.code) === 429 || String((error && error.type) || "").indexOf("rate_limit") !== -1;
   }
 
-  async function withRateLimitRetry(fn) {
-    const maxAttempts = 5;
+  async function withRateLimitRetry(fn, onRetry) {
     let attempt = 0;
     for (;;) {
       try {
         return await fn();
       } catch (error) {
+        if (attempt >= RATE_LIMIT_RETRY_DELAYS_MS.length || !isRateLimitError(error)) throw error;
+        const waitMs = RATE_LIMIT_RETRY_DELAYS_MS[attempt];
         attempt += 1;
-        if (attempt >= maxAttempts || !isRateLimitError(error)) throw error;
-        await sleep(500 * Math.pow(2, attempt - 1));
+        if (onRetry) onRetry(attempt, waitMs);
+        await sleep(waitMs);
       }
     }
   }
@@ -443,9 +449,14 @@
               ? sanitizeMembersPayload(rawRow, { forInsert: true })
               : sanitizeNonMembersPayload(rawRow);
             const requestedDocumentId = String(rawRow.id || rawRow.$id || "").trim();
-            const inserted = await withRateLimitRetry(function () {
-              return dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
-            });
+            const inserted = await withRateLimitRetry(
+              function () {
+                return dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
+              },
+              (attempt, waitMs) => {
+                if (this.progressCallback) this.progressCallback(created.length, totalToInsert, { waitingMs: waitMs, attempt: attempt });
+              }
+            );
             created.push(this.tableName === "members" ? normalizeMembersRow(inserted) : Object.assign({}, inserted, { id: inserted.$id || inserted.id }));
             if (this.progressCallback) this.progressCallback(created.length, totalToInsert);
             if (created.length < totalToInsert) await sleep(ROW_LOOP_THROTTLE_MS);
@@ -460,9 +471,14 @@
               ? sanitizeMembersPayload(this.payload || {})
               : sanitizeNonMembersPayload(this.payload || {});
             const rowId = String(row.$id || row.id);
-            const next = await withRateLimitRetry(function () {
-              return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
-            });
+            const next = await withRateLimitRetry(
+              function () {
+                return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
+              },
+              (attempt, waitMs) => {
+                if (this.progressCallback) this.progressCallback(updated.length, rows.length, { waitingMs: waitMs, attempt: attempt });
+              }
+            );
             updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
             if (this.progressCallback) this.progressCallback(updated.length, rows.length);
             if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
@@ -474,9 +490,14 @@
           let deletedCount = 0;
           for (const row of rows) {
             const rowId = String(row.$id || row.id);
-            await withRateLimitRetry(function () {
-              return dbApi.deleteRow(String(config.databaseId), tableId, rowId);
-            });
+            await withRateLimitRetry(
+              function () {
+                return dbApi.deleteRow(String(config.databaseId), tableId, rowId);
+              },
+              (attempt, waitMs) => {
+                if (this.progressCallback) this.progressCallback(deletedCount, rows.length, { waitingMs: waitMs, attempt: attempt });
+              }
+            );
             deletedCount += 1;
             if (this.progressCallback) this.progressCallback(deletedCount, rows.length);
             if (deletedCount < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);

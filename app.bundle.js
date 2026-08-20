@@ -3577,12 +3577,13 @@
   }
 
   function feeQuarterCandidates(count) {
-    const existing = new Set(getFeePeriods());
+    const limit = count || 6;
     const candidates = [];
     let token = currentQuarterToken();
-    const limit = count || 6;
-    while (candidates.length < limit) {
-      if (!existing.has(token)) candidates.push(token);
+    let guard = 0;
+    while (candidates.length < limit && guard < limit + 24 && token) {
+      guard += 1;
+      if (missingFeeMembersForQuarter(token).length > 0) candidates.push(token);
       token = nextQuarterToken(token);
     }
     return candidates;
@@ -4932,19 +4933,34 @@
       <div class="blocking-progress-card">
         <p>${escapeHtml(message)}</p>
         <p class="blocking-progress-counter" id="blocking-progress-counter">0</p>
+        <p class="meta" id="blocking-progress-note"></p>
       </div>
     `;
     document.body.appendChild(overlay);
   }
 
-  function updateBlockingProgress(done, total) {
+  function updateBlockingProgress(done, total, info) {
     const counter = document.getElementById("blocking-progress-counter");
     if (counter) counter.textContent = `${done} / ${total}`;
+    const note = document.getElementById("blocking-progress-note");
+    if (note) {
+      note.textContent = info && info.waitingMs
+        ? `Appwrite rate limit hit — waiting ${Math.round(info.waitingMs / 1000)}s before retrying (attempt ${info.attempt})…`
+        : "";
+    }
   }
 
   function hideBlockingProgress() {
     const overlay = document.getElementById("blocking-progress-overlay");
     if (overlay) overlay.remove();
+  }
+
+  function missingFeeMembersForQuarter(period) {
+    const normalizedPeriod = String(period || "").trim();
+    const coveredMemberIds = new Set(
+      state.fees.filter((fee) => fee.feePeriod === normalizedPeriod).map((fee) => String(fee.memberId))
+    );
+    return eligibleFeeMembers().filter((member) => !coveredMemberIds.has(String(member.id)));
   }
 
   async function generateFeeRowsForQuarter(period, onProgress) {
@@ -4953,14 +4969,14 @@
     if (!shouldUseRemoteData() || !backendClient) {
       throw new Error("Creating a new quarter requires the Appwrite-backed deployment.");
     }
-    if (getFeePeriods().includes(normalizedPeriod)) {
-      throw new Error(`${formatFeePeriod(normalizedPeriod)} already exists.`);
+    if (!eligibleFeeMembers().length) throw new Error("No eligible players found.");
+
+    const missingMembers = missingFeeMembersForQuarter(normalizedPeriod);
+    if (!missingMembers.length) {
+      throw new Error(`${formatFeePeriod(normalizedPeriod)} already has fee rows for every eligible player.`);
     }
 
-    const eligibleMembers = eligibleFeeMembers();
-    if (!eligibleMembers.length) throw new Error("No eligible players found.");
-
-    const rows = eligibleMembers.map((member) => ({
+    const rows = missingMembers.map((member) => ({
       member_id: member.id,
       season_label: normalizedPeriod.split("_")[1] || "",
       fee_period: normalizedPeriod,
@@ -7726,10 +7742,10 @@
           <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target. <strong>${collectedCount}/${collectibleCount} collected</strong> (${missingCount} missing)</p>
           <label class="filter-label" style="margin-top: 8px;">Choose fee quarter<select id="fee-period-select">${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
           ${periods.length ? `<div class="button-row" style="margin-top: 10px;"><button id="delete-quarter-button" class="ghost-button small-button" type="button">Delete ${formatFeePeriod(selectedLabel)}</button></div>` : ""}
-          <label class="filter-label" style="margin-top: 10px;">Create new quarter
+          <label class="filter-label" style="margin-top: 10px;">Create or complete a quarter
             <div class="inline-form">
-              <select id="create-quarter-select">${quarterCandidates.map((period) => `<option value="${period}">${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select>
-              <button id="create-quarter-button" class="primary-button small-button" type="button">Create quarter</button>
+              <select id="create-quarter-select">${quarterCandidates.map((period) => `<option value="${period}">${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}${periods.includes(period) ? " (incomplete)" : ""}</option>`).join("")}</select>
+              <button id="create-quarter-button" class="primary-button small-button" type="button">Create / complete quarter</button>
             </div>
           </label>
         </article>
@@ -10678,9 +10694,9 @@
         const select = document.getElementById("create-quarter-select");
         const period = select ? select.value : "";
         if (!period) return;
-        const eligibleCount = eligibleFeeMembers().length;
+        const missingCount = missingFeeMembersForQuarter(period).length;
         showBlockingProgress(`Creating ${formatFeePeriod(period)}…`);
-        updateBlockingProgress(0, eligibleCount);
+        updateBlockingProgress(0, missingCount);
         try {
           await generateFeeRowsForQuarter(period, (done, total) => updateBlockingProgress(done, total));
           hideBlockingProgress();
