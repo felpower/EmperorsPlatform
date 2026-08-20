@@ -174,6 +174,7 @@ function normalizeFeeStatusForUpdate(value) {
     "not paid": "pending",
     not_collected: "not_collected",
     "not collected": "not_collected",
+    deferred: "deferred",
     exempt: "exempt",
     exit: "exit",
     not_applicable: "not_applicable",

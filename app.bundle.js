@@ -3798,12 +3798,12 @@
   function availableFeeStatuses() {
     const current = currentFeePeriod();
     const rows = current ? state.fees.filter((fee) => fee.feePeriod === current) : state.fees;
-    return Array.from(new Set(rows.map((fee) => fee.status).filter(Boolean))).sort();
+    return Array.from(new Set([...FEE_STATUSES, ...rows.map((fee) => fee.status)].filter(Boolean))).sort();
   }
 
   function defaultFeeStatuses() {
     const available = availableFeeStatuses();
-    const preferred = ["paid", "paid_rookie_fee", "paid_with_fee", "pending", "not_collected"];
+    const preferred = ["paid", "paid_rookie_fee", "paid_with_fee", "pending", "not_collected", "partial", "deferred"];
     const selected = preferred.filter((status) => available.includes(status));
     return selected.length ? selected : available;
   }
@@ -4588,6 +4588,7 @@
       "not paid": "pending",
       not_collected: "not_collected",
       "not collected": "not_collected",
+      deferred: "deferred",
       exempt: "exempt",
       exit: "exit",
       not_applicable: "not_applicable",
@@ -7708,6 +7709,8 @@
     const periods = getFeePeriods();
     const visibleFees = sortedVisibleFees();
     const statuses = availableFeeStatuses();
+    const paidStatusGroup = statuses.filter((status) => FEE_PAID_STATUSES.includes(status));
+    const otherStatuses = statuses.filter((status) => !FEE_PAID_STATUSES.includes(status));
     const collectibleRows = visibleFees.filter((fee) => FEE_COLLECTIBLE_STATUSES.includes(fee.status));
     const totalTarget = collectibleRows.reduce((sum, fee) => sum + fee.amount, 0);
     const totalPaid = collectibleRows.reduce((sum, fee) => sum + fee.paidAmount, 0);
@@ -7775,12 +7778,26 @@
           <fieldset class="status-filter-group">
             <legend>Fee status</legend>
             <div class="status-filter-options">
-              ${statuses.map((status) => `
+              ${paidStatusGroup.length ? `
+                <label class="status-check status-check-group">
+                  <input type="checkbox" class="fee-status-group-checkbox" data-group="paid" />
+                  <span><strong>Paid (all)</strong></span>
+                </label>
+                <div class="status-filter-suboptions">
+                  ${paidStatusGroup.map((status) => `
+                    <label class="status-check">
+                      <input type="checkbox" class="fee-status-checkbox" data-group="paid" value="${status}" ${selectedFeeStatuses.includes(status) ? "checked" : ""} />
+                      <span>${statusLabel(status)}</span>
+                    </label>
+                  `).join("")}
+                </div>
+              ` : ""}
+              ${otherStatuses.map((status) => `
                 <label class="status-check">
                   <input type="checkbox" class="fee-status-checkbox" value="${status}" ${selectedFeeStatuses.includes(status) ? "checked" : ""} />
                   <span>${statusLabel(status)}</span>
                 </label>
-              `).join("") || `<span class="meta">No statuses for this quarter.</span>`}
+              `).join("") || (paidStatusGroup.length ? "" : `<span class="meta">No statuses for this quarter.</span>`)}
             </div>
           </fieldset>
           <div class="button-row" style="margin-top: 10px;">
@@ -10678,6 +10695,23 @@
         switchView("fees");
       };
     });
+    const paidGroupCheckbox = document.querySelector('.fee-status-group-checkbox[data-group="paid"]');
+    if (paidGroupCheckbox) {
+      const paidSubCheckboxes = Array.from(document.querySelectorAll('.fee-status-checkbox[data-group="paid"]'));
+      const checkedCount = paidSubCheckboxes.filter((input) => input.checked).length;
+      paidGroupCheckbox.checked = paidSubCheckboxes.length > 0 && checkedCount === paidSubCheckboxes.length;
+      paidGroupCheckbox.indeterminate = checkedCount > 0 && checkedCount < paidSubCheckboxes.length;
+      paidGroupCheckbox.onchange = function () {
+        paidSubCheckboxes.forEach((input) => {
+          input.checked = paidGroupCheckbox.checked;
+        });
+        selectedFeeStatuses = Array.from(document.querySelectorAll(".fee-status-checkbox:checked")).map((input) => input.value);
+        feeInlineEditId = null;
+        saveStatusFilter();
+        mount();
+        switchView("fees");
+      };
+    }
   }
 
   function bindFeeQuarterActions() {

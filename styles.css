@@ -2764,6 +2764,19 @@ code {
   margin: 0;
 }
 
+.status-check-group {
+  background: rgba(84, 184, 229, 0.16);
+}
+
+.status-filter-suboptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-left: 20px;
+  border-left: 2px solid var(--line);
+  margin-left: 4px;
+}
+
 .action-row {
   display: flex;
   gap: 8px;
