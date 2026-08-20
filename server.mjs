@@ -2,7 +2,6 @@ import express from "express";
 import fs from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import xlsx from "xlsx";
@@ -11,9 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT || 4173);
-const SEPA_GENERATOR_DIR = "C:\\Projekte\\UniWien-SEPAs";
-const SEPA_GENERATOR_SCRIPT = path.join(SEPA_GENERATOR_DIR, "sepa_generator.py");
-const SEPA_GENERATOR_INPUT_CSV = path.join(SEPA_GENERATOR_DIR, "Mitgliedsbeiträge Quartale bezahlt - Sheet1.csv");
 const APPWRITE_ENDPOINT = process.env.APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1";
 const APPWRITE_PROJECT_ID = process.env.APPWRITE_PROJECT_ID || "69dd0fdd00336ea1b4b5";
 const APPWRITE_API_KEY = process.env.APPWRITE_API_KEY || "";
@@ -952,130 +948,6 @@ async function sendAppwriteInvite({ email, fullName, req }) {
   };
 }
 
-function isValidFeePeriodToken(period) {
-  return /^Q[1-4]_\d{4}$/.test(String(period || ""));
-}
-
-function feePeriodToSheetLabel(period) {
-  return String(period || "").replace("_", " ");
-}
-
-function csvEscape(value) {
-  const text = String(value ?? "");
-  if (/[",\n\r]/.test(text)) {
-    return `"${text.replaceAll('"', '""')}"`;
-  }
-  return text;
-}
-
-function sepaStatusCellValue(status) {
-  const normalized = String(status || "").trim().toLowerCase();
-  if (!normalized) return "";
-  if (["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalized)) return "Paid";
-  if (normalized === "exempt") return "Exempt";
-  if (normalized === "exit") return "Exit";
-  if (normalized === "not_applicable") return "Exempt";
-  // Pending / partial / not_collected should be debited by the script, so keep them empty.
-  return "";
-}
-
-async function prepareSepaGeneratorInput(periodToken) {
-  if (!localDbApi) {
-    throw new Error(`SEPA export requires local database mode. ${localDbUnavailableReason || "Local DB unavailable."}`);
-  }
-  const bootstrap = await localDbApi.getBootstrapData();
-  const members = Array.isArray(bootstrap?.members) ? bootstrap.members : [];
-  const fees = Array.isArray(bootstrap?.fees) ? bootstrap.fees : [];
-  const periodFees = fees.filter((fee) => String(fee?.feePeriod || "") === periodToken);
-  if (!periodFees.length) {
-    throw new Error(`No fee rows found for ${periodToken}.`);
-  }
-
-  const feeByMemberId = new Map();
-  periodFees.forEach((fee) => {
-    feeByMemberId.set(String(fee.memberId), fee);
-  });
-
-  const periodLabel = feePeriodToSheetLabel(periodToken);
-  const header = ["Vorname", "Nachname", "IBAN", "Mandats-ID", "Q2 2026"];
-  const rows = [header];
-
-  members.forEach((member) => {
-    const fee = feeByMemberId.get(String(member.id));
-    if (!fee) return;
-    rows.push([
-      String(member.firstName || "").trim(),
-      String(member.lastName || "").trim(),
-      String(fee.iban || "").trim(),
-      String(member.id || "").trim(),
-      sepaStatusCellValue(fee.status)
-    ]);
-  });
-
-  const csvContent = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
-  await fs.writeFile(SEPA_GENERATOR_INPUT_CSV, csvContent, "utf-8");
-
-  return {
-    periodLabel,
-    rowCount: rows.length - 1
-  };
-}
-
-function runProcess(command, args, cwd) {
-  return new Promise((resolve, reject) => {
-    const processHandle = spawn(command, args, {
-      cwd,
-      shell: false,
-      env: {
-        ...process.env,
-        PYTHONIOENCODING: "utf-8",
-        PYTHONUTF8: "1"
-      }
-    });
-    let stdout = "";
-    let stderr = "";
-    processHandle.stdout.on("data", (chunk) => {
-      stdout += String(chunk || "");
-    });
-    processHandle.stderr.on("data", (chunk) => {
-      stderr += String(chunk || "");
-    });
-    processHandle.on("error", (error) => {
-      reject(error);
-    });
-    processHandle.on("close", (code) => {
-      if (code === 0) {
-        resolve({ stdout, stderr });
-      } else {
-        reject(new Error(stderr || stdout || `Command failed with exit code ${code}`));
-      }
-    });
-  });
-}
-
-async function runSepaGenerator() {
-  try {
-    await runProcess("py", ["-3", SEPA_GENERATOR_SCRIPT], SEPA_GENERATOR_DIR);
-  } catch {
-    await runProcess("python", [SEPA_GENERATOR_SCRIPT], SEPA_GENERATOR_DIR);
-  }
-}
-
-async function latestXmlFilePath(directoryPath) {
-  const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-  const xmlFiles = entries.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".xml"));
-  if (!xmlFiles.length) {
-    throw new Error("No XML file was generated.");
-  }
-  const withStats = await Promise.all(xmlFiles.map(async (entry) => {
-    const fullPath = path.join(directoryPath, entry.name);
-    const stat = await fs.stat(fullPath);
-    return { fullPath, mtimeMs: stat.mtimeMs, name: entry.name };
-  }));
-  withStats.sort((left, right) => right.mtimeMs - left.mtimeMs);
-  return withStats[0];
-}
-
 await initializeOptionalLocalDatabase();
 
 app.use(express.json({ limit: "20mb" }));
@@ -1456,29 +1328,6 @@ app.put("/api/fees/:feeId", async (req, res) => {
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Unknown fee row update error"
-    });
-  }
-});
-
-app.get("/api/fees/export-sepa-xml", async (req, res) => {
-  try {
-    const requestedPeriod = String(req.query.period || "").trim();
-    const periodToken = isValidFeePeriodToken(requestedPeriod) ? requestedPeriod : "";
-    if (!periodToken) {
-      res.status(400).json({ error: "A valid quarter is required (example: Q2_2026)." });
-      return;
-    }
-
-    await prepareSepaGeneratorInput(periodToken);
-    await runSepaGenerator();
-    const latest = await latestXmlFilePath(SEPA_GENERATOR_DIR);
-    const downloadName = `SEPA_Lastschrift_${periodToken}.xml`;
-    res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
-    res.sendFile(latest.fullPath);
-  } catch (error) {
-    res.status(500).json({
-      error: error instanceof Error ? error.message : "Could not generate SEPA XML."
     });
   }
 });
