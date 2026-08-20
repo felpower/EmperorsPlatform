@@ -1887,6 +1887,32 @@ button {
   color: #4c5a63;
 }
 
+.blocking-progress-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(21, 27, 28, 0.55);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.blocking-progress-card {
+  background: var(--paper-strong);
+  color: var(--ink);
+  padding: 28px 36px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  text-align: center;
+  min-width: 260px;
+}
+
+.blocking-progress-counter {
+  margin: 12px 0 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
 .sort-button {
   border: 0;
   background: transparent;

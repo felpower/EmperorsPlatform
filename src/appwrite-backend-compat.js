@@ -23,6 +23,32 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  const ROW_LOOP_THROTTLE_MS = 150;
+
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function isRateLimitError(error) {
+    return Number(error && error.code) === 429 || String((error && error.type) || "").indexOf("rate_limit") !== -1;
+  }
+
+  async function withRateLimitRetry(fn) {
+    const maxAttempts = 5;
+    let attempt = 0;
+    for (;;) {
+      try {
+        return await fn();
+      } catch (error) {
+        attempt += 1;
+        if (attempt >= maxAttempts || !isRateLimitError(error)) throw error;
+        await sleep(500 * Math.pow(2, attempt - 1));
+      }
+    }
+  }
+
   const config = window.ClubHubAppwriteConfig || {};
   const appwrite = window.Appwrite || window.appwrite;
 
@@ -309,6 +335,12 @@
       this.filters = [];
       this.singleMode = "many";
       this.execution = null;
+      this.progressCallback = null;
+    }
+
+    onProgress(callback) {
+      this.progressCallback = typeof callback === "function" ? callback : null;
+      return this;
     }
 
     select(columns) {
@@ -404,14 +436,19 @@
         } else if (this.action === "insert") {
           const tableId = tableIdFor(this.tableName);
           const created = [];
+          const totalToInsert = (this.payload || []).length;
           for (const row of this.payload || []) {
             const rawRow = row || {};
             const payload = this.tableName === "members"
               ? sanitizeMembersPayload(rawRow, { forInsert: true })
               : sanitizeNonMembersPayload(rawRow);
             const requestedDocumentId = String(rawRow.id || rawRow.$id || "").trim();
-            const inserted = await dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
+            const inserted = await withRateLimitRetry(function () {
+              return dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
+            });
             created.push(this.tableName === "members" ? normalizeMembersRow(inserted) : Object.assign({}, inserted, { id: inserted.$id || inserted.id }));
+            if (this.progressCallback) this.progressCallback(created.length, totalToInsert);
+            if (created.length < totalToInsert) await sleep(ROW_LOOP_THROTTLE_MS);
           }
           data = created;
         } else if (this.action === "update") {
@@ -422,15 +459,27 @@
             const payload = this.tableName === "members"
               ? sanitizeMembersPayload(this.payload || {})
               : sanitizeNonMembersPayload(this.payload || {});
-            const next = await dbApi.updateRow(String(config.databaseId), tableId, String(row.$id || row.id), payload);
+            const rowId = String(row.$id || row.id);
+            const next = await withRateLimitRetry(function () {
+              return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
+            });
             updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
+            if (this.progressCallback) this.progressCallback(updated.length, rows.length);
+            if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
           }
           data = updated;
         } else if (this.action === "delete") {
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
+          let deletedCount = 0;
           for (const row of rows) {
-            await dbApi.deleteRow(String(config.databaseId), tableId, String(row.$id || row.id));
+            const rowId = String(row.$id || row.id);
+            await withRateLimitRetry(function () {
+              return dbApi.deleteRow(String(config.databaseId), tableId, rowId);
+            });
+            deletedCount += 1;
+            if (this.progressCallback) this.progressCallback(deletedCount, rows.length);
+            if (deletedCount < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
           }
           data = [];
         } else if (this.action === "upsert") {

@@ -4923,7 +4923,31 @@
     });
   }
 
-  async function generateFeeRowsForQuarter(period) {
+  function showBlockingProgress(message) {
+    hideBlockingProgress();
+    const overlay = document.createElement("div");
+    overlay.id = "blocking-progress-overlay";
+    overlay.className = "blocking-progress-overlay";
+    overlay.innerHTML = `
+      <div class="blocking-progress-card">
+        <p>${escapeHtml(message)}</p>
+        <p class="blocking-progress-counter" id="blocking-progress-counter">0</p>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  function updateBlockingProgress(done, total) {
+    const counter = document.getElementById("blocking-progress-counter");
+    if (counter) counter.textContent = `${done} / ${total}`;
+  }
+
+  function hideBlockingProgress() {
+    const overlay = document.getElementById("blocking-progress-overlay");
+    if (overlay) overlay.remove();
+  }
+
+  async function generateFeeRowsForQuarter(period, onProgress) {
     const normalizedPeriod = String(period || "").trim();
     if (!normalizedPeriod) throw new Error("Please choose a quarter.");
     if (!shouldUseRemoteData() || !backendClient) {
@@ -4947,7 +4971,7 @@
       status_note: null
     }));
 
-    const response = await backendClient.from("membership_fees").insert(rows);
+    const response = await backendClient.from("membership_fees").insert(rows).onProgress(onProgress);
     if (response.error) throw response.error;
 
     invalidateCache(BOOTSTRAP_CACHE_KEY);
@@ -4961,14 +4985,14 @@
     });
   }
 
-  async function deleteFeeRowsForQuarter(period) {
+  async function deleteFeeRowsForQuarter(period, onProgress) {
     const normalizedPeriod = String(period || "").trim();
     if (!normalizedPeriod) throw new Error("Please choose a quarter.");
     if (!shouldUseRemoteData() || !backendClient) {
       throw new Error("Deleting a quarter requires the Appwrite-backed deployment.");
     }
 
-    const response = await backendClient.from("membership_fees").delete().eq("fee_period", normalizedPeriod);
+    const response = await backendClient.from("membership_fees").delete().eq("fee_period", normalizedPeriod).onProgress(onProgress);
     if (response.error) throw response.error;
 
     invalidateCache(BOOTSTRAP_CACHE_KEY);
@@ -10631,12 +10655,16 @@
         const rowCount = state.fees.filter((fee) => fee.feePeriod === period).length;
         const confirmed = window.confirm(`Delete all ${rowCount} fee row(s) for ${formatFeePeriod(period)}? This cannot be undone.`);
         if (!confirmed) return;
+        showBlockingProgress(`Deleting fee rows for ${formatFeePeriod(period)}…`);
+        updateBlockingProgress(0, rowCount);
         try {
-          await deleteFeeRowsForQuarter(period);
+          await deleteFeeRowsForQuarter(period, (done, total) => updateBlockingProgress(done, total));
+          hideBlockingProgress();
           authState.status = `Deleted ${formatFeePeriod(period)}.`;
           mount();
           switchView("fees");
         } catch (error) {
+          hideBlockingProgress();
           authState.status = error.message;
           mount();
           switchView("fees");
@@ -10650,12 +10678,17 @@
         const select = document.getElementById("create-quarter-select");
         const period = select ? select.value : "";
         if (!period) return;
+        const eligibleCount = eligibleFeeMembers().length;
+        showBlockingProgress(`Creating ${formatFeePeriod(period)}…`);
+        updateBlockingProgress(0, eligibleCount);
         try {
-          await generateFeeRowsForQuarter(period);
+          await generateFeeRowsForQuarter(period, (done, total) => updateBlockingProgress(done, total));
+          hideBlockingProgress();
           authState.status = `Created ${formatFeePeriod(period)}.`;
           mount();
           switchView("fees");
         } catch (error) {
+          hideBlockingProgress();
           authState.status = error.message;
           mount();
           switchView("fees");
