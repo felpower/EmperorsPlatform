@@ -238,10 +238,10 @@
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
   const MEMBERSHIP_STATUSES = ["active", "pending", "inactive", "exited"];
-  const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "exempt", "exit", "not_applicable"];
+  const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"];
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
-  const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "exempt", "exit", "not_applicable"];
-  const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected"];
+  const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"];
+  const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected", "deferred"];
   const CONTACT_RECIPIENT_EMAIL = String(APPWRITE_CONFIG?.contactRecipientEmail || "p.felbauer@emperors.at").trim();
   const CONTACT_SUBJECT_TYPES = [
     { value: "general", label: "General Question" },

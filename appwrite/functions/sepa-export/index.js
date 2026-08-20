@@ -132,7 +132,7 @@ module.exports = async ({ req, res, log }) => {
   const compactName = (firstName, lastName, fallback) =>
     String(`${String(firstName || "").trim()} ${String(lastName || "").trim()}`.trim() || fallback || "Unknown member");
   const debitableStatuses = new Set(["pending", "partial", "not_collected"]);
-  const nonDebitableStatuses = new Set(["paid", "paid_rookie_fee", "paid_with_fee", "exempt", "exit", "not_applicable"]);
+  const nonDebitableStatuses = new Set(["paid", "paid_rookie_fee", "paid_with_fee", "deferred", "exempt", "exit", "not_applicable"]);
 
   try {
     const normalizePayloadMembers = (rows) => rows.map((member) => ({
