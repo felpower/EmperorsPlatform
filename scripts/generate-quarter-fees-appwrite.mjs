@@ -66,9 +66,17 @@ async function main() {
   const members = await listAllRows(MEMBERS_COLLECTION_ID);
   const eligibleMembers = members.filter((member) => {
     const status = String(member.membership_status || member.membershipStatus || "").trim().toLowerCase();
-    return status !== "exited";
+    if (status === "exited") return false;
+    if (member.deleted_at || member.deletedAt) return false;
+    let roles = [];
+    try {
+      roles = JSON.parse(member.roles_json || member.rolesJson || "[]");
+    } catch {
+      roles = [];
+    }
+    return Array.isArray(roles) && roles.includes("player");
   });
-  console.log(`Members: ${members.length} total, ${eligibleMembers.length} eligible, ${members.length - eligibleMembers.length} skipped (exited).`);
+  console.log(`Members: ${members.length} total, ${eligibleMembers.length} eligible (player role, not deleted, not exited), ${members.length - eligibleMembers.length} skipped.`);
 
   const existingFees = await listAllRows(FEES_COLLECTION_ID);
   const existingKeys = new Set(existingFees.map((row) => `${row.member_id}:${row.fee_period}`));

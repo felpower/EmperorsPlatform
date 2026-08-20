@@ -1123,8 +1123,18 @@ export async function applyClubeePassSync({ clubeeXlsxPath, memberIds }) {
 }
 
 export async function ensureFeeCoverage() {
-  const members = (await all("select id, membership_status as membershipStatus from members"))
-    .filter((member) => String(member.membershipStatus || "").trim().toLowerCase() !== "exited");
+  const members = (await all("select id, membership_status as membershipStatus, roles_json as rolesJson, deleted_at as deletedAt from members"))
+    .filter((member) => {
+      if (String(member.membershipStatus || "").trim().toLowerCase() === "exited") return false;
+      if (member.deletedAt) return false;
+      let roles = [];
+      try {
+        roles = JSON.parse(member.rolesJson || "[]");
+      } catch {
+        roles = [];
+      }
+      return Array.isArray(roles) && roles.includes("player");
+    });
   if (!members.length) return;
 
   const targetPeriods = quarterSequence(normalizePeriodToken(quarterFromDate()), 4);
