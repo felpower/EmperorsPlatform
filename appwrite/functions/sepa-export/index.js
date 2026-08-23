@@ -206,7 +206,9 @@ module.exports = async ({ req, res, log }) => {
       const outstandingCents = Math.max(0, amountCents - paidCents);
       const fallbackFee = latestFeeRowsByMember.get(memberId) || null;
       const debtorIban = sanitizeIban(member?.iban || fee?.iban || fallbackFee?.iban);
-      const mandateId = String(memberId || feeId || "").trim();
+      // MndtId is capped at 35 chars (Max35Text) - legacy UUID-style member IDs are 36 chars
+      // with their hyphens, so strip non-alphanumerics first (stays stable/unique per member).
+      const mandateId = String(memberId || feeId || "").trim().replace(/[^A-Za-z0-9]/g, "").slice(0, 35);
 
       const skip = (reason) => {
         skippedMembers.push({
