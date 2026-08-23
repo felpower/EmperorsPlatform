@@ -54,6 +54,10 @@ module.exports = async ({ req, res, log }) => {
   if (!/^Q[1-4]_\d{4}$/.test(requestedPeriod)) {
     return res.json({ ok: false, error: "feePeriod is required and must look like Q2_2026." }, 400);
   }
+  // SEPA's restricted Latin character set (EPC rulebook) does not allow underscores in
+  // Max35Text-style ID/text fields (MsgId, PmtInfId, EndToEndId, Ustrd) - some banks (e.g.
+  // George) enforce this strictly, so use a hyphen instead in our internal "Q3_2026" tokens.
+  const sepaSafePeriod = requestedPeriod.replace(/_/g, "-");
 
   const payloadMembers = Array.isArray(body.members) ? body.members : null;
   const payloadFees = Array.isArray(body.fees) ? body.fees : null;
@@ -258,7 +262,7 @@ module.exports = async ({ req, res, log }) => {
         mandateDate,
         amountCents: outstandingCents,
         dueDate: normalizeDate(fee?.due_date) || "",
-        description: `${requestedPeriod} membership fee`
+        description: `${sepaSafePeriod} membership fee`
       });
       includedMembers.push({
         memberId,
@@ -286,15 +290,15 @@ module.exports = async ({ req, res, log }) => {
 
     const collectionDate = normalizeDate(collectionDateOverride) || transactions.find((item) => item.dueDate)?.dueDate || plusDaysIso(5);
     const messageStamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-    const groupMessageId = `UWEMP-${requestedPeriod}-${messageStamp}`;
-    const paymentInfoId = `PI-${requestedPeriod}-${messageStamp}`;
+    const groupMessageId = `UWEMP-${sepaSafePeriod}-${messageStamp}`;
+    const paymentInfoId = `PI-${sepaSafePeriod}-${messageStamp}`;
     const transactionCount = transactions.length;
     const controlSum = transactions.reduce((sum, item) => sum + Number(item.amountCents || 0), 0);
     const creditorIbanNormalized = sanitizeIban(creditorIban);
 
     const transactionXml = transactions
       .map((item, index) => {
-        const txId = `${requestedPeriod}-${String(index + 1).padStart(4, "0")}`;
+        const txId = `${sepaSafePeriod}-${String(index + 1).padStart(4, "0")}`;
         const debtorAgentXml = item.debtorBic
           ? `<DbtrAgt><FinInstnId><BIC>${xmlEscape(item.debtorBic)}</BIC></FinInstnId></DbtrAgt>`
           : `<DbtrAgt><FinInstnId><Othr><Id>NOTPROVIDED</Id></Othr></FinInstnId></DbtrAgt>`;
