@@ -132,6 +132,29 @@ module.exports = async ({ req, res, log }) => {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&apos;");
+  // SEPA's restricted Latin character set (EPC rulebook) only allows plain A-Z a-z 0-9 and
+  // a small set of punctuation - no umlauts, accents, or other diacritics. Transliterate by
+  // Unicode-decomposing (e.g. "o" + combining accent) and dropping the accent marks, same
+  // approach the previous Python generator used.
+  const sepaAllowedChar = /[A-Za-z0-9/?\-:().,'+ ]/;
+  const sepaSafeText = (value) => {
+    const decomposed = String(value ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "");
+    let cleaned = "";
+    for (const char of decomposed) {
+      if (sepaAllowedChar.test(char)) {
+        cleaned += char;
+      } else if (char === "&") {
+        cleaned += "+";
+      } else if (char === "_") {
+        cleaned += "-";
+      } else if (char === "ß") {
+        cleaned += "ss";
+      } else {
+        cleaned += " ";
+      }
+    }
+    return cleaned.replace(/\s+/g, " ").trim();
+  };
   const amountString = (amountCents) => (Number(amountCents || 0) / 100).toFixed(2);
   const compactName = (firstName, lastName, fallback) =>
     String(`${String(firstName || "").trim()} ${String(lastName || "").trim()}`.trim() || fallback || "Unknown member");
@@ -318,7 +341,7 @@ module.exports = async ({ req, res, log }) => {
         </DrctDbtTx>
         ${debtorAgentXml}
         <Dbtr>
-          <Nm>${xmlEscape(item.debtorName)}</Nm>
+          <Nm>${xmlEscape(sepaSafeText(item.debtorName))}</Nm>
         </Dbtr>
         <DbtrAcct>
           <Id>
@@ -326,7 +349,7 @@ module.exports = async ({ req, res, log }) => {
           </Id>
         </DbtrAcct>
         <RmtInf>
-          <Ustrd>${xmlEscape(item.description)}</Ustrd>
+          <Ustrd>${xmlEscape(sepaSafeText(item.description))}</Ustrd>
         </RmtInf>
       </DrctDbtTxInf>`.trim();
       })
@@ -341,7 +364,7 @@ module.exports = async ({ req, res, log }) => {
       <NbOfTxs>${transactionCount}</NbOfTxs>
       <CtrlSum>${amountString(controlSum)}</CtrlSum>
       <InitgPty>
-        <Nm>${xmlEscape(creditorName)}</Nm>
+        <Nm>${xmlEscape(sepaSafeText(creditorName))}</Nm>
       </InitgPty>
     </GrpHdr>
     <PmtInf>
@@ -361,7 +384,7 @@ module.exports = async ({ req, res, log }) => {
       </PmtTpInf>
       <ReqdColltnDt>${xmlEscape(collectionDate)}</ReqdColltnDt>
       <Cdtr>
-        <Nm>${xmlEscape(creditorName)}</Nm>
+        <Nm>${xmlEscape(sepaSafeText(creditorName))}</Nm>
       </Cdtr>
       <CdtrAcct>
         <Id>
