@@ -3137,6 +3137,16 @@ code {
   animation: auth-spin 0.8s linear infinite;
 }
 
+.loading-spinner-lg {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 3px solid rgba(22, 109, 148, 0.22);
+  border-top-color: #166d94;
+  animation: auth-spin 0.8s linear infinite;
+}
+
 @keyframes auth-spin {
   to {
     transform: rotate(360deg);

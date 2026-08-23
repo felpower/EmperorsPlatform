@@ -410,6 +410,7 @@
   let equipmentStorageMode = "local";
   let equipmentStatus = "";
   let isSyncing = false;
+  let hasBootstrapped = false;
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v1";
   const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v1";
@@ -3822,6 +3823,7 @@
   }
 
   function applyBootstrap(bootstrap) {
+    hasBootstrapped = true;
     const previousOrganization = Array.isArray(state?.organization) ? state.organization : [];
     const previousEquipment = Array.isArray(state?.equipment) ? state.equipment : [];
     const previousHallOfFame = Array.isArray(state?.hallOfFame) ? state.hallOfFame : [];
@@ -7705,6 +7707,17 @@
     if (currentAccessRole !== "admin") {
       return lockedState("Membership finance is hidden for this role.", "Only admins should see and manage membership finance data.");
     }
+    if (!hasBootstrapped) {
+      return `
+        <div class="section-head">
+          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3></div>
+        </div>
+        <article class="card" style="display:flex; align-items:center; gap:14px; padding: 32px; justify-content:center;">
+          <span class="loading-spinner-lg" aria-hidden="true"></span>
+          <p class="muted">Loading membership finance data…</p>
+        </article>
+      `;
+    }
 
     const periods = getFeePeriods();
     const visibleFees = sortedVisibleFees();
@@ -7756,6 +7769,7 @@
           <button id="toggle-fee-edit-mode" class="ghost-button" type="button">${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
         </div>
       </div>
+      ${isSyncing ? `<p class="meta" style="display:flex; align-items:center; gap:8px; margin-bottom: 10px;"><span class="auth-spinner" aria-hidden="true"></span>Refreshing finance data…</p>` : ""}
       <div class="grid two-up">
         <article class="card finance-summary-card">
           <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target. <strong>${collectedCount}/${collectibleCount} collected</strong> (${missingCount} missing)</p>
@@ -10847,6 +10861,8 @@
     const exportFeesSepaXmlButton = document.getElementById("export-fees-sepa-xml-option");
     if (exportFeesSepaXmlButton) {
       exportFeesSepaXmlButton.onclick = async function () {
+        exportFeesSepaXmlButton.disabled = true;
+        exportFeesSepaXmlButton.innerHTML = `<span class="auth-spinner" aria-hidden="true"></span> Generating…`;
         try {
           const period = currentFeePeriod();
           if (!period) {
