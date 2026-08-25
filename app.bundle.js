@@ -12604,20 +12604,26 @@ Uni Wien Emperors`;
           tryoutEmailResult = result;
           hideBlockingProgress();
 
+          let statusUpdateWarning = "";
           const sentIds = (result.sent || []).map((item) => String(item.id)).filter(Boolean);
           if (sentIds.length && backendClient && authState.user) {
             const bulkUpdate = await backendClient
               .from("tryout_registrations")
               .update({ status: "invited" })
               .in("id", sentIds);
-            if (!bulkUpdate.error) {
-              tryoutSubmissions = tryoutSubmissions.map((row) => sentIds.includes(String(row.id)) ? { ...row, status: "invited" } : row);
+            const failedIds = new Set((bulkUpdate.partialFailures || []).map((item) => String(item.id)));
+            const updatedRows = Array.isArray(bulkUpdate.data) ? bulkUpdate.data : [];
+            const updatedIds = new Set(updatedRows.map((row) => String(row.id || row.$id)));
+            tryoutSubmissions = tryoutSubmissions.map((row) => updatedIds.has(String(row.id)) ? { ...row, status: "invited" } : row);
+            if (bulkUpdate.error) {
+              const failedCount = failedIds.size || sentIds.length;
+              statusUpdateWarning = ` Emails sent, but updating status to "invited" failed for ${failedCount} of ${sentIds.length}: ${bulkUpdate.error.message}`;
             }
           }
 
           selectedTryoutSubmissionIds = [];
-          tryoutSubmissionsStatus = `Sent ${result.sentCount} email(s)${result.failedCount ? `, ${result.failedCount} failed` : ""}.`;
-          showToast(tryoutSubmissionsStatus, result.failedCount ? "error" : "success");
+          tryoutSubmissionsStatus = `Sent ${result.sentCount} email(s)${result.failedCount ? `, ${result.failedCount} failed` : ""}.${statusUpdateWarning}`;
+          showToast(tryoutSubmissionsStatus, result.failedCount || statusUpdateWarning ? "error" : "success");
         } catch (error) {
           hideBlockingProgress();
           tryoutSubmissionsStatus = error?.message || "Could not send tryout emails.";

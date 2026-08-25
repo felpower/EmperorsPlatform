@@ -527,24 +527,30 @@
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
           const updated = [];
+          const updateFailures = [];
           for (const row of rows) {
             const payload = this.tableName === "members"
               ? sanitizeMembersPayload(this.payload || {})
               : sanitizeNonMembersPayload(this.payload || {});
             const rowId = String(row.$id || row.id);
-            const next = await withRateLimitRetry(
-              function () {
-                return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
-              },
-              (attempt, waitMs) => {
-                if (this.progressCallback) this.progressCallback(updated.length, rows.length, { waitingMs: waitMs, attempt: attempt });
-              }
-            );
-            updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
-            if (this.progressCallback) this.progressCallback(updated.length, rows.length);
-            if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
+            try {
+              const next = await withRateLimitRetry(
+                function () {
+                  return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
+                },
+                (attempt, waitMs) => {
+                  if (this.progressCallback) this.progressCallback(updated.length + updateFailures.length, rows.length, { waitingMs: waitMs, attempt: attempt });
+                }
+              );
+              updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
+            } catch (rowError) {
+              updateFailures.push({ id: rowId, message: rowError && rowError.message ? String(rowError.message) : "Update failed." });
+            }
+            if (this.progressCallback) this.progressCallback(updated.length + updateFailures.length, rows.length);
+            if (updated.length + updateFailures.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
           }
           data = updated;
+          this.partialFailures = updateFailures;
         } else if (this.action === "delete") {
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
@@ -608,6 +614,14 @@
           return { data: data[0], error: null, status: 200 };
         }
 
+        if (this.partialFailures && this.partialFailures.length) {
+          return {
+            data: data,
+            error: createError(`${this.partialFailures.length} of ${data.length + this.partialFailures.length} row(s) failed: ${this.partialFailures.map(function (f) { return f.message; }).join("; ")}`),
+            partialFailures: this.partialFailures,
+            status: 207
+          };
+        }
         return { data: data, error: null, status: 200 };
       } catch (error) {
         const rawMessage = error && error.message ? String(error.message) : "Appwrite query failed.";
