@@ -380,6 +380,26 @@ Bitte bring mit:
 Wir freuen uns auf dich!
 
 Sportliche Grüße
+Uni Wien Emperors
+
+---------- English version below ----------
+
+Hi {{firstName}},
+
+We're excited to invite you to the Uni Wien Emperors tryout!
+
+Date: Tuesday, September 1, 2026
+Meeting point: 8:00 PM
+Location: Trainingsplatz FC Stadlau, Erzherzog-Karl-Straße 108, 1220 Vienna
+
+Please bring:
+- Turf shoes (or regular soccer/football boots)
+- A water bottle
+- Sports clothing
+
+We look forward to seeing you!
+
+Best regards,
 Uni Wien Emperors`;
   let tryoutEmailSubject = DEFAULT_TRYOUT_EMAIL_SUBJECT;
   let tryoutEmailBody = DEFAULT_TRYOUT_EMAIL_BODY;

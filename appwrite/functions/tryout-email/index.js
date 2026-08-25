@@ -3,6 +3,7 @@ module.exports = async ({ req, res, log }) => {
   const mailgunDomain = String(process.env.MAILGUN_DOMAIN || "").trim();
   const mailgunFromEmail = String(process.env.MAILGUN_FROM_EMAIL || process.env.CONTACT_FROM_EMAIL || "").trim();
   const mailgunApiBaseUrl = String(process.env.MAILGUN_API_BASE_URL || "https://api.eu.mailgun.net").trim().replace(/\/+$/, "");
+  const replyToEmail = String(process.env.TRYOUT_REPLY_TO_EMAIL || "p.felbauer@emperors.at").trim();
 
   const parseBody = () => {
     try {
@@ -47,6 +48,7 @@ module.exports = async ({ req, res, log }) => {
     const form = new FormData();
     form.set("from", mailgunFromEmail);
     form.set("to", recipientEmail);
+    if (replyToEmail) form.set("h:Reply-To", replyToEmail);
     form.set("subject", subject);
     form.set("text", text);
     form.set("html", bodyHtml(text));
