@@ -8,6 +8,7 @@ window.ClubHubAppwriteConfig = {
   contactRecipientEmail: "p.felbauer@emperors.at",
   passSyncFunctionId: "PassSyncFunction",
   sepaExportFunctionId: "SepaExport",
+  tryoutEmailFunctionId: "TryoutEmail",
   diagnosticsFunctionId: "69fe0260003aa6db005b",
   profilePicturesBucketId: "ProfilePictures",
   rosterPicturesBucketId: "RosterPictures",

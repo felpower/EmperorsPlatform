@@ -362,6 +362,29 @@
   let tryoutQrGeneratedUrl = "";
   let tryoutQrStatus = "";
   let tryoutSubmissionFilters = loadTryoutSubmissionFilters();
+  let selectedTryoutSubmissionIds = [];
+  const DEFAULT_TRYOUT_EMAIL_SUBJECT = "Uni Wien Emperors Tryout – Einladung";
+  const DEFAULT_TRYOUT_EMAIL_BODY = `Hallo {{firstName}},
+
+wir freuen uns, dich zum Tryout der Uni Wien Emperors einzuladen!
+
+Datum: Dienstag, 1.9.2026
+Treffpunkt: 20:00 Uhr
+Ort: Trainingsplatz FC Stadlau, Erzherzog-Karl-Straße 108, 1220 Wien
+
+Bitte bring mit:
+- Kunstrasenschuhe (bzw. normale Fußballschuhe)
+- Trinkflasche
+- Sportkleidung
+
+Wir freuen uns auf dich!
+
+Sportliche Grüße
+Uni Wien Emperors`;
+  let tryoutEmailSubject = DEFAULT_TRYOUT_EMAIL_SUBJECT;
+  let tryoutEmailBody = DEFAULT_TRYOUT_EMAIL_BODY;
+  let tryoutEmailSending = false;
+  let tryoutEmailResult = null;
   let tryoutSettingsLoadPromise = null;
   let tryoutSettingsLoadAttempted = false;
   let tryoutSettingsStatus = "";
@@ -987,6 +1010,10 @@
       .replaceAll("\"", "&quot;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;");
+  }
+
+  function isEmailAddress(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
   }
 
   function renderLazyImage({
@@ -5384,6 +5411,72 @@
     return parsedBody;
   }
 
+  async function sendTryoutEmailsViaFunction({ subject, bodyTemplate, recipients }) {
+    const functionId = String(APPWRITE_CONFIG?.tryoutEmailFunctionId || "").trim();
+    if (!functionId) {
+      throw new Error("Tryout email function is not configured.");
+    }
+
+    const appwriteSdk = window.Appwrite || window.appwrite;
+    if (!appwriteSdk || typeof appwriteSdk.Client !== "function" || typeof appwriteSdk.Functions !== "function") {
+      throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    }
+
+    const functionClient = new appwriteSdk.Client()
+      .setEndpoint(String(APPWRITE_CONFIG?.endpoint || "https://fra.cloud.appwrite.io/v1"))
+      .setProject(String(APPWRITE_CONFIG?.projectId || ""));
+    const functionsApi = new appwriteSdk.Functions(functionClient);
+
+    const execution = await functionsApi.createExecution(
+      functionId,
+      JSON.stringify({ subject, bodyTemplate, recipients }),
+      false
+    );
+
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const terminalStatuses = new Set(["completed", "failed", "crashed", "timeout", "canceled"]);
+    let finalExecution = execution;
+
+    for (let index = 0; index < 60; index += 1) {
+      const status = String(finalExecution?.status || "").toLowerCase();
+      if (terminalStatuses.has(status)) break;
+      if (typeof functionsApi.getExecution === "function" && finalExecution?.$id) {
+        await wait(1000);
+        finalExecution = await functionsApi.getExecution(functionId, String(finalExecution.$id));
+        continue;
+      }
+      break;
+    }
+
+    const finalStatus = String(finalExecution?.status || "").toLowerCase();
+    if (finalStatus && finalStatus !== "completed") {
+      const statusCode = String(finalExecution?.responseStatusCode || "").trim();
+      const stderr = String(finalExecution?.stderr || "").trim();
+      const bodyText = String(finalExecution?.responseBody || "").trim();
+      throw new Error(
+        `Tryout email function failed (${finalStatus}${statusCode ? `:${statusCode}` : ""}). ${stderr || bodyText || "Check function logs in Appwrite Console."}`.trim()
+      );
+    }
+
+    const responseBodyRaw = String(finalExecution?.responseBody || "").trim();
+    if (!responseBodyRaw) {
+      throw new Error("Tryout email function returned an empty response body.");
+    }
+
+    let parsedBody = null;
+    try {
+      parsedBody = JSON.parse(responseBodyRaw);
+    } catch {
+      throw new Error("Tryout email function returned invalid JSON.");
+    }
+
+    if (!parsedBody?.ok) {
+      throw new Error(String(parsedBody?.error || "Tryout email send failed."));
+    }
+
+    return parsedBody;
+  }
+
   function formatSepaSkipReason(reason) {
     const normalized = String(reason || "").trim().toLowerCase();
     if (!normalized) return "unknown";
@@ -6855,12 +6948,20 @@
           <span>${filteredRows.length} shown</span>
           <span>${tryoutSubmissions.length} total</span>
           <span>${tryoutSubmissions.filter((row) => row.uniWienStudent === "yes").length} Uni Wien students</span>
+          <span>${selectedTryoutSubmissionIds.length} selected</span>
         </div>
+        ${loaded ? `
+          <div class="button-row" style="margin-bottom: 10px;">
+            <button type="button" class="ghost-button small-button" id="tryout-select-visible" data-no-toast="true">Select visible (${filteredRows.length})</button>
+            <button type="button" class="ghost-button small-button" id="tryout-clear-selection" data-no-toast="true">Clear selection</button>
+          </div>
+        ` : ""}
 
         <div class="table-wrap tryout-submissions-table-wrap">
           <table class="tryout-submissions-table">
             <thead>
               <tr>
+                <th></th>
                 <th>Submitted</th>
                 <th>Name</th>
                 <th>Uni Wien</th>
@@ -6873,6 +6974,7 @@
             <tbody>
               ${loaded ? (filteredRows.map((row) => `
                 <tr>
+                  <td><input type="checkbox" class="tryout-submission-select" data-tryout-submission-id="${escapeAttribute(row.id)}" ${selectedTryoutSubmissionIds.includes(String(row.id)) ? "checked" : ""} aria-label="Select ${escapeAttribute(`${row.firstName} ${row.lastName}`.trim() || "submission")}" /></td>
                   <td>${escapeHtml(row.submittedAt ? formatDate(row.submittedAt) : "-")}</td>
                   <td>
                     <strong>${escapeHtml(`${row.firstName} ${row.lastName}`.trim() || "-")}</strong>
@@ -6909,14 +7011,45 @@
                   </td>
                 </tr>
               `).join("") || `
-                <tr><td colspan="7" class="meta">No submissions match the current filters.</td></tr>
+                <tr><td colspan="8" class="meta">No submissions match the current filters.</td></tr>
               `) : `
-                <tr><td colspan="7" class="meta">Load submissions to review tryout registrations.</td></tr>
+                <tr><td colspan="8" class="meta">Load submissions to review tryout registrations.</td></tr>
               `}
             </tbody>
           </table>
         </div>
+
+        ${loaded ? renderTryoutEmailComposer() : ""}
       </section>
+    `;
+  }
+
+  function renderTryoutEmailComposer() {
+    const selectedRows = tryoutSubmissions.filter((row) => selectedTryoutSubmissionIds.includes(String(row.id)));
+    const missingEmailCount = selectedRows.filter((row) => !isEmailAddress(row.email)).length;
+    return `
+      <article class="card compact-card" style="margin-top: 14px; display: grid; gap: 10px;">
+        <div>
+          <p class="eyebrow">Bulk email</p>
+          <h3 style="margin-top: 4px;">Send email to selected registrants</h3>
+          <p class="muted">${selectedRows.length} selected${missingEmailCount ? ` (${missingEmailCount} missing a valid email and will be skipped)` : ""}. Use {{firstName}}, {{lastName}}, or {{email}} as placeholders.</p>
+        </div>
+        <label>Subject
+          <input id="tryout-email-subject" value="${escapeAttribute(tryoutEmailSubject)}" />
+        </label>
+        <label>Message
+          <textarea id="tryout-email-body" rows="10">${escapeHtml(tryoutEmailBody)}</textarea>
+        </label>
+        <div class="button-row">
+          <button type="button" class="primary-button" id="tryout-send-email" ${selectedRows.length ? "" : "disabled"}>Send email to ${selectedRows.length} selected</button>
+        </div>
+        ${tryoutEmailResult ? `
+          <div class="meta">
+            <p><strong>${tryoutEmailResult.sentCount}</strong> sent${tryoutEmailResult.failedCount ? `, <strong>${tryoutEmailResult.failedCount}</strong> failed` : ""}.</p>
+            ${tryoutEmailResult.failed && tryoutEmailResult.failed.length ? tryoutEmailResult.failed.map((item) => `<div>${escapeHtml(item.email || item.id || "Unknown")}: ${escapeHtml(item.reason || "Unknown error")}</div>`).join("") : ""}
+          </div>
+        ` : ""}
+      </article>
     `;
   }
 
@@ -12375,6 +12508,106 @@
         }
       };
     });
+
+    const selectVisibleButton = document.getElementById("tryout-select-visible");
+    if (selectVisibleButton) {
+      selectVisibleButton.onclick = function () {
+        const visibleIds = filteredTryoutSubmissions().map((row) => String(row.id));
+        selectedTryoutSubmissionIds = Array.from(new Set([...selectedTryoutSubmissionIds, ...visibleIds]));
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    const clearSelectionButton = document.getElementById("tryout-clear-selection");
+    if (clearSelectionButton) {
+      clearSelectionButton.onclick = function () {
+        selectedTryoutSubmissionIds = [];
+        mount();
+        switchView("tryout");
+      };
+    }
+
+    document.querySelectorAll(".tryout-submission-select").forEach((checkbox) => {
+      checkbox.onchange = function () {
+        const id = String(checkbox.dataset.tryoutSubmissionId || "").trim();
+        const selectedSet = new Set(selectedTryoutSubmissionIds.map(String));
+        if (checkbox.checked) selectedSet.add(id);
+        else selectedSet.delete(id);
+        selectedTryoutSubmissionIds = Array.from(selectedSet);
+        mount();
+        switchView("tryout");
+      };
+    });
+
+    const emailSubjectInput = document.getElementById("tryout-email-subject");
+    if (emailSubjectInput) {
+      emailSubjectInput.oninput = function () {
+        tryoutEmailSubject = emailSubjectInput.value;
+      };
+    }
+
+    const emailBodyInput = document.getElementById("tryout-email-body");
+    if (emailBodyInput) {
+      emailBodyInput.oninput = function () {
+        tryoutEmailBody = emailBodyInput.value;
+      };
+    }
+
+    const sendEmailButton = document.getElementById("tryout-send-email");
+    if (sendEmailButton) {
+      sendEmailButton.onclick = async function () {
+        const selectedRows = tryoutSubmissions.filter((row) => selectedTryoutSubmissionIds.includes(String(row.id)));
+        const recipients = selectedRows
+          .filter((row) => isEmailAddress(row.email))
+          .map((row) => ({
+            id: String(row.id),
+            email: String(row.email || "").trim(),
+            firstName: String(row.firstName || "").trim(),
+            lastName: String(row.lastName || "").trim()
+          }));
+        if (!recipients.length) {
+          showToast("No selected registrant has a valid email address.", "error");
+          return;
+        }
+        const confirmed = window.confirm(`Send this email to ${recipients.length} registrant(s)?`);
+        if (!confirmed) return;
+
+        showBlockingProgress(`Sending tryout emails…`);
+        updateBlockingProgress(0, recipients.length);
+        try {
+          const result = await sendTryoutEmailsViaFunction({
+            subject: tryoutEmailSubject,
+            bodyTemplate: tryoutEmailBody,
+            recipients
+          });
+          tryoutEmailResult = result;
+          hideBlockingProgress();
+
+          const sentIds = (result.sent || []).map((item) => String(item.id)).filter(Boolean);
+          if (sentIds.length && backendClient && authState.user) {
+            const bulkUpdate = await backendClient
+              .from("tryout_registrations")
+              .update({ status: "invited" })
+              .in("id", sentIds);
+            if (!bulkUpdate.error) {
+              tryoutSubmissions = tryoutSubmissions.map((row) => sentIds.includes(String(row.id)) ? { ...row, status: "invited" } : row);
+            }
+          }
+
+          selectedTryoutSubmissionIds = [];
+          tryoutSubmissionsStatus = `Sent ${result.sentCount} email(s)${result.failedCount ? `, ${result.failedCount} failed` : ""}.`;
+          showToast(tryoutSubmissionsStatus, result.failedCount ? "error" : "success");
+        } catch (error) {
+          hideBlockingProgress();
+          tryoutSubmissionsStatus = error?.message || "Could not send tryout emails.";
+          showToast(tryoutSubmissionsStatus, "error");
+        } finally {
+          mount();
+          switchView("tryout");
+        }
+      };
+    }
   }
 
   function openEquipmentPhotoDialog(photoSrc, title) {
