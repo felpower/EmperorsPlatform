@@ -518,37 +518,31 @@
           }
           data = created;
         } else if (this.action === "update") {
+          // Note: bulk transactions are NOT used here even though bulkApi supports "update"
+          // operations. Appwrite's transaction "update" validates the data payload against the
+          // full collection schema (missing-required-attribute errors), unlike updateDocument()'s
+          // normal partial-patch merge - so a partial payload like {status: "invited"} fails for
+          // any collection with other required attributes. Per-row updateRow() calls don't have
+          // this problem, so updates always go through the throttled per-row loop.
           const tableId = tableIdFor(this.tableName);
           const rows = await this.fetchRows();
-          let updated;
-          if (bulkApi.supported && rows.length > 1) {
+          const updated = [];
+          for (const row of rows) {
             const payload = this.tableName === "members"
               ? sanitizeMembersPayload(this.payload || {})
               : sanitizeNonMembersPayload(this.payload || {});
-            const operations = rows.map((row) => bulkApi.buildOperation("update", tableId, String(row.$id || row.id), payload));
-            await runBulkWrite(operations, this.progressCallback);
-            updated = rows.map((row) => this.tableName === "members"
-              ? normalizeMembersRow(Object.assign({}, row, payload))
-              : Object.assign({}, row, payload, { id: row.$id || row.id }));
-          } else {
-            updated = [];
-            for (const row of rows) {
-              const payload = this.tableName === "members"
-                ? sanitizeMembersPayload(this.payload || {})
-                : sanitizeNonMembersPayload(this.payload || {});
-              const rowId = String(row.$id || row.id);
-              const next = await withRateLimitRetry(
-                function () {
-                  return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
-                },
-                (attempt, waitMs) => {
-                  if (this.progressCallback) this.progressCallback(updated.length, rows.length, { waitingMs: waitMs, attempt: attempt });
-                }
-              );
-              updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
-              if (this.progressCallback) this.progressCallback(updated.length, rows.length);
-              if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
-            }
+            const rowId = String(row.$id || row.id);
+            const next = await withRateLimitRetry(
+              function () {
+                return dbApi.updateRow(String(config.databaseId), tableId, rowId, payload);
+              },
+              (attempt, waitMs) => {
+                if (this.progressCallback) this.progressCallback(updated.length, rows.length, { waitingMs: waitMs, attempt: attempt });
+              }
+            );
+            updated.push(this.tableName === "members" ? normalizeMembersRow(next) : Object.assign({}, next, { id: next.$id || next.id }));
+            if (this.progressCallback) this.progressCallback(updated.length, rows.length);
+            if (updated.length < rows.length) await sleep(ROW_LOOP_THROTTLE_MS);
           }
           data = updated;
         } else if (this.action === "delete") {
