@@ -405,6 +405,7 @@ Uni Wien Emperors`;
   let tryoutEmailBody = DEFAULT_TRYOUT_EMAIL_BODY;
   let tryoutEmailSending = false;
   let tryoutEmailResult = null;
+  let tryoutEmailComposerExpanded = false;
   let tryoutSettingsLoadPromise = null;
   let tryoutSettingsLoadAttempted = false;
   let tryoutSettingsStatus = "";
@@ -6348,6 +6349,8 @@ Uni Wien Emperors`;
   }
 
   function loadTryoutSubmissionFilters() {
+    // Status always starts on "new" on a fresh load - new registrations are what coaches care
+    // about by default, so it's intentionally not remembered across page loads like the others.
     try {
       const raw = sessionStorage.getItem(TRYOUT_REGISTRATION_FILTER_KEY);
       if (!raw) return { search: "", uniWien: "all", experience: "all", status: "new" };
@@ -6356,7 +6359,7 @@ Uni Wien Emperors`;
         search: String(parsed?.search || ""),
         uniWien: String(parsed?.uniWien || "all"),
         experience: String(parsed?.experience || "all"),
-        status: String(parsed?.status || "new")
+        status: "new"
       };
     } catch {
       return { search: "", uniWien: "all", experience: "all", status: "new" };
@@ -6364,7 +6367,8 @@ Uni Wien Emperors`;
   }
 
   function saveTryoutSubmissionFilters() {
-    sessionStorage.setItem(TRYOUT_REGISTRATION_FILTER_KEY, JSON.stringify(tryoutSubmissionFilters));
+    const { status, ...persisted } = tryoutSubmissionFilters;
+    sessionStorage.setItem(TRYOUT_REGISTRATION_FILTER_KEY, JSON.stringify(persisted));
   }
 
   function canManageTryoutSubmissions() {
@@ -7048,27 +7052,31 @@ Uni Wien Emperors`;
     const selectedRows = tryoutSubmissions.filter((row) => selectedTryoutSubmissionIds.includes(String(row.id)));
     const missingEmailCount = selectedRows.filter((row) => !isEmailAddress(row.email)).length;
     return `
-      <article class="card compact-card" style="margin-top: 14px; display: grid; gap: 10px;">
-        <div>
-          <p class="eyebrow">Bulk email</p>
-          <h3 style="margin-top: 4px;">Send email to selected registrants</h3>
-          <p class="muted">${selectedRows.length} selected${missingEmailCount ? ` (${missingEmailCount} missing a valid email and will be skipped)` : ""}. Use {{firstName}}, {{lastName}}, or {{email}} as placeholders.</p>
-        </div>
-        <label>Subject
-          <input id="tryout-email-subject" value="${escapeAttribute(tryoutEmailSubject)}" />
-        </label>
-        <label>Message
-          <textarea id="tryout-email-body" rows="10">${escapeHtml(tryoutEmailBody)}</textarea>
-        </label>
-        <div class="button-row">
-          <button type="button" class="primary-button" id="tryout-send-email" ${selectedRows.length ? "" : "disabled"}>Send email to ${selectedRows.length} selected</button>
-        </div>
-        ${tryoutEmailResult ? `
-          <div class="meta">
-            <p><strong>${tryoutEmailResult.sentCount}</strong> sent${tryoutEmailResult.failedCount ? `, <strong>${tryoutEmailResult.failedCount}</strong> failed` : ""}.</p>
-            ${tryoutEmailResult.failed && tryoutEmailResult.failed.length ? tryoutEmailResult.failed.map((item) => `<div>${escapeHtml(item.email || item.id || "Unknown")}: ${escapeHtml(item.reason || "Unknown error")}</div>`).join("") : ""}
+      <article class="card compact-card" style="margin-top: 14px;">
+        <details class="fee-filters-dropdown" id="tryout-email-composer" ${tryoutEmailComposerExpanded ? "open" : ""}>
+          <summary>
+            <span class="member-filter-summary-label">Bulk email</span>
+            <span class="member-filter-summary-meta">${selectedRows.length} selected</span>
+          </summary>
+          <div style="display: grid; gap: 10px; margin-top: 10px;">
+            <p class="muted">${selectedRows.length} selected${missingEmailCount ? ` (${missingEmailCount} missing a valid email and will be skipped)` : ""}. Use {{firstName}}, {{lastName}}, or {{email}} as placeholders.</p>
+            <label>Subject
+              <input id="tryout-email-subject" value="${escapeAttribute(tryoutEmailSubject)}" />
+            </label>
+            <label>Message
+              <textarea id="tryout-email-body" rows="10">${escapeHtml(tryoutEmailBody)}</textarea>
+            </label>
+            <div class="button-row">
+              <button type="button" class="primary-button" id="tryout-send-email" ${selectedRows.length ? "" : "disabled"}>Send email to ${selectedRows.length} selected</button>
+            </div>
+            ${tryoutEmailResult ? `
+              <div class="meta">
+                <p><strong>${tryoutEmailResult.sentCount}</strong> sent${tryoutEmailResult.failedCount ? `, <strong>${tryoutEmailResult.failedCount}</strong> failed` : ""}.</p>
+                ${tryoutEmailResult.failed && tryoutEmailResult.failed.length ? tryoutEmailResult.failed.map((item) => `<div>${escapeHtml(item.email || item.id || "Unknown")}: ${escapeHtml(item.reason || "Unknown error")}</div>`).join("") : ""}
+              </div>
+            ` : ""}
           </div>
-        ` : ""}
+        </details>
       </article>
     `;
   }
@@ -12528,6 +12536,13 @@ Uni Wien Emperors`;
         }
       };
     });
+
+    const emailComposerDetails = document.getElementById("tryout-email-composer");
+    if (emailComposerDetails) {
+      emailComposerDetails.ontoggle = function () {
+        tryoutEmailComposerExpanded = emailComposerDetails.open;
+      };
+    }
 
     const selectVisibleButton = document.getElementById("tryout-select-visible");
     if (selectVisibleButton) {
