@@ -6748,21 +6748,22 @@ Uni Wien Emperors`;
     });
   }
 
-  function tryoutReferralStandings(rows = tryoutSubmissions) {
+  function tryoutReferralStandings(rows = tryoutSubmissions, duplicateInfo = tryoutDuplicateRegistrationInfo(rows)) {
     const standingsByMember = new Map();
     const generalSources = new Map();
 
     rows.forEach((row) => {
       const referral = String(row?.referredBy || "").trim();
       if (!referral) return;
+      const duplicateGroup = duplicateInfo.groupKeysByRow.get(row) ?? row;
       const match = findTryoutReferralMember(referral);
       if (!match.member) {
         const sourceKey = normalizeLookupToken(referral) || referral.toLowerCase();
         const currentSource = generalSources.get(sourceKey) || {
           source: referral,
-          count: 0
+          referralGroups: new Set()
         };
-        currentSource.count += 1;
+        currentSource.referralGroups.add(duplicateGroup);
         generalSources.set(sourceKey, currentSource);
         return;
       }
@@ -6772,31 +6773,40 @@ Uni Wien Emperors`;
       const current = standingsByMember.get(memberKey) || {
         memberId: memberKey,
         memberName,
-        referralCount: 0,
-        referrals: []
+        referralsByGroup: new Map()
       };
-      current.referralCount += 1;
-      current.referrals.push({
-        id: String(row.id || ""),
-        name: `${row.firstName || ""} ${row.lastName || ""}`.trim() || row.email || "Unknown registration"
-      });
+      const currentReferral = current.referralsByGroup.get(duplicateGroup) || {
+        name: `${row.firstName || ""} ${row.lastName || ""}`.trim() || row.email || "Unknown registration",
+        registrationCount: 0
+      };
+      currentReferral.registrationCount += 1;
+      current.referralsByGroup.set(duplicateGroup, currentReferral);
       standingsByMember.set(memberKey, current);
     });
 
     return {
       rows: Array.from(standingsByMember.values())
-        .map((row) => ({
-          ...row,
-          referrals: row.referrals.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }))
-        }))
+        .map((row) => {
+          const referrals = Array.from(row.referralsByGroup.values())
+            .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+          return {
+            memberId: row.memberId,
+            memberName: row.memberName,
+            referrals,
+            referralCount: referrals.length,
+            duplicateCount: referrals.reduce((total, referral) => total + Math.max(0, referral.registrationCount - 1), 0)
+          };
+        })
         .sort((left, right) =>
           right.referralCount - left.referralCount
           || left.memberName.localeCompare(right.memberName, undefined, { sensitivity: "base" })
         ),
-      generalSources: Array.from(generalSources.values()).sort((left, right) =>
-        right.count - left.count
-        || left.source.localeCompare(right.source, undefined, { sensitivity: "base" })
-      )
+      generalSources: Array.from(generalSources.values())
+        .map((source) => ({ source: source.source, count: source.referralGroups.size }))
+        .sort((left, right) =>
+          right.count - left.count
+          || left.source.localeCompare(right.source, undefined, { sensitivity: "base" })
+        )
     };
   }
 
@@ -6808,15 +6818,16 @@ Uni Wien Emperors`;
         <div class="tryout-referral-people-list">
           <strong>Referred players</strong>
           <ul>
-            ${row.referrals.map((referral) => `<li>${escapeHtml(referral.name)}</li>`).join("")}
+            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
           </ul>
         </div>
       </details>
+      ${row.duplicateCount ? `<div class="tryout-referral-duplicate-note">${row.duplicateCount} possible duplicate${row.duplicateCount === 1 ? "" : "s"}</div>` : ""}
     `;
   }
 
-  function renderTryoutReferralOverview() {
-    const referralStandings = tryoutReferralStandings();
+  function renderTryoutReferralOverview(duplicateInfo = tryoutDuplicateRegistrationInfo()) {
+    const referralStandings = tryoutReferralStandings(tryoutSubmissions, duplicateInfo);
     const trackedReferralCount = referralStandings.rows.reduce((total, row) => total + row.referralCount, 0);
     const summaryMeta = `${trackedReferralCount} assigned referral${trackedReferralCount === 1 ? "" : "s"}`;
 
@@ -6906,7 +6917,7 @@ Uni Wien Emperors`;
     return identifiers;
   }
 
-  function tryoutDuplicateRegistrationCounts(rows = tryoutSubmissions) {
+  function tryoutDuplicateRegistrationInfo(rows = tryoutSubmissions) {
     const parents = rows.map((_, index) => index);
     const identifierOwners = new Map();
     const findRoot = (index) => {
@@ -6931,7 +6942,18 @@ Uni Wien Emperors`;
       const root = findRoot(rowIndex);
       groupSizes.set(root, (groupSizes.get(root) || 0) + 1);
     });
-    return new Map(rows.map((row, rowIndex) => [row, groupSizes.get(findRoot(rowIndex)) || 1]));
+    const countsByRow = new Map();
+    const groupKeysByRow = new Map();
+    rows.forEach((row, rowIndex) => {
+      const root = findRoot(rowIndex);
+      countsByRow.set(row, groupSizes.get(root) || 1);
+      groupKeysByRow.set(row, root);
+    });
+    return {
+      countsByRow,
+      groupKeysByRow,
+      possibleDuplicateCount: Array.from(groupSizes.values()).reduce((total, groupSize) => total + Math.max(0, groupSize - 1), 0)
+    };
   }
 
   function tryoutSubmissionFilterOptions(key) {
@@ -7112,7 +7134,8 @@ Uni Wien Emperors`;
     const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
     const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
     const statusOptions = Array.from(new Set([...tryoutSubmissionStatusOptions(), ...tryoutSubmissionFilterOptions("status")]));
-    const duplicateCounts = tryoutDuplicateRegistrationCounts();
+    const duplicateInfo = tryoutDuplicateRegistrationInfo();
+    const duplicateCounts = duplicateInfo.countsByRow;
 
     return `
       <section class="tryout-admin-panel setup-card">
@@ -7159,9 +7182,10 @@ Uni Wien Emperors`;
           <span>${filteredRows.length} shown</span>
           <span>${tryoutSubmissions.length} total</span>
           <span>${tryoutSubmissions.filter((row) => row.uniWienStudent === "yes").length} Uni Wien students</span>
+          <span class="tryout-duplicate-summary">${duplicateInfo.possibleDuplicateCount} possible duplicate${duplicateInfo.possibleDuplicateCount === 1 ? "" : "s"}</span>
           <span>${selectedTryoutSubmissionIds.length} selected</span>
         </div>
-        ${loaded ? renderTryoutReferralOverview() : ""}
+        ${loaded ? renderTryoutReferralOverview(duplicateInfo) : ""}
         ${loaded ? `
           <div class="button-row" style="margin-bottom: 10px;">
             <button type="button" class="ghost-button small-button" id="tryout-select-visible" data-no-toast="true">Select visible (${filteredRows.length})</button>
