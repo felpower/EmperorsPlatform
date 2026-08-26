@@ -6750,14 +6750,20 @@ Uni Wien Emperors`;
 
   function tryoutReferralStandings(rows = tryoutSubmissions) {
     const standingsByMember = new Map();
-    let unassignedCount = 0;
+    const generalSources = new Map();
 
     rows.forEach((row) => {
       const referral = String(row?.referredBy || "").trim();
       if (!referral) return;
       const match = findTryoutReferralMember(referral);
       if (!match.member) {
-        unassignedCount += 1;
+        const sourceKey = normalizeLookupToken(referral) || referral.toLowerCase();
+        const currentSource = generalSources.get(sourceKey) || {
+          source: referral,
+          count: 0
+        };
+        currentSource.count += 1;
+        generalSources.set(sourceKey, currentSource);
         return;
       }
 
@@ -6766,19 +6772,47 @@ Uni Wien Emperors`;
       const current = standingsByMember.get(memberKey) || {
         memberId: memberKey,
         memberName,
-        referralCount: 0
+        referralCount: 0,
+        referrals: []
       };
       current.referralCount += 1;
+      current.referrals.push({
+        id: String(row.id || ""),
+        name: `${row.firstName || ""} ${row.lastName || ""}`.trim() || row.email || "Unknown registration"
+      });
       standingsByMember.set(memberKey, current);
     });
 
     return {
-      rows: Array.from(standingsByMember.values()).sort((left, right) =>
-        right.referralCount - left.referralCount
-        || left.memberName.localeCompare(right.memberName, undefined, { sensitivity: "base" })
-      ),
-      unassignedCount
+      rows: Array.from(standingsByMember.values())
+        .map((row) => ({
+          ...row,
+          referrals: row.referrals.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }))
+        }))
+        .sort((left, right) =>
+          right.referralCount - left.referralCount
+          || left.memberName.localeCompare(right.memberName, undefined, { sensitivity: "base" })
+        ),
+      generalSources: Array.from(generalSources.values()).sort((left, right) =>
+        right.count - left.count
+        || left.source.localeCompare(right.source, undefined, { sensitivity: "base" })
+      )
     };
+  }
+
+  function renderTryoutReferralPeople(row) {
+    const referralCount = Number(row?.referralCount || 0);
+    return `
+      <details class="tryout-referral-people">
+        <summary aria-label="Show ${referralCount} referrals for ${escapeAttribute(row.memberName)}" title="${escapeAttribute(row.referrals.map((referral) => referral.name).join(", "))}"><strong>${referralCount}</strong></summary>
+        <div class="tryout-referral-people-list">
+          <strong>Referred players</strong>
+          <ul>
+            ${row.referrals.map((referral) => `<li>${escapeHtml(referral.name)}</li>`).join("")}
+          </ul>
+        </div>
+      </details>
+    `;
   }
 
   function renderTryoutReferralOverview() {
@@ -6828,7 +6862,7 @@ Uni Wien Emperors`;
                       <tr>
                         <td><span class="tryout-referral-rank">${index + 1}</span></td>
                         <td><strong>${escapeHtml(row.memberName)}</strong></td>
-                        <td><strong>${row.referralCount}</strong></td>
+                        <td>${renderTryoutReferralPeople(row)}</td>
                         <td>
                           <div class="tryout-referral-progress" aria-label="${escapeAttribute(progressLabel)}">
                             <span style="width: ${(progressValue / 3) * 100}%"></span>
@@ -6843,12 +6877,61 @@ Uni Wien Emperors`;
               </table>
             </div>
           ` : `<p class="meta">No referrals have been assigned to active members yet.</p>`}
-          ${referralStandings.unassignedCount ? `
-            <p class="meta tryout-referral-unassigned">${referralStandings.unassignedCount} referral entr${referralStandings.unassignedCount === 1 ? "y is" : "ies are"} a general source or could not be uniquely assigned to a member.</p>
+          ${referralStandings.generalSources.length ? `
+            <div class="tryout-general-sources" aria-label="General referral sources">
+              <span class="meta">General sources:</span>
+              ${referralStandings.generalSources.map((source) => `<span>${escapeHtml(source.source)} <strong>${source.count}</strong></span>`).join("")}
+            </div>
           ` : ""}
         </div>
       </details>
     `;
+  }
+
+  function normalizeTryoutDuplicatePhone(value) {
+    let digits = String(value || "").replace(/\D/g, "");
+    if (digits.startsWith("0043")) digits = `0${digits.slice(4)}`;
+    else if (digits.startsWith("43")) digits = `0${digits.slice(2)}`;
+    return digits.length >= 7 ? digits : "";
+  }
+
+  function tryoutDuplicateIdentifiers(row) {
+    const identifiers = [];
+    const email = String(row?.email || "").trim().toLowerCase();
+    const phone = normalizeTryoutDuplicatePhone(row?.phone);
+    const name = normalizeLookupToken(`${row?.firstName || ""} ${row?.lastName || ""}`);
+    if (email) identifiers.push(`email:${email}`);
+    if (phone) identifiers.push(`phone:${phone}`);
+    if (name) identifiers.push(`name:${name}`);
+    return identifiers;
+  }
+
+  function tryoutDuplicateRegistrationCounts(rows = tryoutSubmissions) {
+    const parents = rows.map((_, index) => index);
+    const identifierOwners = new Map();
+    const findRoot = (index) => {
+      if (parents[index] !== index) parents[index] = findRoot(parents[index]);
+      return parents[index];
+    };
+    const joinRows = (leftIndex, rightIndex) => {
+      const leftRoot = findRoot(leftIndex);
+      const rightRoot = findRoot(rightIndex);
+      if (leftRoot !== rightRoot) parents[rightRoot] = leftRoot;
+    };
+
+    rows.forEach((row, rowIndex) => {
+      tryoutDuplicateIdentifiers(row).forEach((identifier) => {
+        if (identifierOwners.has(identifier)) joinRows(rowIndex, identifierOwners.get(identifier));
+        else identifierOwners.set(identifier, rowIndex);
+      });
+    });
+
+    const groupSizes = new Map();
+    rows.forEach((_, rowIndex) => {
+      const root = findRoot(rowIndex);
+      groupSizes.set(root, (groupSizes.get(root) || 0) + 1);
+    });
+    return new Map(rows.map((row, rowIndex) => [row, groupSizes.get(findRoot(rowIndex)) || 1]));
   }
 
   function tryoutSubmissionFilterOptions(key) {
@@ -7029,6 +7112,7 @@ Uni Wien Emperors`;
     const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
     const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
     const statusOptions = Array.from(new Set([...tryoutSubmissionStatusOptions(), ...tryoutSubmissionFilterOptions("status")]));
+    const duplicateCounts = tryoutDuplicateRegistrationCounts();
 
     return `
       <section class="tryout-admin-panel setup-card">
@@ -7106,6 +7190,7 @@ Uni Wien Emperors`;
                   <td>${escapeHtml(row.submittedAt ? formatDate(row.submittedAt) : "-")}</td>
                   <td>
                     <strong>${escapeHtml(`${row.firstName} ${row.lastName}`.trim() || "-")}</strong>
+                    ${(duplicateCounts.get(row) || 1) > 1 ? `<div><span class="tryout-duplicate-badge" title="Possible duplicate: another registration has the same email, phone number, or full name.">${duplicateCounts.get(row)}&times; registered</span></div>` : ""}
                     <div class="meta">${escapeHtml(row.email || "-")}</div>
                     ${row.phone ? `<div class="meta">${escapeHtml(row.phone)}</div>` : ""}
                   </td>
