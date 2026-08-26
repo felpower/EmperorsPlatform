@@ -6748,6 +6748,109 @@ Uni Wien Emperors`;
     });
   }
 
+  function tryoutReferralStandings(rows = tryoutSubmissions) {
+    const standingsByMember = new Map();
+    let unassignedCount = 0;
+
+    rows.forEach((row) => {
+      const referral = String(row?.referredBy || "").trim();
+      if (!referral) return;
+      const match = findTryoutReferralMember(referral);
+      if (!match.member) {
+        unassignedCount += 1;
+        return;
+      }
+
+      const memberName = tryoutReferralMemberName(match.member);
+      const memberKey = String(match.member.id || match.member.$id || normalizeLookupToken(memberName));
+      const current = standingsByMember.get(memberKey) || {
+        memberId: memberKey,
+        memberName,
+        referralCount: 0
+      };
+      current.referralCount += 1;
+      standingsByMember.set(memberKey, current);
+    });
+
+    return {
+      rows: Array.from(standingsByMember.values()).sort((left, right) =>
+        right.referralCount - left.referralCount
+        || left.memberName.localeCompare(right.memberName, undefined, { sensitivity: "base" })
+      ),
+      unassignedCount
+    };
+  }
+
+  function renderTryoutReferralOverview() {
+    const referralStandings = tryoutReferralStandings();
+    const trackedReferralCount = referralStandings.rows.reduce((total, row) => total + row.referralCount, 0);
+    const summaryMeta = `${trackedReferralCount} assigned referral${trackedReferralCount === 1 ? "" : "s"}`;
+
+    return `
+      <details class="tryout-referral-overview">
+        <summary>
+          <span>
+            <span class="member-filter-summary-label">Referral overview</span>
+            <span class="member-filter-summary-meta">${escapeHtml(summaryMeta)}</span>
+          </span>
+          <span class="tryout-referral-summary-hint">Show progress</span>
+        </summary>
+        <div class="tryout-referral-overview-body">
+          <div>
+            <p class="eyebrow">Referral progress</p>
+            <h4>3 referrals = 1 contribution-free quarter</h4>
+            <p class="muted">Counts are based on tryout registrations that can be uniquely assigned to an active member.</p>
+          </div>
+          ${referralStandings.rows.length ? `
+            <div class="table-wrap tryout-referral-table-wrap">
+              <table class="tryout-referral-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Member</th>
+                    <th>Referrals</th>
+                    <th>Progress</th>
+                    <th>Reward</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${referralStandings.rows.map((row, index) => {
+                    const earnedQuarters = Math.floor(row.referralCount / 3);
+                    const progressInQuarter = row.referralCount % 3;
+                    const progressValue = earnedQuarters && progressInQuarter === 0 ? 3 : progressInQuarter;
+                    const progressLabel = earnedQuarters
+                      ? (progressInQuarter ? `${progressInQuarter} / 3 toward next quarter` : "3 / 3 target reached")
+                      : `${progressInQuarter} / 3 referrals`;
+                    const rewardLabel = earnedQuarters
+                      ? `${earnedQuarters} free quarter${earnedQuarters === 1 ? "" : "s"}`
+                      : `${3 - progressInQuarter} to go`;
+                    return `
+                      <tr>
+                        <td><span class="tryout-referral-rank">${index + 1}</span></td>
+                        <td><strong>${escapeHtml(row.memberName)}</strong></td>
+                        <td><strong>${row.referralCount}</strong></td>
+                        <td>
+                          <div class="tryout-referral-progress" aria-label="${escapeAttribute(progressLabel)}">
+                            <span style="width: ${(progressValue / 3) * 100}%"></span>
+                          </div>
+                          <div class="meta">${escapeHtml(progressLabel)}</div>
+                        </td>
+                        <td><span class="tryout-referral-reward ${earnedQuarters ? "earned" : ""}">${escapeHtml(rewardLabel)}</span></td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          ` : `<p class="meta">No referrals have been assigned to active members yet.</p>`}
+          ${referralStandings.unassignedCount ? `
+            <p class="meta tryout-referral-unassigned">${referralStandings.unassignedCount} referral entr${referralStandings.unassignedCount === 1 ? "y is" : "ies are"} a general source or could not be uniquely assigned to a member.</p>
+          ` : ""}
+        </div>
+      </details>
+    `;
+  }
+
   function tryoutSubmissionFilterOptions(key) {
     const values = Array.from(new Set(tryoutSubmissions.map((row) => String(row[key] || "").trim()).filter(Boolean))).sort();
     return values;
@@ -6974,6 +7077,7 @@ Uni Wien Emperors`;
           <span>${tryoutSubmissions.filter((row) => row.uniWienStudent === "yes").length} Uni Wien students</span>
           <span>${selectedTryoutSubmissionIds.length} selected</span>
         </div>
+        ${loaded ? renderTryoutReferralOverview() : ""}
         ${loaded ? `
           <div class="button-row" style="margin-bottom: 10px;">
             <button type="button" class="ghost-button small-button" id="tryout-select-visible" data-no-toast="true">Select visible (${filteredRows.length})</button>
