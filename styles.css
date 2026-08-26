@@ -1273,6 +1273,12 @@ button {
   font-weight: 700;
 }
 
+.tryout-admin-summary .tryout-summary-with-tooltip {
+  cursor: help;
+  text-decoration: underline dotted rgba(49, 64, 71, 0.45);
+  text-underline-offset: 3px;
+}
+
 .tryout-referral-overview {
   border: 1px solid var(--line);
   border-radius: 14px;

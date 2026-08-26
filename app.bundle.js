@@ -6956,6 +6956,19 @@ Uni Wien Emperors`;
     };
   }
 
+  function tryoutRegistrationSummaryStats(rows, duplicateInfo) {
+    const groupKeys = new Set(rows.map((row) => duplicateInfo.groupKeysByRow.get(row) ?? row));
+    return {
+      registrationCount: rows.length,
+      uniquePeopleCount: groupKeys.size,
+      possibleDuplicateCount: Math.max(0, rows.length - groupKeys.size)
+    };
+  }
+
+  function tryoutRegistrationSummaryTitle(label, stats) {
+    return `${label}: ${stats.registrationCount} registration${stats.registrationCount === 1 ? "" : "s"}, ${stats.uniquePeopleCount} estimated unique ${stats.uniquePeopleCount === 1 ? "person" : "people"}, ${stats.possibleDuplicateCount} possible duplicate${stats.possibleDuplicateCount === 1 ? "" : "s"}.`;
+  }
+
   function tryoutSubmissionFilterOptions(key) {
     const values = Array.from(new Set(tryoutSubmissions.map((row) => String(row[key] || "").trim()).filter(Boolean))).sort();
     return values;
@@ -7136,6 +7149,12 @@ Uni Wien Emperors`;
     const statusOptions = Array.from(new Set([...tryoutSubmissionStatusOptions(), ...tryoutSubmissionFilterOptions("status")]));
     const duplicateInfo = tryoutDuplicateRegistrationInfo();
     const duplicateCounts = duplicateInfo.countsByRow;
+    const uniWienStudentRows = tryoutSubmissions.filter((row) => row.uniWienStudent === "yes");
+    const acceptedOrStartingRows = tryoutSubmissions.filter((row) => row.uniWienStudent === "accepted_or_starting");
+    const shownStats = tryoutRegistrationSummaryStats(filteredRows, duplicateInfo);
+    const totalStats = tryoutRegistrationSummaryStats(tryoutSubmissions, duplicateInfo);
+    const uniWienStudentStats = tryoutRegistrationSummaryStats(uniWienStudentRows, duplicateInfo);
+    const acceptedOrStartingStats = tryoutRegistrationSummaryStats(acceptedOrStartingRows, duplicateInfo);
 
     return `
       <section class="tryout-admin-panel setup-card">
@@ -7179,9 +7198,10 @@ Uni Wien Emperors`;
         </div>
 
         <div class="tryout-admin-summary">
-          <span>${filteredRows.length} shown</span>
-          <span>${tryoutSubmissions.length} total</span>
-          <span>${tryoutSubmissions.filter((row) => row.uniWienStudent === "yes").length} Uni Wien students</span>
+          <span class="tryout-summary-with-tooltip" title="${escapeAttribute(tryoutRegistrationSummaryTitle("Shown", shownStats))}">${filteredRows.length} shown</span>
+          <span class="tryout-summary-with-tooltip" title="${escapeAttribute(tryoutRegistrationSummaryTitle("Total", totalStats))}">${tryoutSubmissions.length} total</span>
+          <span class="tryout-summary-with-tooltip" title="${escapeAttribute(tryoutRegistrationSummaryTitle("Uni Wien students", uniWienStudentStats))}">${uniWienStudentRows.length} Uni Wien students</span>
+          <span class="tryout-summary-with-tooltip" title="${escapeAttribute(tryoutRegistrationSummaryTitle("Accepted / starting soon", acceptedOrStartingStats))}">${acceptedOrStartingRows.length} accepted / starting soon</span>
           <span class="tryout-duplicate-summary">${duplicateInfo.possibleDuplicateCount} possible duplicate${duplicateInfo.possibleDuplicateCount === 1 ? "" : "s"}</span>
           <span>${selectedTryoutSubmissionIds.length} selected</span>
         </div>
