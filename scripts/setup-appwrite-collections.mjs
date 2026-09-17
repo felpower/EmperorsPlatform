@@ -209,6 +209,7 @@ const schema = {
     attributes: [
       { type: "string", key: "sponsor_id", size: 255, required: true },
       { type: "string", key: "direction", size: 16, required: true },
+      { type: "string", key: "subject", size: 512, required: false },
       { type: "string", key: "body", size: 15000, required: true },
       { type: "datetime", key: "message_date", required: false }
     ]

@@ -9652,12 +9652,21 @@ Uni Wien Emperors`;
       if (sponsorsResponse.error) throw sponsorsResponse.error;
       if (messagesResponse.error) throw messagesResponse.error;
       sponsorOutreachMessages = (messagesResponse.data || []).map((row) => ({ ...row, id: row.id || row.$id }));
-      sponsorOutreachRows = (sponsorsResponse.data || []).map((row) => ({
-        ...row,
-        id: row.id || row.$id,
-        outbound_message: sponsorOutreachMessages.find((message) => String(message.sponsor_id) === String(row.id || row.$id) && message.direction === "outbound")?.body || "",
-        inbound_message: sponsorOutreachMessages.find((message) => String(message.sponsor_id) === String(row.id || row.$id) && message.direction === "inbound")?.body || ""
-      }));
+      sponsorOutreachRows = (sponsorsResponse.data || []).map((row) => {
+        const id = row.id || row.$id;
+        const communications = sponsorOutreachMessages
+          .filter((message) => String(message.sponsor_id) === String(id))
+          .sort((left, right) => String(left.message_date || "").localeCompare(String(right.message_date || "")));
+        const primaryOutboundId = `${String(id).slice(0, 31)}_out`;
+        const primaryInboundId = `${String(id).slice(0, 31)}_in`;
+        return {
+          ...row,
+          id,
+          communications,
+          outbound_message: communications.find((message) => String(message.id) === primaryOutboundId)?.body || communications.find((message) => message.direction === "outbound")?.body || "",
+          inbound_message: communications.find((message) => String(message.id) === primaryInboundId)?.body || communications.find((message) => message.direction === "inbound")?.body || ""
+        };
+      });
       sponsorOutreachLoaded = true;
     } catch (error) {
       sponsorOutreachStatus = error?.message || "Sponsor contacts could not be loaded.";
@@ -9689,6 +9698,27 @@ Uni Wien Emperors`;
     const text = sponsorText(value);
     if (!text) return "";
     return `<section class="sponsor-message"><h5>${escapeHtml(title)}</h5><pre>${escapeHtml(text)}</pre></section>`;
+  }
+
+  function renderSponsorCommunicationTimeline(row) {
+    const messages = Array.isArray(row?.communications) ? row.communications : [];
+    if (!messages.length) {
+      return `${renderSponsorMessage("Sent message", row?.outbound_message)}${renderSponsorMessage("Received message", row?.inbound_message)}`;
+    }
+    return `
+      <section class="sponsor-timeline">
+        <h5>Communication (${messages.length})</h5>
+        ${messages.map((message) => `
+          <article class="sponsor-timeline-item sponsor-timeline-${escapeAttribute(message.direction || "inbound")}">
+            <div class="sponsor-timeline-head">
+              <span>${message.direction === "outbound" ? "Sent" : "Received"}</span>
+              <strong>${escapeHtml(message.subject || "Email")}</strong>
+              <time>${escapeHtml(sponsorDateLabel(message.message_date))}</time>
+            </div>
+            <pre>${escapeHtml(message.body || "")}</pre>
+          </article>
+        `).join("")}
+      </section>`;
   }
 
   function renderSponsorOutreachDialog() {
@@ -9789,8 +9819,7 @@ Uni Wien Emperors`;
               ${row.offer_summary ? `<p><strong>Offer:</strong> ${escapeHtml(row.offer_summary)}</p>` : ""}
               ${row.offer_value ? `<p><strong>Value:</strong> ${escapeHtml(row.offer_value)}</p>` : ""}
               ${row.discount_code ? `<p><strong>Discount code:</strong> ${escapeHtml(row.discount_code)}</p>` : ""}
-              ${renderSponsorMessage("Sent message", row.outbound_message)}
-              ${renderSponsorMessage("Received message", row.inbound_message)}
+              ${renderSponsorCommunicationTimeline(row)}
               ${row.notes ? `<p><strong>Internal notes:</strong> ${escapeHtml(row.notes)}</p>` : ""}
             </details></td></tr>
           `).join("") || `<tr><td colspan="7" class="empty-cell">No sponsor contacts match these filters.</td></tr>`}</tbody>
