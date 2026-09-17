@@ -289,7 +289,7 @@
       ]
     }
   ];
-  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "sponsors", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "sponsors", "members", "fees", "user", "passes", "organization", "sponsor-outreach", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
   const memberPositionOptions = [
@@ -343,6 +343,25 @@
   let selectedUserMemberId = "";
   let profileRouteMode = "member";
   let organizationDialogEditingId = "";
+  const sponsorOutreachStatuses = [
+    { value: "research", label: "Research" },
+    { value: "planned", label: "Planned" },
+    { value: "contacted", label: "Contacted" },
+    { value: "follow_up", label: "Follow-up" },
+    { value: "negotiating", label: "In discussion" },
+    { value: "confirmed", label: "Confirmed" },
+    { value: "declined", label: "Declined" },
+    { value: "no_response", label: "No response" },
+    { value: "postponed", label: "Follow up later" }
+  ];
+  let sponsorOutreachRows = [];
+  let sponsorOutreachMessages = [];
+  let sponsorOutreachLoading = false;
+  let sponsorOutreachLoaded = false;
+  let sponsorOutreachStatus = "";
+  let sponsorOutreachSearch = "";
+  let sponsorOutreachStatusFilter = "all";
+  let sponsorOutreachEditingId = "";
   let authInviteRole = "admin";
   let teardownMembersStickyHeader = null;
   let teardownFeesStickyHeader = null;
@@ -9549,6 +9568,412 @@ Uni Wien Emperors`;
     return Boolean(authState.user) && String(currentAccessRole || "").trim().toLowerCase() === "admin";
   }
 
+  function canManageSponsorOutreach() {
+    return Boolean(authState.user || isLocalPreviewMode()) && String(currentAccessRole || "").trim().toLowerCase() === "admin";
+  }
+
+  function sponsorStatusLabel(value) {
+    return sponsorOutreachStatuses.find((option) => option.value === String(value || ""))?.label || String(value || "Unknown");
+  }
+
+  function sponsorDateValue(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const date = new Date(text);
+    return Number.isNaN(date.getTime()) ? text.slice(0, 10) : date.toISOString().slice(0, 10);
+  }
+
+  function sponsorDateLabel(value) {
+    const dateValue = sponsorDateValue(value);
+    if (!dateValue) return "—";
+    const date = new Date(`${dateValue}T12:00:00`);
+    return Number.isNaN(date.getTime()) ? dateValue : date.toLocaleDateString("de-AT");
+  }
+
+  function sponsorDateToIso(value) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const date = new Date(`${text}T12:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  function sponsorText(value) {
+    return String(value || "").trim();
+  }
+
+  function sponsorDomain(value) {
+    const text = sponsorText(value).toLowerCase();
+    if (!text) return "";
+    const emailMatch = text.match(/@([^\s,;>]+)/);
+    if (emailMatch) return emailMatch[1].replace(/^www\./, "").replace(/[)>.,]+$/, "");
+    try {
+      const url = new URL(/^https?:\/\//.test(text) ? text : `https://${text}`);
+      return url.hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function sponsorDuplicateFor(draft, excludedId = "") {
+    const company = normalizeLookupToken(draft?.company_name || draft?.companyName || "");
+    const email = sponsorText(draft?.contact_email || draft?.contactEmail || "").toLowerCase();
+    const domains = new Set([
+      sponsorDomain(draft?.contact_email || draft?.contactEmail),
+      sponsorDomain(draft?.website)
+    ].filter(Boolean));
+    const sharedMailDomains = new Set(["gmail.com", "outlook.com", "hotmail.com", "gmx.at", "gmx.net", "yahoo.com", "icloud.com"]);
+    return sponsorOutreachRows.find((row) => {
+      if (String(row.id) === String(excludedId || "")) return false;
+      if (company && normalizeLookupToken(row.company_name) === company) return true;
+      if (email && sponsorText(row.contact_email).toLowerCase() === email) return true;
+      const rowDomains = [sponsorDomain(row.contact_email), sponsorDomain(row.website)].filter(Boolean);
+      return rowDomains.some((domain) => domains.has(domain) && !sharedMailDomains.has(domain));
+    }) || null;
+  }
+
+  function generateSponsorOutreachId() {
+    return `sponsor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function loadSponsorOutreachData() {
+    if (!backendClient || !authState.user || String(currentAccessRole || "").toLowerCase() !== "admin") {
+      sponsorOutreachRows = [];
+      sponsorOutreachLoaded = true;
+      sponsorOutreachLoading = false;
+      return;
+    }
+    sponsorOutreachLoading = true;
+    sponsorOutreachStatus = "";
+    try {
+      const [sponsorsResponse, messagesResponse] = await Promise.all([
+        backendClient.from("sponsor_outreach").select("*"),
+        backendClient.from("sponsor_communications").select("*")
+      ]);
+      if (sponsorsResponse.error) throw sponsorsResponse.error;
+      if (messagesResponse.error) throw messagesResponse.error;
+      sponsorOutreachMessages = (messagesResponse.data || []).map((row) => ({ ...row, id: row.id || row.$id }));
+      sponsorOutreachRows = (sponsorsResponse.data || []).map((row) => ({
+        ...row,
+        id: row.id || row.$id,
+        outbound_message: sponsorOutreachMessages.find((message) => String(message.sponsor_id) === String(row.id || row.$id) && message.direction === "outbound")?.body || "",
+        inbound_message: sponsorOutreachMessages.find((message) => String(message.sponsor_id) === String(row.id || row.$id) && message.direction === "inbound")?.body || ""
+      }));
+      sponsorOutreachLoaded = true;
+    } catch (error) {
+      sponsorOutreachStatus = error?.message || "Sponsor contacts could not be loaded.";
+      sponsorOutreachLoaded = true;
+    } finally {
+      sponsorOutreachLoading = false;
+    }
+  }
+
+  function sponsorOutreachVisibleRows() {
+    const query = normalizeLookupToken(sponsorOutreachSearch);
+    return sponsorOutreachRows
+      .filter((row) => sponsorOutreachStatusFilter === "all" || String(row.status) === sponsorOutreachStatusFilter)
+      .filter((row) => {
+        if (!query) return true;
+        return normalizeLookupToken([
+          row.company_name, row.contact_name, row.contact_email, row.website, row.campaign,
+          row.offer_summary, row.response_summary, row.next_action, row.notes
+        ].join(" ")).includes(query);
+      })
+      .sort((left, right) => {
+        const leftDate = String(left.next_follow_up_at || left.contacted_at || left.updated_at || "");
+        const rightDate = String(right.next_follow_up_at || right.contacted_at || right.updated_at || "");
+        return rightDate.localeCompare(leftDate) || String(left.company_name || "").localeCompare(String(right.company_name || ""));
+      });
+  }
+
+  function renderSponsorMessage(title, value) {
+    const text = sponsorText(value);
+    if (!text) return "";
+    return `<section class="sponsor-message"><h5>${escapeHtml(title)}</h5><pre>${escapeHtml(text)}</pre></section>`;
+  }
+
+  function renderSponsorOutreachDialog() {
+    const statusOptions = sponsorOutreachStatuses.map((option) => `<option value="${escapeAttribute(option.value)}">${escapeHtml(option.label)}</option>`).join("");
+    return `
+      <dialog id="sponsor-outreach-dialog" class="dialog sponsor-dialog">
+        <form id="sponsor-outreach-form" class="dialog-form" novalidate>
+          <div class="dialog-title-row">
+            <div><p class="eyebrow">Sponsor CRM</p><h3 id="sponsor-outreach-dialog-title">Add sponsor</h3></div>
+            <button type="button" class="ghost-button" id="sponsor-outreach-dialog-close">Close</button>
+          </div>
+          <input type="hidden" name="sponsorId" />
+          <div class="form-grid sponsor-form-grid">
+            <label>Company *<input name="companyName" required maxlength="255" /></label>
+            <label>Status *<select name="status" required>${statusOptions}</select></label>
+            <label>Contact person<input name="contactName" maxlength="255" /></label>
+            <label>Role / position<input name="contactRole" maxlength="255" /></label>
+            <label>Email<input name="contactEmail" type="email" maxlength="320" /></label>
+            <label>Other emails<input name="alternateEmails" maxlength="1024" placeholder="Separate with commas" /></label>
+            <label>Phone<input name="phone" maxlength="128" /></label>
+            <label>Website<input name="website" maxlength="512" /></label>
+            <label class="wide-field">Address<input name="address" maxlength="1024" /></label>
+            <label>Language<input name="language" maxlength="64" /></label>
+            <label>Campaign<input name="campaign" maxlength="255" placeholder="e.g. Rookie Tryout 27 October 2026" /></label>
+            <label>Contacted by<input name="contactedBy" maxlength="255" /></label>
+            <label>Contacted on<input name="contactedAt" type="date" /></label>
+            <label>Response received<input name="respondedAt" type="date" /></label>
+            <label>Next follow-up<input name="nextFollowUpAt" type="date" /></label>
+            <label class="wide-field">Next action<textarea name="nextAction" rows="2" maxlength="2048"></textarea></label>
+            <label class="wide-field">Request summary<textarea name="requestSummary" rows="3" maxlength="4096"></textarea></label>
+            <label class="wide-field">Sent message<textarea name="outboundMessage" rows="8" maxlength="16000"></textarea></label>
+            <label class="wide-field">Response summary<textarea name="responseSummary" rows="3" maxlength="2048"></textarea></label>
+            <label class="wide-field">Received message<textarea name="inboundMessage" rows="8" maxlength="16000"></textarea></label>
+            <label class="wide-field">Offer / sponsorship commitment<textarea name="offerSummary" rows="3" maxlength="2048"></textarea></label>
+            <label>Estimated value<input name="offerValue" maxlength="255" placeholder="e.g. €500 or product package" /></label>
+            <label>Discount code<input name="discountCode" maxlength="255" /></label>
+            <label class="wide-field">Internal notes<textarea name="notes" rows="3" maxlength="512"></textarea></label>
+          </div>
+          <p id="sponsor-duplicate-warning" class="sponsor-duplicate-warning" hidden></p>
+          <div class="dialog-actions">
+            <button type="button" class="ghost-button" id="sponsor-outreach-dialog-cancel">Cancel</button>
+            <button type="submit" class="primary-button" id="sponsor-outreach-submit">Save sponsor</button>
+          </div>
+        </form>
+      </dialog>`;
+  }
+
+  function renderSponsorOutreach() {
+    if (!canManageSponsorOutreach()) {
+      return `<article class="setup-card"><p class="eyebrow">Admin only</p><h3>Sponsor outreach</h3><p>This page is available only to administrators.</p></article>`;
+    }
+    const rows = sponsorOutreachVisibleRows();
+    const today = new Date().toISOString().slice(0, 10);
+    const confirmedCount = sponsorOutreachRows.filter((row) => row.status === "confirmed").length;
+    const openCount = sponsorOutreachRows.filter((row) => ["planned", "contacted", "follow_up", "negotiating", "no_response"].includes(row.status)).length;
+    const dueCount = sponsorOutreachRows.filter((row) => {
+      const followUp = sponsorDateValue(row.next_follow_up_at);
+      return followUp && followUp <= today && !["confirmed", "declined"].includes(row.status);
+    }).length;
+    const statusOptions = sponsorOutreachStatuses.map((option) => `<option value="${escapeAttribute(option.value)}" ${sponsorOutreachStatusFilter === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("");
+    return `
+      <div class="section-head">
+        <div><p class="eyebrow">Admin · Partnerships</p><h3>Sponsor outreach</h3><p class="meta">Track every company, conversation, follow-up and offer in one place.</p></div>
+        <div class="button-row"><button type="button" class="ghost-button" id="sponsor-outreach-refresh">Refresh</button><button type="button" class="primary-button" id="sponsor-outreach-add">Add sponsor</button></div>
+      </div>
+      <div class="sponsor-summary-grid">
+        <article class="card sponsor-summary-card"><span>Companies</span><strong>${sponsorOutreachRows.length}</strong></article>
+        <article class="card sponsor-summary-card"><span>Open conversations</span><strong>${openCount}</strong></article>
+        <article class="card sponsor-summary-card"><span>Confirmed</span><strong>${confirmedCount}</strong></article>
+        <article class="card sponsor-summary-card ${dueCount ? "is-due" : ""}"><span>Follow-ups due</span><strong>${dueCount}</strong></article>
+      </div>
+      <article class="card sponsor-filter-card">
+        <label>Search<input id="sponsor-outreach-search" type="search" value="${escapeAttribute(sponsorOutreachSearch)}" placeholder="Company, contact, offer…" /></label>
+        <label>Status<select id="sponsor-outreach-status-filter"><option value="all">All statuses</option>${statusOptions}</select></label>
+      </article>
+      ${sponsorOutreachStatus ? `<p class="auth-status">${escapeHtml(sponsorOutreachStatus)}</p>` : ""}
+      ${sponsorOutreachLoading || !sponsorOutreachLoaded ? `<article class="card sponsor-loading"><span class="loading-spinner-lg" aria-hidden="true"></span><strong>Loading sponsor contacts…</strong></article>` : `
+        <div class="table-wrap sponsor-table-wrap"><table class="data-table sponsor-table">
+          <thead><tr><th>Company</th><th>Contact</th><th>Status</th><th>Last contact</th><th>Follow-up</th><th>Offer</th><th>Actions</th></tr></thead>
+          <tbody>${rows.map((row) => `
+            <tr>
+              <td><strong>${escapeHtml(row.company_name || "Unnamed company")}</strong><span class="cell-subtext">${escapeHtml(row.campaign || row.website || "")}</span></td>
+              <td>${escapeHtml(row.contact_name || "—")}<span class="cell-subtext">${escapeHtml(row.contact_email || row.contact_role || "")}</span></td>
+              <td><span class="sponsor-status sponsor-status-${escapeAttribute(row.status)}">${escapeHtml(sponsorStatusLabel(row.status))}</span></td>
+              <td>${escapeHtml(sponsorDateLabel(row.contacted_at))}</td>
+              <td>${escapeHtml(sponsorDateLabel(row.next_follow_up_at))}<span class="cell-subtext">${escapeHtml(row.next_action || "")}</span></td>
+              <td>${escapeHtml(row.offer_summary || "—")}</td>
+              <td><div class="action-row"><button type="button" class="ghost-button small-button sponsor-edit-button" data-sponsor-id="${escapeAttribute(row.id)}" data-no-toast="true">Edit</button><button type="button" class="ghost-button small-button danger-button sponsor-delete-button" data-sponsor-id="${escapeAttribute(row.id)}" data-no-toast="true">Delete</button></div></td>
+            </tr>
+            <tr class="sponsor-detail-row"><td colspan="7"><details class="sponsor-details"><summary>Conversation and details</summary>
+              <div class="sponsor-detail-grid">
+                <div><span>Contact</span><strong>${escapeHtml(row.contact_name || "—")}</strong><p>${escapeHtml(row.contact_role || "")}</p><p>${escapeHtml(row.contact_email || "")}</p><p>${escapeHtml(row.alternate_emails || "")}</p><p>${escapeHtml(row.phone || "")}</p></div>
+                <div><span>Company</span><strong>${escapeHtml(row.website || "—")}</strong><p>${escapeHtml(row.address || "")}</p><p>${escapeHtml(row.language || "")}</p></div>
+                <div><span>Workflow</span><strong>${escapeHtml(sponsorStatusLabel(row.status))}</strong><p>Contacted by ${escapeHtml(row.contacted_by || "—")}</p><p>Response: ${escapeHtml(sponsorDateLabel(row.responded_at))}</p><p>Next: ${escapeHtml(row.next_action || "—")}</p></div>
+              </div>
+              ${row.request_summary ? `<p><strong>Request:</strong> ${escapeHtml(row.request_summary)}</p>` : ""}
+              ${row.response_summary ? `<p><strong>Response:</strong> ${escapeHtml(row.response_summary)}</p>` : ""}
+              ${row.offer_summary ? `<p><strong>Offer:</strong> ${escapeHtml(row.offer_summary)}</p>` : ""}
+              ${row.offer_value ? `<p><strong>Value:</strong> ${escapeHtml(row.offer_value)}</p>` : ""}
+              ${row.discount_code ? `<p><strong>Discount code:</strong> ${escapeHtml(row.discount_code)}</p>` : ""}
+              ${renderSponsorMessage("Sent message", row.outbound_message)}
+              ${renderSponsorMessage("Received message", row.inbound_message)}
+              ${row.notes ? `<p><strong>Internal notes:</strong> ${escapeHtml(row.notes)}</p>` : ""}
+            </details></td></tr>
+          `).join("") || `<tr><td colspan="7" class="empty-cell">No sponsor contacts match these filters.</td></tr>`}</tbody>
+        </table></div>`}
+      ${renderSponsorOutreachDialog()}`;
+  }
+
+  function sponsorFormDraft(form) {
+    return {
+      id: sponsorText(form.elements.sponsorId.value) || generateSponsorOutreachId(),
+      company_name: sponsorText(form.elements.companyName.value),
+      status: sponsorText(form.elements.status.value),
+      contact_name: sponsorText(form.elements.contactName.value),
+      contact_role: sponsorText(form.elements.contactRole.value),
+      contact_email: sponsorText(form.elements.contactEmail.value),
+      alternate_emails: sponsorText(form.elements.alternateEmails.value),
+      phone: sponsorText(form.elements.phone.value),
+      website: sponsorText(form.elements.website.value),
+      address: sponsorText(form.elements.address.value),
+      language: sponsorText(form.elements.language.value),
+      campaign: sponsorText(form.elements.campaign.value),
+      contacted_by: sponsorText(form.elements.contactedBy.value),
+      contacted_at: sponsorDateToIso(form.elements.contactedAt.value),
+      responded_at: sponsorDateToIso(form.elements.respondedAt.value),
+      next_follow_up_at: sponsorDateToIso(form.elements.nextFollowUpAt.value),
+      next_action: sponsorText(form.elements.nextAction.value),
+      request_summary: sponsorText(form.elements.requestSummary.value),
+      outbound_message: sponsorText(form.elements.outboundMessage.value),
+      response_summary: sponsorText(form.elements.responseSummary.value),
+      inbound_message: sponsorText(form.elements.inboundMessage.value),
+      offer_summary: sponsorText(form.elements.offerSummary.value),
+      offer_value: sponsorText(form.elements.offerValue.value),
+      discount_code: sponsorText(form.elements.discountCode.value),
+      notes: sponsorText(form.elements.notes.value)
+    };
+  }
+
+  function openSponsorOutreachDialog(row) {
+    const dialog = document.getElementById("sponsor-outreach-dialog");
+    const form = document.getElementById("sponsor-outreach-form");
+    if (!dialog || !form) return;
+    sponsorOutreachEditingId = String(row?.id || "");
+    form.reset();
+    const values = {
+      sponsorId: sponsorOutreachEditingId,
+      companyName: row?.company_name,
+      status: row?.status || "planned",
+      contactName: row?.contact_name,
+      contactRole: row?.contact_role,
+      contactEmail: row?.contact_email,
+      alternateEmails: row?.alternate_emails,
+      phone: row?.phone,
+      website: row?.website,
+      address: row?.address,
+      language: row?.language,
+      campaign: row?.campaign,
+      contactedBy: row?.contacted_by,
+      contactedAt: sponsorDateValue(row?.contacted_at),
+      respondedAt: sponsorDateValue(row?.responded_at),
+      nextFollowUpAt: sponsorDateValue(row?.next_follow_up_at),
+      nextAction: row?.next_action,
+      requestSummary: row?.request_summary,
+      outboundMessage: row?.outbound_message,
+      responseSummary: row?.response_summary,
+      inboundMessage: row?.inbound_message,
+      offerSummary: row?.offer_summary,
+      offerValue: row?.offer_value,
+      discountCode: row?.discount_code,
+      notes: row?.notes
+    };
+    Object.entries(values).forEach(([name, value]) => {
+      if (form.elements[name]) form.elements[name].value = value || "";
+    });
+    document.getElementById("sponsor-outreach-dialog-title").textContent = row ? `Edit ${row.company_name}` : "Add sponsor";
+    document.getElementById("sponsor-outreach-submit").textContent = row ? "Save changes" : "Save sponsor";
+    dialog.showModal();
+  }
+
+  async function saveSponsorOutreach(draft) {
+    if (!canManageSponsorOutreach()) throw new Error("Only admins can save sponsor contacts.");
+    if (!draft.company_name) throw new Error("Company is required.");
+    if (!sponsorOutreachStatuses.some((option) => option.value === draft.status)) throw new Error("Select a valid status.");
+    const duplicate = sponsorDuplicateFor(draft, draft.id);
+    if (duplicate) throw new Error(`Possible duplicate: ${duplicate.company_name} already uses this company name, email or domain.`);
+    const existing = sponsorOutreachRows.find((row) => String(row.id) === String(draft.id));
+    const now = new Date().toISOString();
+    const { outbound_message: outboundMessage, inbound_message: inboundMessage, ...sponsorFields } = draft;
+    const payload = { ...sponsorFields, created_at: existing?.created_at || now, updated_at: now };
+    const response = await backendClient.from("sponsor_outreach").upsert(payload, { onConflict: "id" });
+    if (response.error) throw response.error;
+    for (const [direction, body] of [["outbound", outboundMessage], ["inbound", inboundMessage]]) {
+      const messageId = `${String(draft.id).slice(0, 31)}_${direction === "outbound" ? "out" : "in"}`;
+      const existingMessage = sponsorOutreachMessages.find((message) => String(message.id) === messageId);
+      if (sponsorText(body)) {
+        const messageResponse = await backendClient.from("sponsor_communications").upsert({
+          id: messageId,
+          sponsor_id: draft.id,
+          direction,
+          body: sponsorText(body),
+          message_date: direction === "outbound" ? draft.contacted_at : draft.responded_at
+        }, { onConflict: "id" });
+        if (messageResponse.error) throw messageResponse.error;
+      } else if (existingMessage) {
+        const messageResponse = await backendClient.from("sponsor_communications").delete().eq("id", messageId);
+        if (messageResponse.error) throw messageResponse.error;
+      }
+    }
+    await loadSponsorOutreachData();
+  }
+
+  function bindSponsorOutreachActions() {
+    const addButton = document.getElementById("sponsor-outreach-add");
+    if (addButton) addButton.onclick = () => openSponsorOutreachDialog(null);
+    const refreshButton = document.getElementById("sponsor-outreach-refresh");
+    if (refreshButton) refreshButton.onclick = async function () {
+      sponsorOutreachLoading = true;
+      mount();
+      await loadSponsorOutreachData();
+      mount();
+    };
+    const searchInput = document.getElementById("sponsor-outreach-search");
+    if (searchInput) searchInput.oninput = function () {
+      sponsorOutreachSearch = searchInput.value;
+      const cursor = searchInput.selectionStart;
+      mount();
+      const next = document.getElementById("sponsor-outreach-search");
+      if (next) { next.focus(); next.setSelectionRange(cursor, cursor); }
+    };
+    const filter = document.getElementById("sponsor-outreach-status-filter");
+    if (filter) filter.onchange = function () { sponsorOutreachStatusFilter = filter.value; mount(); };
+    document.querySelectorAll(".sponsor-edit-button").forEach((button) => {
+      button.onclick = () => openSponsorOutreachDialog(sponsorOutreachRows.find((row) => String(row.id) === String(button.dataset.sponsorId)));
+    });
+    document.querySelectorAll(".sponsor-delete-button").forEach((button) => {
+      button.onclick = async function () {
+        const row = sponsorOutreachRows.find((item) => String(item.id) === String(button.dataset.sponsorId));
+        if (!row || !window.confirm(`Delete ${row.company_name} and its conversation history?`)) return;
+        button.disabled = true;
+        const messageResponse = await backendClient.from("sponsor_communications").delete().eq("sponsor_id", row.id);
+        if (messageResponse.error) { showToast(messageResponse.error.message || "Conversation delete failed.", "error"); button.disabled = false; return; }
+        const response = await backendClient.from("sponsor_outreach").delete().eq("id", row.id);
+        if (response.error) { showToast(response.error.message || "Delete failed.", "error"); button.disabled = false; return; }
+        sponsorOutreachRows = sponsorOutreachRows.filter((item) => String(item.id) !== String(row.id));
+        showToast(`${row.company_name} deleted.`, "success");
+        mount();
+      };
+    });
+    const dialog = document.getElementById("sponsor-outreach-dialog");
+    const form = document.getElementById("sponsor-outreach-form");
+    const closeDialog = () => { if (dialog?.open) dialog.close(); };
+    [document.getElementById("sponsor-outreach-dialog-close"), document.getElementById("sponsor-outreach-dialog-cancel")].forEach((button) => {
+      if (button) button.onclick = closeDialog;
+    });
+    if (dialog) dialog.onclick = (event) => { if (event.target === dialog) closeDialog(); };
+    if (form) {
+      const updateDuplicateWarning = () => {
+        const warning = document.getElementById("sponsor-duplicate-warning");
+        const draft = sponsorFormDraft(form);
+        const duplicate = sponsorDuplicateFor(draft, sponsorOutreachEditingId);
+        if (!warning) return;
+        warning.hidden = !duplicate;
+        warning.textContent = duplicate ? `Possible duplicate: ${duplicate.company_name} already has the same company name, email or domain.` : "";
+      };
+      [form.elements.companyName, form.elements.contactEmail, form.elements.website].forEach((input) => input?.addEventListener("input", updateDuplicateWarning));
+      form.onsubmit = async function (event) {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const submit = document.getElementById("sponsor-outreach-submit");
+        if (submit) { submit.disabled = true; submit.textContent = "Saving…"; }
+        try {
+          const draft = sponsorFormDraft(form);
+          await saveSponsorOutreach(draft);
+          closeDialog();
+          showToast(`${draft.company_name} saved.`, "success");
+          mount();
+        } catch (error) {
+          showToast(error?.message || "Sponsor could not be saved.", "error");
+          if (submit) { submit.disabled = false; submit.textContent = sponsorOutreachEditingId ? "Save changes" : "Save sponsor"; }
+        }
+      };
+    }
+  }
+
   function renderOrganization() {
     if (!(authState.user || isLocalPreviewMode())) {
       return `
@@ -9728,7 +10153,7 @@ Uni Wien Emperors`;
 
   function viewsAllowedForRole(role) {
     const normalizedRole = String(role || "").trim().toLowerCase();
-    if (normalizedRole === "admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+    if (normalizedRole === "admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "passes", "organization", "sponsor-outreach", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
     if (normalizedRole === "finance_admin") return ["dashboard", "roster", "tryout", "members", "fees", "user", "organization", "equipment", "events", "invites", "recovery"];
     if (normalizedRole === "coach") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
     if (normalizedRole === "tech_admin") return ["dashboard", "roster", "tryout", "members", "user", "passes", "organization", "equipment", "events", "invites", "recovery"];
@@ -13070,6 +13495,7 @@ Uni Wien Emperors`;
       setViewHtml("user", renderUserPage());
       setViewHtml("passes", renderPasses());
       setViewHtml("organization", renderOrganization());
+      setViewHtml("sponsor-outreach", renderSponsorOutreach());
       setViewHtml("equipment", renderEquipment());
       setViewHtml("pass-sync", renderPassSyncReview());
       setViewHtml("events", renderGamesBoard());
@@ -13081,6 +13507,7 @@ Uni Wien Emperors`;
       bindContactActions();
       bindUserPageActions();
       bindOrganizationActions();
+      bindSponsorOutreachActions();
       bindEquipmentActions();
       bindGamesActions();
       bindRosterActions();
@@ -13170,6 +13597,7 @@ Uni Wien Emperors`;
         .then(() => promoteInvitedMemberOnFirstSignIn())
         .then(() => loadBootstrapDataWithCache())
         .then(() => loadEquipmentDataWithCache())
+        .then(() => loadSponsorOutreachData())
         .then(() => mount())
         .catch((error) => {
           authState.status = error.message;
@@ -13182,6 +13610,7 @@ Uni Wien Emperors`;
   try {
     await loadBootstrapDataWithCache();
     await loadEquipmentDataWithCache();
+    await loadSponsorOutreachData();
   } catch (error) {
     authState.status = error?.message || "Startup failed while loading remote data.";
   }

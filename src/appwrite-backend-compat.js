@@ -170,6 +170,8 @@
       tryout_registrations: String(config.tryoutRegistrationsTableId || "tryout_registrations"),
       tryout_settings: String(config.tryoutSettingsTableId || "tryout_settings"),
       organization: String(config.organizationTableId || "organization"),
+      sponsor_outreach: String(config.sponsorOutreachTableId || "sponsor_outreach"),
+      sponsor_communications: String(config.sponsorCommunicationsTableId || "sponsor_communications"),
       equipment_inventory: String(config.equipmentTableId || "equipment_inventory"),
       diagnostics_logs: String(config.diagnosticsTableId || "diagnostics_logs"),
       hall_of_fame: String(config.hallOfFameTableId || "hall_of_fame")

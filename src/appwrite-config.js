@@ -28,6 +28,8 @@ window.ClubHubAppwriteConfig = {
   tryoutRegistrationsTableId: "tryout_registrations",
   tryoutSettingsTableId: "tryout_settings",
   organizationTableId: "organization",
+  sponsorOutreachTableId: "sponsor_outreach",
+  sponsorCommunicationsTableId: "sponsor_communications",
   equipmentTableId: "equipment_inventory",
   diagnosticsTableId: "diagnostics_logs",
   hallOfFameTableId: "hall_of_fame"

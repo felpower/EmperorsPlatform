@@ -28,6 +28,18 @@ const publicReadCollectionPermissions = [
   'delete("users")'
 ];
 
+const sponsorAdminUserIds = String(process.env.APPWRITE_ADMIN_USER_IDS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+const sponsorAdminPermissions = sponsorAdminUserIds.flatMap((userId) => [
+  `read("user:${userId}")`,
+  `create("user:${userId}")`,
+  `update("user:${userId}")`,
+  `delete("user:${userId}")`
+]);
+
 const schema = {
   members: {
     name: "members",
@@ -159,6 +171,48 @@ const schema = {
       { type: "string", key: "aufgaben", size: 4096, required: false }
     ]
   },
+  sponsor_outreach: {
+    name: "sponsor_outreach",
+    permissions: sponsorAdminPermissions,
+    syncPermissions: true,
+    attributes: [
+      { type: "string", key: "company_name", size: 255, required: true },
+      { type: "string", key: "status", size: 32, required: true },
+      { type: "string", key: "contact_name", size: 255, required: false },
+      { type: "string", key: "contact_role", size: 255, required: false },
+      { type: "string", key: "contact_email", size: 320, required: false },
+      { type: "string", key: "alternate_emails", size: 1024, required: false },
+      { type: "string", key: "phone", size: 128, required: false },
+      { type: "string", key: "website", size: 512, required: false },
+      { type: "string", key: "address", size: 1024, required: false },
+      { type: "string", key: "language", size: 64, required: false },
+      { type: "string", key: "campaign", size: 255, required: false },
+      { type: "string", key: "contacted_by", size: 255, required: false },
+      { type: "datetime", key: "contacted_at", required: false },
+      { type: "datetime", key: "responded_at", required: false },
+      { type: "datetime", key: "next_follow_up_at", required: false },
+      { type: "string", key: "next_action", size: 2048, required: false },
+      { type: "string", key: "request_summary", size: 4096, required: false },
+      { type: "string", key: "response_summary", size: 2048, required: false },
+      { type: "string", key: "offer_summary", size: 2048, required: false },
+      { type: "string", key: "offer_value", size: 255, required: false },
+      { type: "string", key: "discount_code", size: 255, required: false },
+      { type: "string", key: "notes", size: 512, required: false },
+      { type: "datetime", key: "created_at", required: false },
+      { type: "datetime", key: "updated_at", required: false }
+    ]
+  },
+  sponsor_communications: {
+    name: "sponsor_communications",
+    permissions: sponsorAdminPermissions,
+    syncPermissions: true,
+    attributes: [
+      { type: "string", key: "sponsor_id", size: 255, required: true },
+      { type: "string", key: "direction", size: 16, required: true },
+      { type: "string", key: "body", size: 15000, required: true },
+      { type: "datetime", key: "message_date", required: false }
+    ]
+  },
   hall_of_fame: {
     name: "hall_of_fame",
     permissions: publicReadCollectionPermissions,
@@ -234,6 +288,22 @@ async function ensureCollection(collectionId, definition) {
   const existing = (list.collections || []).find((collection) => collection.$id === collectionId);
 
   if (existing) {
+    if (definition.syncPermissions) {
+      const desired = [...(definition.permissions || [])].sort();
+      const current = [...(existing.$permissions || [])].sort();
+      if (JSON.stringify(desired) !== JSON.stringify(current)) {
+        await request(`/databases/${DATABASE_ID}/collections/${collectionId}`, {
+          method: "PUT",
+          body: {
+            name: definition.name,
+            permissions: desired,
+            documentSecurity: false,
+            enabled: true
+          }
+        });
+        console.log(`Updated permissions: ${collectionId}`);
+      }
+    }
     console.log(`Collection exists: ${collectionId}`);
     return existing;
   }
@@ -304,6 +374,28 @@ async function ensureAttribute(collectionId, attribute) {
 }
 
 async function main() {
+  if (!sponsorAdminUserIds.length) {
+    try {
+      const query = encodeURIComponent(JSON.stringify({ method: "limit", values: [5000] }));
+      const roles = await request(`/databases/${DATABASE_ID}/collections/member_roles/documents?queries[]=${query}`);
+      const discoveredAdminIds = [...new Set((roles.documents || [])
+        .filter((row) => String(row.role_code || "").trim().toLowerCase() === "admin")
+        .map((row) => String(row.profile_id || "").trim())
+        .filter(Boolean))];
+      sponsorAdminPermissions.splice(0, sponsorAdminPermissions.length, ...discoveredAdminIds.flatMap((userId) => [
+        `read("user:${userId}")`,
+        `create("user:${userId}")`,
+        `update("user:${userId}")`,
+        `delete("user:${userId}")`
+      ]));
+      console.log(`Discovered ${discoveredAdminIds.length} sponsor CRM admin user(s) from member_roles.`);
+    } catch (error) {
+      console.warn(`Could not discover sponsor CRM admins: ${error.message || error}`);
+    }
+  }
+  if (!sponsorAdminPermissions.length) {
+    console.warn("Sponsor CRM collections will have no client permissions until admin user IDs are configured.");
+  }
   for (const [collectionId, definition] of Object.entries(schema)) {
     await ensureCollection(collectionId, definition);
     for (const attribute of definition.attributes) {

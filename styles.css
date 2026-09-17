@@ -3366,3 +3366,223 @@ code {
     transform: rotate(360deg);
   }
 }
+
+.sponsor-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sponsor-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.sponsor-summary-card span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.sponsor-summary-card strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.8rem;
+}
+
+.sponsor-summary-card.is-due {
+  border-color: rgba(207, 75, 54, 0.45);
+  background: rgba(207, 75, 54, 0.06);
+}
+
+.sponsor-filter-card {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px);
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+}
+
+.sponsor-filter-card label,
+.sponsor-form-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.sponsor-filter-card input,
+.sponsor-filter-card select,
+.sponsor-form-grid input,
+.sponsor-form-grid select,
+.sponsor-form-grid textarea {
+  width: 100%;
+}
+
+.sponsor-loading {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.sponsor-table td {
+  vertical-align: top;
+}
+
+.cell-subtext {
+  display: block;
+  max-width: 300px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.sponsor-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(84, 184, 229, 0.12);
+  color: #166d94;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sponsor-status-confirmed {
+  background: rgba(38, 153, 92, 0.13);
+  color: #167344;
+}
+
+.sponsor-status-declined,
+.sponsor-status-no_response {
+  background: rgba(207, 75, 54, 0.12);
+  color: var(--danger);
+}
+
+.sponsor-status-postponed,
+.sponsor-status-follow_up {
+  background: rgba(227, 151, 41, 0.15);
+  color: #8a570a;
+}
+
+.sponsor-detail-row td {
+  padding-top: 0;
+  background: rgba(22, 109, 148, 0.025);
+}
+
+.sponsor-details summary {
+  cursor: pointer;
+  color: #166d94;
+  font-weight: 700;
+}
+
+.sponsor-details[open] summary {
+  margin-bottom: 14px;
+}
+
+.sponsor-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sponsor-detail-grid > div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.sponsor-detail-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sponsor-detail-grid p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.sponsor-message {
+  margin-top: 14px;
+}
+
+.sponsor-message h5 {
+  margin: 0 0 8px;
+}
+
+.sponsor-message pre {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.025);
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sponsor-dialog {
+  width: min(980px, calc(100vw - 32px));
+  max-width: 980px;
+}
+
+.sponsor-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sponsor-form-grid .wide-field {
+  grid-column: 1 / -1;
+}
+
+.sponsor-duplicate-warning {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(207, 75, 54, 0.3);
+  border-radius: 10px;
+  background: rgba(207, 75, 54, 0.08);
+  color: var(--danger);
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .sponsor-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sponsor-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .sponsor-summary-grid,
+  .sponsor-filter-card,
+  .sponsor-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sponsor-form-grid .wide-field {
+    grid-column: auto;
+  }
+}

@@ -154,6 +154,8 @@ Available scripts:
 - `node scripts/import-roster-pictures.mjs --extract-only`
 - `node scripts/import-roster-pictures.mjs --apply`
 
+The setup script derives sponsor CRM access from `member_roles` entries with role `admin`. For a fresh database without role rows, set `APPWRITE_ADMIN_USER_IDS` to comma-separated Appwrite user IDs. The `sponsor_outreach` and `sponsor_communications` collections remain inaccessible when no admin IDs are available.
+
 Roster picture import expects:
 
 - `APPWRITE_API_KEY` with database and storage write permissions
