@@ -80,8 +80,12 @@ module.exports = async ({ req, res, log }) => {
 
   try {
     // 1) Find existing user by email.
-    const search = encodeURIComponent(email);
-    const list = await request(`/users?search=${search}&limit=100`);
+    const emailQuery = encodeURIComponent(JSON.stringify({
+      method: "equal",
+      attribute: "email",
+      values: [email]
+    }));
+    const list = await request(`/users?queries%5B%5D=${emailQuery}`);
     if (!list.response.ok) {
       return fail(appwriteErrorMessage(list, "Could not search users."), { stage: "search_users" });
     }
