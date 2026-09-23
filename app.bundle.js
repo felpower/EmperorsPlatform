@@ -237,7 +237,17 @@
     { key: "technik", label: "Technik" }
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
-  const MEMBERSHIP_STATUSES = ["active", "pending", "inactive", "exited"];
+  // "coach" = coach/staff without club membership (coaches who also play stay "active").
+  const MEMBERSHIP_STATUSES = ["active", "pending", "inactive", "exited", "coach"];
+  const MEMBERSHIP_STATUS_LABELS = { coach: "Coach (no membership)" };
+  // Membership status dates: [camelCase member field, Appwrite column, status it belongs to]
+  const MEMBERSHIP_DATE_FIELDS = [
+    ["membershipActiveSince", "membership_active_since", "active"],
+    ["membershipPendingSince", "membership_pending_since", "pending"],
+    ["membershipInactiveFrom", "membership_inactive_from", "inactive"],
+    ["membershipInactiveUntil", "membership_inactive_until", "inactive"],
+    ["membershipExitedOn", "membership_exited_on", "exited"]
+  ];
   const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"];
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"];
@@ -2256,6 +2266,11 @@ Uni Wien Emperors`;
       rookie: Boolean(member.rookie),
       inClubee: Boolean(member.inClubee),
       membershipStatus: member.membershipStatus || (member.active ? "active" : "inactive"),
+      membershipActiveSince: member.membershipActiveSince || "",
+      membershipPendingSince: member.membershipPendingSince || "",
+      membershipInactiveFrom: member.membershipInactiveFrom || "",
+      membershipInactiveUntil: member.membershipInactiveUntil || "",
+      membershipExitedOn: member.membershipExitedOn || "",
       deletedAt: member.deletedAt || null,
       profileId: member.profileId || null,
       inviteSentAt: member.inviteSentAt || null,
@@ -3052,7 +3067,29 @@ Uni Wien Emperors`;
     if (normalized === "paid_rookie_fee") return "paid rookie fee";
     if (normalized === "paid_with_fee") return "paid with fee";
     if (normalized === "not_applicable") return "not in team";
+    if (normalized === "coach") return "coach";
     return normalized.replaceAll("_", " ");
+  }
+
+  function membershipDateSummary(member) {
+    if (!member) return "";
+    const status = String(member.membershipStatus || "").trim().toLowerCase();
+    const fmt = (value) => (value ? formatDate(value) : "");
+    if (status === "active" && member.membershipActiveSince) return `since ${fmt(member.membershipActiveSince)}`;
+    if (status === "pending" && member.membershipPendingSince) return `since ${fmt(member.membershipPendingSince)}`;
+    if (status === "exited" && member.membershipExitedOn) return `on ${fmt(member.membershipExitedOn)}`;
+    if (status === "inactive" && (member.membershipInactiveFrom || member.membershipInactiveUntil)) {
+      return `${fmt(member.membershipInactiveFrom) || "?"} – ${fmt(member.membershipInactiveUntil) || "?"}`;
+    }
+    return "";
+  }
+
+  function syncMembershipDateFields(form) {
+    if (!form) return;
+    const status = String(form.elements.membershipStatus?.value || "").trim().toLowerCase();
+    form.querySelectorAll("[data-membership-date]").forEach((element) => {
+      element.hidden = element.dataset.membershipDate !== status;
+    });
   }
 
   function statusPill(value, label) {
@@ -4210,6 +4247,11 @@ Uni Wien Emperors`;
         rookie: false,
         inClubee: Boolean(row.profile_id),
         membershipStatus: row.membership_status || "pending",
+        membershipActiveSince: normalizeToIsoDate(row.membership_active_since || ""),
+        membershipPendingSince: normalizeToIsoDate(row.membership_pending_since || ""),
+        membershipInactiveFrom: normalizeToIsoDate(row.membership_inactive_from || ""),
+        membershipInactiveUntil: normalizeToIsoDate(row.membership_inactive_until || ""),
+        membershipExitedOn: normalizeToIsoDate(row.membership_exited_on || ""),
         deletedAt: row.deleted_at || null,
         profileId: row.profile_id || null,
         inviteSentAt: row.invite_sent_at || null,
@@ -4727,6 +4769,11 @@ Uni Wien Emperors`;
         notes: String(memberPayload.notes || "").trim(),
         deleted_at: null
       };
+      MEMBERSHIP_DATE_FIELDS.forEach(([field, column]) => {
+        if (Object.prototype.hasOwnProperty.call(memberPayload, field)) {
+          patch[column] = normalizeToIsoDate(memberPayload[field] || "") || null;
+        }
+      });
       if (Object.prototype.hasOwnProperty.call(memberPayload, "iban")) {
         patch.iban = String(memberPayload.iban || "").trim() || null;
       }
@@ -4990,7 +5037,8 @@ Uni Wien Emperors`;
   function eligibleFeeMembers() {
     return state.members.filter((member) => {
       if (member.deletedAt) return false;
-      if (String(member.membershipStatus || "").trim().toLowerCase() === "exited") return false;
+      const membershipStatus = String(member.membershipStatus || "").trim().toLowerCase();
+      if (membershipStatus === "exited" || membershipStatus === "coach") return false;
       return (member.roles || []).includes("player");
     });
   }
@@ -5704,6 +5752,7 @@ Uni Wien Emperors`;
             <div>
               <p class="muted">Membership Status</p>
               <p style="font-size: 1.25rem; font-weight: 600;">${userMember.membershipStatus}</p>
+              ${membershipDateSummary(userMember) ? `<p class="meta">${escapeHtml(membershipDateSummary(userMember))}</p>` : ""}
             </div>
           </div>
           <div>
@@ -5808,7 +5857,9 @@ Uni Wien Emperors`;
 
   function isRosterMember(member) {
     if (!member || member.deletedAt) return false;
-    if (String(member.membershipStatus || "").trim().toLowerCase() !== "active") return false;
+    const membershipStatus = String(member.membershipStatus || "").trim().toLowerCase();
+    if (membershipStatus === "coach") return isRosterCoach(member) || isRosterStaff(member);
+    if (membershipStatus !== "active") return false;
     return isRosterAthlete(member) || isRosterCoach(member) || isRosterStaff(member);
   }
 
@@ -7901,6 +7952,7 @@ Uni Wien Emperors`;
                     ${adminActionsEnabled && !member.deletedAt
                       ? `<select class="member-inline-input member-inline-membership" data-member-id="${member.id}">${MEMBERSHIP_STATUSES.map((status) => `<option value="${status}" ${draftMembership === status ? "selected" : ""}>${status}</option>`).join("")}</select>`
                       : (member.deletedAt ? statusPill("deleted", "deleted") : statusPill(member.membershipStatus))}
+                    ${!member.deletedAt && membershipDateSummary(member) ? `<div class="meta">${escapeHtml(membershipDateSummary(member))}</div>` : ""}
                   </td>
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
@@ -10483,6 +10535,10 @@ Uni Wien Emperors`;
     form.elements.sideOfBall.value = member?.sideOfBall || "";
     form.elements.loanJersey.checked = Boolean(member?.loanJersey);
     form.elements.membershipStatus.value = member?.membershipStatus || "active";
+    MEMBERSHIP_DATE_FIELDS.forEach(([field]) => {
+      if (form.elements[field]) form.elements[field].value = normalizeToIsoDate(member?.[field] || "") || "";
+    });
+    syncMembershipDateFields(form);
     form.elements.passStatus.value = displayPassStatus(member?.passStatus || "valid");
     form.elements.passExpiry.value = normalizeToIsoDate(member?.passExpiry || "") || (!member ? defaultPassExpiryDate() : "");
     form.elements.notes.value = member?.notes || "";
@@ -10498,8 +10554,9 @@ Uni Wien Emperors`;
     const dialog = document.getElementById("member-dialog");
     const form = document.getElementById("member-form");
     const submitButton = document.getElementById("member-submit-button");
-    const closeButton = document.querySelector(".ghost-icon");
-    const cancelButton = document.querySelector(".dialog-actions .ghost-button");
+    // Scope to the member dialog - a document-wide querySelector picked up buttons of other dialogs.
+    const closeButton = dialog ? dialog.querySelector(".dialog-header .ghost-icon") : null;
+    const cancelButton = dialog ? dialog.querySelector(".dialog-actions .ghost-button") : null;
     const rolesSelectAll = document.getElementById("roles-select-all");
     const rolesClearAll = document.getElementById("roles-clear-all");
     const positionsSelectAll = document.getElementById("positions-select-all");
@@ -10510,7 +10567,8 @@ Uni Wien Emperors`;
     if (form && !form.dataset.enumsRendered) {
       const membershipSelect = form.elements.membershipStatus;
       if (membershipSelect) {
-        membershipSelect.innerHTML = MEMBERSHIP_STATUSES.map((status) => `<option value="${status}">${status.charAt(0).toUpperCase()}${status.slice(1)}</option>`).join("");
+        membershipSelect.addEventListener("change", () => syncMembershipDateFields(form));
+        membershipSelect.innerHTML = MEMBERSHIP_STATUSES.map((status) => `<option value="${status}">${MEMBERSHIP_STATUS_LABELS[status] || `${status.charAt(0).toUpperCase()}${status.slice(1)}`}</option>`).join("");
       }
       const rolesContainer = form.querySelector('input[name="roles"]')?.closest(".status-filter-options");
       if (rolesContainer) {
@@ -10882,6 +10940,7 @@ Uni Wien Emperors`;
           sideOfBall: String(formData.get("sideOfBall") || "").trim(),
           loanJersey: formData.get("loanJersey") === "yes",
           membershipStatus: String(formData.get("membershipStatus") || "active"),
+          ...Object.fromEntries(MEMBERSHIP_DATE_FIELDS.map(([field]) => [field, String(formData.get(field) || "").trim()])),
           passStatus: String(formData.get("passStatus") || "missing").trim(),
           passExpiry: String(formData.get("passExpiry") || "").trim(),
           notes: String(formData.get("notes") || "").trim()

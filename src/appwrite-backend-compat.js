@@ -344,6 +344,11 @@
     if (hasOwn(input, "roster_image")) sanitized.rosterImage = input.roster_image ? String(input.roster_image).trim() : null;
     if (hasOwn(input, "membership_status")) sanitized.membership_status = input.membership_status ? String(input.membership_status).trim() : "pending";
     if (hasOwn(input, "notes")) sanitized.notes = input.notes ? String(input.notes).trim() : null;
+    ["membership_active_since", "membership_pending_since", "membership_inactive_from", "membership_inactive_until", "membership_exited_on"].forEach(function (key) {
+      if (!hasOwn(input, key)) return;
+      const raw = String(input[key] || "").trim().slice(0, 10);
+      sanitized[key] = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+    });
     if (hasOwn(input, "profile_id")) sanitized.profile_id = input.profile_id ? String(input.profile_id).trim() : null;
     if (hasOwn(input, "invite_sent_at")) sanitized.invite_sent_at = toOptionalIso(input.invite_sent_at);
     if (hasOwn(input, "deleted_at")) sanitized.deleted_at = toOptionalIso(input.deleted_at);

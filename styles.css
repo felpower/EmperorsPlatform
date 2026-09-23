@@ -2097,6 +2097,11 @@ button {
 }
 
 .status.exit,
+.status.coach {
+  background: rgba(47, 111, 179, 0.14);
+  color: #2f6fb3;
+}
+
 .status.exited {
   background: rgba(80, 89, 97, 0.18);
   color: #4c5a63;
@@ -2375,6 +2380,25 @@ tbody tr:hover {
   border-radius: 20px;
   border: 1px solid var(--line);
   background: #fff;
+}
+
+/* Keep the dialog title row (eyebrow, name, close button) visible while scrolling. */
+.dialog-form > .dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: -24px -24px 0;
+  padding: 18px 24px 14px;
+  background: var(--paper-strong);
+  border-bottom: 1px solid var(--line);
+  /* stay a single row (title left, X right) also on small screens */
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+[data-membership-date][hidden] {
+  display: none !important;
 }
 
 .dialog-header,

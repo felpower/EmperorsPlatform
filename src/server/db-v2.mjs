@@ -1139,7 +1139,7 @@ export async function applyClubeePassSync({ clubeeXlsxPath, memberIds }) {
 export async function ensureFeeCoverage() {
   const members = (await all("select id, membership_status as membershipStatus, roles_json as rolesJson, deleted_at as deletedAt from members"))
     .filter((member) => {
-      if (String(member.membershipStatus || "").trim().toLowerCase() === "exited") return false;
+      if (["exited", "coach"].includes(String(member.membershipStatus || "").trim().toLowerCase())) return false;
       if (member.deletedAt) return false;
       let roles = [];
       try {

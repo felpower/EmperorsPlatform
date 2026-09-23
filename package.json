@@ -10,7 +10,9 @@
     "smoke:appwrite:collections": "node scripts/appwrite-collections-crud-smoke.mjs",
     "smoke:appwrite:parity-members-fees": "node scripts/parity-members-fees-smoke.mjs",
     "import:roster-pictures": "node scripts/import-roster-pictures.mjs",
-    "generate:quarterly-fees": "node scripts/generate-quarter-fees-appwrite.mjs"
+    "generate:quarterly-fees": "node scripts/generate-quarter-fees-appwrite.mjs",
+    "migrate:membership-dates": "node scripts/migrate-membership-dates.mjs",
+    "migrate:coach-membership": "node scripts/migrate-coach-membership.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

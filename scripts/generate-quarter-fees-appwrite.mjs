@@ -81,7 +81,7 @@ async function main() {
   const members = await listAllRows(MEMBERS_COLLECTION_ID);
   const eligibleMembers = members.filter((member) => {
     const status = String(member.membership_status || member.membershipStatus || "").trim().toLowerCase();
-    if (status === "exited") return false;
+    if (status === "exited" || status === "coach") return false;
     if (member.deleted_at || member.deletedAt) return false;
     let roles = [];
     try {

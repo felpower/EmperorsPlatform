@@ -31,7 +31,11 @@ Recommended extra columns for better parity:
 - positions_json (string, optional, store JSON array)
 - roles_json (string, optional, store JSON array)
 - rosterImage (string, optional, Appwrite Storage file id from the RosterPictures bucket)
-- membership_status (string, optional) values: active, pending, inactive
+- membership_status (string, optional) values: active, pending, inactive, exited, coach (coach/staff without membership; coach+player stays active)
+- membership_active_since (string 10, optional, YYYY-MM-DD) - used when status is active
+- membership_pending_since (string 10, optional, YYYY-MM-DD) - used when status is pending
+- membership_inactive_from / membership_inactive_until (string 10, optional, YYYY-MM-DD) - inactive period
+- membership_exited_on (string 10, optional, YYYY-MM-DD) - used when status is exited
 - notes (string, optional)
 - profile_id (string, optional)
 - invite_sent_at (datetime, optional)
