@@ -1,0 +1,11 @@
+{
+  "name": "emperors-admin-function",
+  "private": true,
+  "version": "1.0.0",
+  "description": "EmperorsPlatform admin Appwrite function: invite, pass sync, SEPA export, tryout email, set password",
+  "main": "src/main.js",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}

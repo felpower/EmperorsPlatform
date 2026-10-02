@@ -232,9 +232,12 @@ const schema = {
   }
 };
 
+// Free plan: one bucket for all pictures. The real "media" bucket is created (with the merged
+// settings and permissions of the old buckets) by scripts/migrate-storage-to-single-bucket.mjs;
+// this is only the fallback for a fresh project.
 const buckets = {
-  hall_of_fame: {
-    name: "Hall of Fame Photos",
+  media: {
+    name: "Media",
     permissions: publicReadCollectionPermissions
   }
 };

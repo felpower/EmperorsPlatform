@@ -1,5 +1,7 @@
 # Appwrite Functions Setup
 
+> **Free plan (Oct 2026):** the six functions below are being merged into `emperors-public` and `emperors-admin` (`appwrite/functions/public`, `appwrite/functions/admin`). See `FREE_PLAN_MIGRATION.md`; this page describes the old layout.
+
 This project now uses Appwrite Functions for the server-side tasks that should not run in the browser.
 
 ## Functions In Repo

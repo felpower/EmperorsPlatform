@@ -1,5 +1,7 @@
 # Appwrite Deployment Guide
 
+> **Free plan (Oct 2026):** functions, buckets and deployments change – see `FREE_PLAN_MIGRATION.md`.
+
 This project now targets:
 
 - GitHub Pages for the frontend

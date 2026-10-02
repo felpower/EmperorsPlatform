@@ -3,7 +3,8 @@ const ENDPOINT = process.env.APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io
 const PROJECT_ID = process.env.APPWRITE_PROJECT_ID || "69dd0fdd00336ea1b4b5";
 const DATABASE_ID = process.env.APPWRITE_DATABASE_ID || "69dd11140002e2b4254a";
 const MEMBERS_COLLECTION_ID = process.env.APPWRITE_MEMBERS_COLLECTION_ID || "members";
-const ROSTER_BUCKET_ID = process.env.APPWRITE_ROSTER_BUCKET_ID || "RosterPictures";
+// Since the Free-plan migration all pictures live in the single "media" bucket.
+const ROSTER_BUCKET_ID = process.env.APPWRITE_ROSTER_BUCKET_ID || "media";
 const ROSTER_IMAGE_ATTRIBUTE = process.env.APPWRITE_ROSTER_IMAGE_ATTRIBUTE || "rosterImage";
 const API_KEY = process.env.APPWRITE_API_KEY || "";
 const USER_AGENT = "Mozilla/5.0 (compatible; EmperorsRosterImporter/1.0)";

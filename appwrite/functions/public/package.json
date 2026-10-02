@@ -1,0 +1,8 @@
+{
+  "name": "emperors-public-function",
+  "private": true,
+  "version": "1.0.0",
+  "description": "EmperorsPlatform public Appwrite function: contact, diagnostics, password reset",
+  "main": "src/main.js",
+  "license": "UNLICENSED"
+}

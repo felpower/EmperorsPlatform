@@ -1,0 +1,199 @@
+// Invite / account provisioning (was the CreateAuthAccount function, repo-root index.js).
+const { sendAuthLinkEmail, authEmailMode } = require("../shared/auth-links");
+
+module.exports = async ({ req, res, log }) => {
+  const endpoint = String(process.env.APPWRITE_ENDPOINT || "").trim();
+  const projectId = String(process.env.APPWRITE_PROJECT_ID || "").trim();
+  const apiKey = String(process.env.APPWRITE_API_KEY || "").trim();
+  const databaseId = String(process.env.APPWRITE_DATABASE_ID || "").trim();
+  const membersCollectionId = String(process.env.APPWRITE_MEMBERS_COLLECTION_ID || "members").trim();
+
+  if (!endpoint || !projectId || !apiKey || !databaseId) {
+    return res.json(
+      {
+        error:
+          "Missing APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_API_KEY, or APPWRITE_DATABASE_ID environment variables."
+      },
+      500
+    );
+  }
+
+  const parseBody = () => {
+    try {
+      if (!req || req.body === undefined || req.body === null) return {};
+      if (typeof req.body === "string") {
+        return req.body.trim() ? JSON.parse(req.body) : {};
+      }
+      if (typeof req.body === "object") {
+        return req.body;
+      }
+      return {};
+    } catch {
+      return {};
+    }
+  };
+
+  const body = parseBody();
+  const email = String(body.email || "").trim().toLowerCase();
+  const fullName = String(body.fullName || "").trim() || "ClubHub User";
+  const memberId = String(body.memberId || "").trim();
+  const sendRecovery = body.sendRecovery !== false;
+  const redirectTo = String(body.redirectTo || process.env.PUBLIC_SITE_URL || "").trim();
+
+  if (!email) {
+    return res.json({ error: "email is required" }, 400);
+  }
+
+  const base = endpoint.replace(/\/$/, "");
+  const headers = {
+    "X-Appwrite-Project": projectId,
+    "X-Appwrite-Key": apiKey,
+    "Content-Type": "application/json"
+  };
+
+  const request = async (pathname, { method = "GET", body: requestBody } = {}) => {
+    const response = await fetch(`${base}${pathname}`, {
+      method,
+      headers,
+      body: requestBody ? JSON.stringify(requestBody) : undefined
+    });
+    const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  };
+
+  const appwriteErrorMessage = (result, fallback) => {
+    const message = String(result?.payload?.message || result?.payload?.error || fallback || "Appwrite request failed.").trim();
+    const status = result?.response?.status;
+    const type = String(result?.payload?.type || "").trim();
+    const suffix = [
+      status ? `status ${status}` : "",
+      type
+    ].filter(Boolean).join(", ");
+    return suffix ? `${message} (${suffix})` : message;
+  };
+
+  const fail = (message, extra = {}) => {
+    const details = {
+      error: String(message || "Unknown function error."),
+      ...extra
+    };
+    log(`Invite function failed: ${details.error}`);
+    return res.json(details, 500);
+  };
+
+  try {
+    // 1) Find existing user by email.
+    const emailQuery = encodeURIComponent(JSON.stringify({
+      method: "equal",
+      attribute: "email",
+      values: [email]
+    }));
+    const list = await request(`/users?queries%5B%5D=${emailQuery}`);
+    if (!list.response.ok) {
+      return fail(appwriteErrorMessage(list, "Could not search users."), { stage: "search_users" });
+    }
+
+    const users = Array.isArray(list.payload?.users) ? list.payload.users : [];
+    let user = users.find((entry) => String(entry?.email || "").trim().toLowerCase() === email) || null;
+    let createdUser = false;
+
+    // 2) Create missing user.
+    if (!user) {
+      const userId = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.slice(0, 36);
+      const tempPassword = `InviteTemp!${Math.random().toString(36).slice(2, 8)}A1`;
+      const create = await request("/users", {
+        method: "POST",
+        body: {
+          userId,
+          email,
+          password: tempPassword,
+          name: fullName
+        }
+      });
+
+      if (!create.response.ok) {
+        return fail(appwriteErrorMessage(create, "Could not create user."), { stage: "create_user", email });
+      }
+
+      user = create.payload || null;
+      createdUser = true;
+    }
+
+    const userId = String(user?.$id || user?.id || "").trim();
+    if (!userId) {
+      return fail("Could not resolve Appwrite user ID for invite recovery email.", {
+        stage: "resolve_user_id",
+        createdUser,
+        email
+      });
+    }
+
+    let recoverySent = false;
+    if (sendRecovery) {
+      if (!redirectTo) {
+        return fail("Missing redirectTo (or PUBLIC_SITE_URL) for recovery email.", { stage: "prepare_recovery", email });
+      }
+
+      if (authEmailMode() === "mailgun") {
+        // Own invite email via Mailgun (works on the Free plan, keeps the club template).
+        try {
+          await sendAuthLinkEmail({ userId, email, name: fullName, kind: "invite", redirectTo });
+        } catch (mailError) {
+          return fail(`Could not send invite email: ${mailError instanceof Error ? mailError.message : mailError}`, {
+            stage: "send_invite_mail",
+            userId,
+            createdUser,
+            email
+          });
+        }
+      } else {
+        const recovery = await request("/account/recovery", {
+          method: "POST",
+          body: {
+            email,
+            url: redirectTo
+          }
+        });
+
+        if (!recovery.response.ok) {
+          return fail(appwriteErrorMessage(recovery, "Could not send invite recovery email."), {
+            stage: "send_recovery",
+            userId,
+            createdUser,
+            email
+          });
+        }
+      }
+      recoverySent = true;
+    }
+
+    // 4) Optionally patch member linkage/invite timestamp.
+    let memberPatchWarning = "";
+    if (memberId) {
+      const patch = await request(
+        `/databases/${databaseId}/collections/${membersCollectionId}/documents/${encodeURIComponent(memberId)}`,
+        {
+          method: "PATCH",
+          body: {
+            data: {
+              profile_id: userId || null,
+              ...(recoverySent ? { invite_sent_at: new Date().toISOString() } : {})
+            }
+          }
+        }
+      );
+
+      if (!patch.response.ok) {
+        memberPatchWarning = String(
+          patch.payload?.message || "User ensured, but member row could not be updated."
+        ).trim();
+        log(`Invite function warning (member patch): ${memberPatchWarning}`);
+      }
+    }
+
+    log(`Invite user ensured for ${email} (${createdUser ? "created" : "existing"}), recovery ${recoverySent ? "sent" : "skipped"}.`);
+    return res.json({ ok: true, email, userId, createdUser, recoverySent, memberPatchWarning });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Unknown function error.", { stage: "unexpected" });
+  }
+};

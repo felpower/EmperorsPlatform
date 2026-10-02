@@ -12,7 +12,12 @@
     "import:roster-pictures": "node scripts/import-roster-pictures.mjs",
     "generate:quarterly-fees": "node scripts/generate-quarter-fees-appwrite.mjs",
     "migrate:membership-dates": "node scripts/migrate-membership-dates.mjs",
-    "migrate:coach-membership": "node scripts/migrate-coach-membership.mjs"
+    "migrate:coach-membership": "node scripts/migrate-coach-membership.mjs",
+    "functions:sync-shared": "node scripts/sync-function-shared.mjs",
+    "functions:check-shared": "node scripts/sync-function-shared.mjs --check",
+    "free-plan:setup-functions": "node scripts/setup-free-plan-functions.mjs",
+    "free-plan:migrate-storage": "node scripts/migrate-storage-to-single-bucket.mjs",
+    "free-plan:cleanup-deployments": "node scripts/cleanup-function-deployments.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

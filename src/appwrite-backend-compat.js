@@ -68,6 +68,32 @@
     .setProject(String(config.projectId));
 
   const account = new appwrite.Account(client);
+  const functionsService = typeof appwrite.Functions === "function" ? new appwrite.Functions(client) : null;
+
+  // "mailgun": invite/reset links are mailed by our own functions (Free plan has no custom SMTP/templates).
+  // "appwrite": Appwrite's built-in recovery email (account.createRecovery).
+  function authEmailMode() {
+    return String(config.authEmailMode || "appwrite").trim().toLowerCase() === "mailgun" ? "mailgun" : "appwrite";
+  }
+
+  async function runFunctionTask(functionId, payload) {
+    if (!functionsService) throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
+    const normalizedId = String(functionId || "").trim();
+    if (!normalizedId) throw new Error("Function id is not configured.");
+    const execution = await functionsService.createExecution(normalizedId, JSON.stringify(payload || {}), false);
+    const raw = String(execution?.responseBody || "").trim();
+    let body = null;
+    try {
+      body = raw ? JSON.parse(raw) : null;
+    } catch {
+      body = null;
+    }
+    const status = String(execution?.status || "").toLowerCase();
+    if ((status && status !== "completed") || body?.error || body?.ok === false) {
+      throw new Error(String(body?.error || execution?.errors || raw || "Function call failed."));
+    }
+    return body || {};
+  }
   const tablesService = typeof appwrite.TablesDB === "function" ? new appwrite.TablesDB(client) : null;
   const databasesService = typeof appwrite.Databases === "function" ? new appwrite.Databases(client) : null;
   const Query = appwrite.Query;
@@ -661,6 +687,15 @@
       async resetPasswordForEmail(email, options) {
         try {
           const redirectTo = String(options?.redirectTo || window.location.origin).trim();
+          if (authEmailMode() === "mailgun") {
+            await runFunctionTask(config.publicFunctionId || config.contactFunctionId, {
+              task: "passwordReset",
+              email: String(email || "").trim(),
+              redirectTo: redirectTo,
+              kind: options?.kind === "invite" ? "invite" : "reset"
+            });
+            return { data: {}, error: null };
+          }
           await account.createRecovery(String(email || "").trim(), redirectTo);
           return { data: {}, error: null };
         } catch (error) {
@@ -688,6 +723,49 @@
           }
 
           return { data: {}, error: null };
+        } catch (error) {
+          return { data: null, error: createError(error && error.message) };
+        }
+      },
+
+      // One-time login link from an invite/reset email (mode=token). Signs the user in;
+      // the password itself is then set through the admin function task "setPassword".
+      async signInWithLoginToken(input) {
+        try {
+          const userId = String(input?.userId || "").trim();
+          const secret = String(input?.secret || "").trim();
+          if (!userId || !secret) {
+            return { data: null, error: createError("The link is incomplete. Please request a new one.") };
+          }
+          let current = null;
+          try {
+            current = await account.get();
+          } catch {
+            current = null;
+          }
+          if (current && String(current.$id) !== userId) {
+            await account.deleteSession("current");
+            current = null;
+          }
+          if (!current) {
+            await account.createSession(userId, secret);
+          }
+          const session = await getCurrentSession();
+          notifyAuthListeners("SIGNED_IN", session);
+          return { data: { session: session, user: session?.user || null }, error: null };
+        } catch (error) {
+          return { data: null, error: createError(error && error.message) };
+        }
+      },
+
+      async setPasswordViaFunction(password) {
+        try {
+          await runFunctionTask(config.adminFunctionId || config.inviteFunctionId, { task: "setPassword", password: String(password || "") });
+          const session = await getCurrentSession();
+          if (session?.user?.id) saveUserMetadata(session.user.id, { password_set: true });
+          const nextSession = await getCurrentSession();
+          notifyAuthListeners("USER_UPDATED", nextSession);
+          return { data: { user: nextSession?.user || null }, error: null };
         } catch (error) {
           return { data: null, error: createError(error && error.message) };
         }

@@ -43,5 +43,7 @@ assets/*.csv
 # Editor/system extras
 .vscode/*
 !.vscode/extensions.json
-!.vscode/settings.json
 !.vscode/tasks.json
+
+# reports written by the free-plan migration scripts
+migration-reports/

@@ -802,7 +802,7 @@ Uni Wien Emperors`;
     remoteDiagnosticSyncIds.add(entry.id);
     Promise.resolve().then(async function () {
       try {
-        await executeAppwriteFunction(functionId, { event: buildRemoteDiagnosticPayload(entry) }, { maxPolls: 6, pollDelayMs: 250 });
+        await executeAppwriteFunction(functionId, { task: "log", event: buildRemoteDiagnosticPayload(entry) }, { maxPolls: 6, pollDelayMs: 250 });
         remoteDiagnosticsDisabledReason = "";
         remoteDiagnosticsRetryAfter = 0;
         remoteDiagnosticsStatus = "Remote diagnostics connected.";
@@ -956,6 +956,27 @@ Uni Wien Emperors`;
     return `avatar-${safe}`.slice(0, 36);
   }
 
+  // Per-file permissions for uploads into the shared media bucket
+  // (ClubHubAppwriteConfig.storageFilePermissions, printed by scripts/migrate-storage-to-single-bucket.mjs).
+  function storageFilePermissions(category) {
+    const map = APPWRITE_CONFIG && typeof APPWRITE_CONFIG.storageFilePermissions === "object" ? APPWRITE_CONFIG.storageFilePermissions : null;
+    const userId = String(authState.user?.id || "").trim();
+    const list = map && Array.isArray(map[category])
+      ? map[category]
+        .map((entry) => String(entry || "").trim())
+        .filter((entry) => entry && (userId || !entry.includes("{currentUser}")))
+        .map((entry) => entry.replaceAll("{currentUser}", userId))
+      : [];
+    return list.length ? Array.from(new Set(list)) : null;
+  }
+
+  async function createStorageFile(storage, bucketId, fileId, file, category) {
+    const permissions = storageFilePermissions(category);
+    return permissions
+      ? storage.createFile(bucketId, fileId, file, permissions)
+      : storage.createFile(bucketId, fileId, file);
+  }
+
   function storageAvatarUrlForMember(memberId) {
     const bucketId = String(APPWRITE_CONFIG?.profilePicturesBucketId || "").trim();
     const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
@@ -974,7 +995,7 @@ Uni Wien Emperors`;
     const normalizedReference = String(fileId || "").trim();
     if (!normalizedReference) return "";
     if (/^(https?:|data:)/i.test(normalizedReference)) return normalizedReference;
-    const bucketId = String(APPWRITE_CONFIG?.rosterPicturesBucketId || "RosterPictures").trim();
+    const bucketId = String(APPWRITE_CONFIG?.rosterPicturesBucketId || APPWRITE_CONFIG?.mediaBucketId || "").trim();
     const endpoint = String(APPWRITE_CONFIG?.endpoint || "").trim();
     const projectId = String(APPWRITE_CONFIG?.projectId || "").trim();
     if (!bucketId || !endpoint || !projectId) return "";
@@ -1205,7 +1226,7 @@ Uni Wien Emperors`;
       // Ignore missing file errors; create below will handle fresh uploads.
     }
 
-    await storage.createFile(bucketId, fileId, file);
+    await createStorageFile(storage, bucketId, fileId, file, "avatar");
     bumpProfileAvatarVersion(memberId);
     return storageAvatarUrlForMember(memberId);
   }
@@ -1240,7 +1261,7 @@ Uni Wien Emperors`;
       // Ignore missing file errors; create below will handle fresh uploads.
     }
 
-    await storage.createFile(bucketId, fileId, file);
+    await createStorageFile(storage, bucketId, fileId, file, "equipment");
     bumpEquipmentPhotoVersion(normalizedEquipmentId);
     return {
       photoFileId: fileId,
@@ -1342,7 +1363,7 @@ Uni Wien Emperors`;
       // Ignore missing file errors; create below will handle fresh uploads.
     }
 
-    await storage.createFile(bucketId, fileId, file);
+    await createStorageFile(storage, bucketId, fileId, file, "hallOfFame");
     bumpHallOfFamePhotoVersion(normalizedHofId);
     return {
       photoFileId: fileId,
@@ -1934,7 +1955,10 @@ Uni Wien Emperors`;
     const userId = String(searchParams.get("userId") || hashParams.get("userId") || "").trim();
     const secret = String(searchParams.get("secret") || hashParams.get("secret") || "").trim();
     const email = String(searchParams.get("email") || hashParams.get("email") || "").trim();
-    return { userId, secret, email };
+    // mode=token: one-time login link from our own invite/reset email (see appwrite/functions/shared/auth-links.js)
+    const mode = String(searchParams.get("mode") || hashParams.get("mode") || "").trim().toLowerCase();
+    const kind = String(searchParams.get("kind") || hashParams.get("kind") || "").trim().toLowerCase();
+    return { userId, secret, email, mode, kind };
   }
 
   async function setRecoveryPassword(password) {
@@ -1945,8 +1969,17 @@ Uni Wien Emperors`;
     recoveryState.status = "Setting password...";
     try {
       const recovery = readRecoveryParams();
-      const usingRecoveryToken = Boolean(recovery.userId && recovery.secret);
-      const response = usingRecoveryToken
+      const usingLoginToken = recovery.mode === "token" && Boolean(recovery.userId && recovery.secret);
+      const usingRecoveryToken = !usingLoginToken && Boolean(recovery.userId && recovery.secret);
+      if (usingLoginToken) {
+        const signIn = await backendClient.auth.signInWithLoginToken({ userId: recovery.userId, secret: recovery.secret });
+        if (signIn.error) {
+          throw signIn.error;
+        }
+      }
+      const response = usingLoginToken
+        ? await backendClient.auth.setPasswordViaFunction(String(password || ""))
+        : usingRecoveryToken
         ? await backendClient.auth.updateRecovery({
             userId: recovery.userId,
             secret: recovery.secret,
@@ -1981,7 +2014,9 @@ Uni Wien Emperors`;
     const recovery = readRecoveryParams();
     const hasRecoveryToken = Boolean(recovery.userId && recovery.secret);
     const email = authState.user?.email || recovery.email || "your email";
-    const isFirstTime = hasRecoveryToken || !authState.user?.user_metadata?.password_set;
+    const isFirstTime = recovery.mode === "token"
+      ? recovery.kind !== "reset"
+      : (hasRecoveryToken || !authState.user?.user_metadata?.password_set);
 
     if (!authState.user && !hasRecoveryToken) {
       return `
@@ -2046,7 +2081,7 @@ Uni Wien Emperors`;
 
     const redirectTo = `${window.location.origin}/recovery`;
     const sendRecoveryEmailDirectly = async () => {
-      const recoveryResponse = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+      const recoveryResponse = await backendClient.auth.resetPasswordForEmail(email, { redirectTo, kind: "invite" });
       if (recoveryResponse?.error) {
         throw recoveryResponse.error;
       }
@@ -2082,6 +2117,7 @@ Uni Wien Emperors`;
       const execution = await functionsApi.createExecution(
         functionId,
         JSON.stringify({
+          task: "invite",
           email,
           fullName,
           roles,
@@ -2148,7 +2184,7 @@ Uni Wien Emperors`;
     const alreadySentRecovery = Boolean(functionResult?.ok && functionResult?.recoverySent);
     let response = { data: {}, error: null };
     if (!alreadySentRecovery) {
-      response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo });
+      response = await backendClient.auth.resetPasswordForEmail(email, { redirectTo, kind: "invite" });
     }
     if (response?.error) {
       if (functionFailureMessage) {
@@ -2183,6 +2219,7 @@ Uni Wien Emperors`;
     const execution = await functionsApi.createExecution(
       functionId,
       JSON.stringify({
+        task: "invite",
         email,
         fullName,
         roles,
@@ -5289,6 +5326,7 @@ Uni Wien Emperors`;
     const execution = await functionsApi.createExecution(
       functionId,
       JSON.stringify({
+        task: "passSync",
         action: mode === "apply" ? "apply" : "preview",
         fileName: passSyncUpload?.fileName || "",
         fileBase64: passSyncUpload?.fileBase64 || "",
@@ -5436,6 +5474,7 @@ Uni Wien Emperors`;
     const execution = await functionsApi.createExecution(
       functionId,
       JSON.stringify({
+        task: "sepaExport",
         feePeriod: periodToken,
         members: membersPayload,
         fees: feesPayload
@@ -5517,7 +5556,7 @@ Uni Wien Emperors`;
 
     const execution = await functionsApi.createExecution(
       functionId,
-      JSON.stringify({ subject, bodyTemplate, recipients }),
+      JSON.stringify({ task: "tryoutEmail", subject, bodyTemplate, recipients }),
       false
     );
 
@@ -7733,7 +7772,7 @@ Uni Wien Emperors`;
 
     if (functionId) {
       try {
-        const result = await executeAppwriteFunction(functionId, { contact: payload }, { maxPolls: 10, pollDelayMs: 350 });
+        const result = await executeAppwriteFunction(functionId, { task: "contact", contact: payload }, { maxPolls: 10, pollDelayMs: 350 });
         const body = result.body || {};
         if (body.error || body.ok === false) {
           throw new Error(String(body.error || "Contact email function failed."));

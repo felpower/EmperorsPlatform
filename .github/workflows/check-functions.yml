@@ -1,0 +1,23 @@
+name: Check functions
+
+# Each Appwrite function deploys only its own folder (Git build trigger path filter),
+# so the shared helpers are copied into every function. This fails if a copy is stale.
+on:
+  push:
+    paths: ["appwrite/functions/**", "scripts/sync-function-shared.mjs"]
+  pull_request:
+    paths: ["appwrite/functions/**", "scripts/sync-function-shared.mjs"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Shared files in sync
+        run: node scripts/sync-function-shared.mjs --check
+      - name: Syntax check
+        run: |
+          for file in $(find appwrite/functions/public appwrite/functions/admin -name "*.js"); do node --check "$file"; done
