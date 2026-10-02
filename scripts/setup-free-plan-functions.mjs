@@ -87,7 +87,8 @@ function buildFunctionBody(target, sources, anyVcsSource) {
   const fns = sources.map((source) => source.fn);
   const runtime = fns.map((fn) => fn.runtime).sort((a, b) => runtimeRank(b) - runtimeRank(a))[0] || "node-22";
   // Same repository for every function: fall back to any old function connected to Git.
-  const vcsSource = fns.find((fn) => fn.installationId && fn.providerRepositoryId) || anyVcsSource;
+  const connected = fns.filter((fn) => fn.installationId && fn.providerRepositoryId);
+  const vcsSource = connected.find((fn) => fn.providerBranch === "main") || connected[0] || anyVcsSource;
   const events = [...new Set(fns.flatMap((fn) => fn.events || []))];
   const schedules = [...new Set(fns.map((fn) => fn.schedule).filter(Boolean))];
   const scopes = [...new Set(fns.flatMap((fn) => fn.scopes || []))];
@@ -110,7 +111,7 @@ function buildFunctionBody(target, sources, anyVcsSource) {
     Object.assign(body, {
       installationId: vcsSource.installationId,
       providerRepositoryId: vcsSource.providerRepositoryId,
-      providerBranch: vcsSource.providerBranch || "main",
+      providerBranch: "main",
       providerSilentMode: Boolean(vcsSource.providerSilentMode),
       providerRootDirectory: target.root,
       // Git "build triggers": only deploy when this folder changes.
