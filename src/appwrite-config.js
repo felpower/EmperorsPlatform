@@ -37,7 +37,11 @@ const CLUBHUB_FREE_PLAN_SETUP = {
   teamsBucketId: "media",
   // Permissions for new uploads into "media". Only used when the bucket has file security on.
   // Paste the block printed by: node scripts/migrate-storage-to-single-bucket.mjs --dry-run
-  storageFilePermissions: null,
+  storageFilePermissions: {
+    avatar: ['read("users")', 'update("users")', 'delete("users")'],
+    equipment: ['read("users")', 'update("users")', 'delete("users")'],
+    hallOfFame: ['read("any")', 'update("users")', 'delete("users")']
+  },
   authEmailMode: "mailgun"
 };
 
