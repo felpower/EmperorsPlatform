@@ -192,7 +192,7 @@ async function main() {
         console.log(`  var ${variable.key.padEnd(34)} would copy (from ${variable.from.join(", ")})`);
         continue;
       }
-      await request(`/functions/${encodeURIComponent(target.$id)}/variables`, { method: "POST", body: { key: variable.key, value: variable.value, secret: false } });
+      await request(`/functions/${encodeURIComponent(target.$id)}/variables`, { method: "POST", body: { variableId: "unique()", key: variable.key, value: variable.value, secret: false } });
       console.log(`  var ${variable.key.padEnd(34)} copied (from ${variable.from.join(", ")})`);
     }
   }
