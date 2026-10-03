@@ -400,7 +400,7 @@
 
 wir freuen uns, dich zum Tryout der Uni Wien Emperors einzuladen!
 
-Datum: Dienstag, 1.9.2026
+Datum: {{tryoutDate}}
 Treffpunkt: 20:00 Uhr
 Ort: Trainingsplatz FC Stadlau, Erzherzog-Karl-Straße 108, 1220 Wien
 
@@ -420,7 +420,7 @@ Hi {{firstName}},
 
 We're excited to invite you to the Uni Wien Emperors tryout!
 
-Date: Tuesday, September 1, 2026
+Date: {{tryoutDateEn}}
 Meeting point: 8:00 PM
 Location: Trainingsplatz FC Stadlau, Erzherzog-Karl-Straße 108, 1220 Vienna
 
@@ -7463,9 +7463,41 @@ Uni Wien Emperors`;
     `;
   }
 
+  // The bulk email takes the tryout date from the "Next tryout" setting on the tryout page,
+  // so the date in the email can't drift from the date shown on the website.
+  function tryoutEmailDateParts() {
+    const raw = String((state.tryoutSettings || DEFAULT_TRYOUT_SETTINGS).date || "").slice(0, 10);
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day, 12));
+    if (Number.isNaN(date.getTime())) return null;
+    const weekdayDe = new Intl.DateTimeFormat("de-AT", { weekday: "long", timeZone: "UTC" }).format(date);
+    const en = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return { iso: raw, de: `${weekdayDe}, ${day}.${month}.${year}`, en, isPast: raw < todayIso };
+  }
+
+  function hasTryoutDatePlaceholder(text) {
+    return /\{\{\s*tryoutDate(?:En)?\s*\}\}/.test(String(text || ""));
+  }
+
+  function applyTryoutDatePlaceholders(text) {
+    const parts = tryoutEmailDateParts();
+    const value = String(text || "");
+    if (!parts) return value;
+    return value
+      .replace(/\{\{\s*tryoutDateEn\s*\}\}/g, parts.en)
+      .replace(/\{\{\s*tryoutDate\s*\}\}/g, parts.de);
+  }
+
   function renderTryoutEmailComposer() {
     const selectedRows = tryoutSubmissions.filter((row) => selectedTryoutSubmissionIds.includes(String(row.id)));
     const missingEmailCount = selectedRows.filter((row) => !isEmailAddress(row.email)).length;
+    const dateParts = tryoutEmailDateParts();
+    const usesDatePlaceholder = hasTryoutDatePlaceholder(tryoutEmailSubject) || hasTryoutDatePlaceholder(tryoutEmailBody);
     return `
       <article class="card compact-card" style="margin-top: 14px;">
         <details class="fee-filters-dropdown" id="tryout-email-composer" ${tryoutEmailComposerExpanded ? "open" : ""}>
@@ -7475,6 +7507,9 @@ Uni Wien Emperors`;
           </summary>
           <div style="display: grid; gap: 10px; margin-top: 10px;">
             <p class="muted">${selectedRows.length} selected${missingEmailCount ? ` (${missingEmailCount} missing a valid email and will be skipped)` : ""}. Use {{firstName}}, {{lastName}}, or {{email}} as placeholders.</p>
+            <p class="muted">${dateParts
+              ? `{{tryoutDate}} and {{tryoutDateEn}} are filled in automatically from <strong>Next tryout</strong> above: <strong>${escapeHtml(dateParts.de)}</strong> / <strong>${escapeHtml(dateParts.en)}</strong>.${dateParts.isPast ? ` <strong>This date is in the past - update Next tryout before sending.</strong>` : ""}`
+              : `No Next tryout date is set, so {{tryoutDate}} and {{tryoutDateEn}} cannot be filled in.`}${usesDatePlaceholder ? "" : ` <strong>The message does not use {{tryoutDate}}, so any date in it is not updated automatically.</strong>`}</p>
             <label>Subject
               <input id="tryout-email-subject" value="${escapeAttribute(tryoutEmailSubject)}" />
             </label>
@@ -13489,15 +13524,24 @@ Uni Wien Emperors`;
           showToast("No selected registrant has a valid email address.", "error");
           return;
         }
-        const confirmed = window.confirm(`Send this email to ${recipients.length} registrant(s)?`);
+        const dateParts = tryoutEmailDateParts();
+        const usesDatePlaceholder = hasTryoutDatePlaceholder(tryoutEmailSubject) || hasTryoutDatePlaceholder(tryoutEmailBody);
+        if (usesDatePlaceholder && !dateParts) {
+          showToast("Set the Next tryout date on this page before sending - the email uses {{tryoutDate}}.", "error");
+          return;
+        }
+        const dateLine = usesDatePlaceholder
+          ? `\n\nTryout date in the email: ${dateParts.de} / ${dateParts.en}${dateParts.isPast ? "\nWARNING: this date is in the past." : ""}`
+          : "\n\nNote: the message does not use {{tryoutDate}} - check the date in the text yourself.";
+        const confirmed = window.confirm(`Send this email to ${recipients.length} registrant(s)?${dateLine}`);
         if (!confirmed) return;
 
         showBlockingProgress(`Sending tryout emails…`);
         updateBlockingProgress(0, recipients.length);
         try {
           const result = await sendTryoutEmailsViaFunction({
-            subject: tryoutEmailSubject,
-            bodyTemplate: tryoutEmailBody,
+            subject: applyTryoutDatePlaceholders(tryoutEmailSubject),
+            bodyTemplate: applyTryoutDatePlaceholders(tryoutEmailBody),
             recipients
           });
           tryoutEmailResult = result;
