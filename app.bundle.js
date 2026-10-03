@@ -368,6 +368,9 @@
   let sponsorOutreachMessages = [];
   let sponsorOutreachLoading = false;
   let sponsorOutreachLoaded = false;
+  // Sponsor data is loaded lazily when the sponsor view is opened (not on every page load),
+  // because each returned row counts as a database read on the Appwrite plan.
+  let sponsorOutreachUserId = "";
   let sponsorOutreachStatus = "";
   let sponsorOutreachSearch = "";
   let sponsorOutreachStatusFilter = "all";
@@ -485,22 +488,42 @@ Uni Wien Emperors`;
   let isSyncing = false;
   let hasBootstrapped = false;
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v1";
-  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v1";
+  const PUBLIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes for signed-out visitors (roster rarely changes)
+  // Every row Appwrite returns counts as a database read (Free plan: 500k/month), so the
+  // bootstrap is cached per signed-in account and re-read only when the cache is older than
+  // CACHE_TTL or after this browser wrote something. Keys include the user id so two accounts
+  // on the same browser never see each other's data.
+  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v2";
+  const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v2";
+  function cacheScope() {
+    return String(authState?.user?.id || "public");
+  }
+  function bootstrapCacheKey() {
+    return `${BOOTSTRAP_CACHE_KEY}:${cacheScope()}`;
+  }
+  function equipmentCacheKey() {
+    return `${EQUIPMENT_CACHE_KEY}:${cacheScope()}`;
+  }
+  try {
+    localStorage.removeItem("emperors-bootstrap-cache-v1");
+    localStorage.removeItem("emperors-equipment-cache-v1");
+  } catch {
+    // ignore storage errors
+  }
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
   }
 
-  function getCacheWithTTL(key) {
+  function getCacheWithTTL(key, ttlMs = CACHE_TTL) {
     if (cacheModule && typeof cacheModule.getCacheWithTTL === "function") {
-      return cacheModule.getCacheWithTTL(key, CACHE_TTL);
+      return cacheModule.getCacheWithTTL(key, ttlMs);
     }
     try {
       const cached = localStorage.getItem(key);
       if (!cached) return null;
       const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp > CACHE_TTL) {
+      if (Date.now() - timestamp > ttlMs) {
         localStorage.removeItem(key);
         return null;
       }
@@ -850,7 +873,11 @@ Uni Wien Emperors`;
     remoteDiagnosticsLoading = true;
     remoteDiagnosticsStatus = "Loading remote diagnostics...";
     try {
-      const response = await backendClient.from("diagnostics_logs").select("*");
+      const response = await backendClient
+        .from("diagnostics_logs")
+        .select("*")
+        .order("$createdAt", { ascending: false })
+        .limit(MAX_REMOTE_DIAGNOSTIC_ENTRIES);
       if (response?.error) {
         throw response.error;
       }
@@ -1942,8 +1969,8 @@ Uni Wien Emperors`;
     if (response.error) {
       throw response.error;
     }
-    invalidateCache(BOOTSTRAP_CACHE_KEY);
-    invalidateCache(EQUIPMENT_CACHE_KEY);
+    invalidateCache(bootstrapCacheKey());
+    invalidateCache(equipmentCacheKey());
     syncAuthSession(null);
   }
 
@@ -2742,7 +2769,7 @@ Uni Wien Emperors`;
   function saveEquipmentToStorage(rows) {
     const normalizedRows = sortEquipmentRows(rows);
     localStorage.setItem(EQUIPMENT_STORAGE_KEY, JSON.stringify(normalizedRows));
-    setCacheWithTTL(EQUIPMENT_CACHE_KEY, normalizedRows);
+    setCacheWithTTL(equipmentCacheKey(), normalizedRows);
     state.equipment = normalizedRows;
     saveState();
   }
@@ -4103,9 +4130,24 @@ Uni Wien Emperors`;
   function ensurePublicRosterLoaded(returnView = "roster") {
     if (!backendClient || authState.user || publicRosterLoadPromise || publicRosterLoadAttempted) return;
     publicRosterLoadAttempted = true;
+    // Signed-out visitors (roster, tryout referral list): reuse the cached public roster
+    // for PUBLIC_CACHE_TTL instead of reading the whole members table on every visit.
+    const cachedPublic = getCacheWithTTL(bootstrapCacheKey(), PUBLIC_CACHE_TTL);
+    if (cachedPublic && Array.isArray(cachedPublic.members) && cachedPublic.members.length) {
+      if (!(Array.isArray(state.members) && state.members.length)) {
+        applyBootstrap(cachedPublic);
+        if (returnView !== "tryout") {
+          mount();
+          switchView(returnView);
+        }
+      }
+      if (returnView === "tryout") refreshTryoutReferralOptions();
+      return;
+    }
     publicRosterStatus = publicRosterStatus || "Loading roster...";
     publicRosterLoadPromise = loadPublicRosterBootstrap()
       .then(() => {
+        setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
         publicRosterStatus = publicRosterStatus || "";
         if (returnView === "tryout") {
           refreshTryoutReferralOptions();
@@ -4141,7 +4183,15 @@ Uni Wien Emperors`;
       return;
     }
 
-    await repairCurrentUserMemberLink();
+    // The member-link repair reads the whole members table; once it has succeeded for this
+    // user in this browser session there is nothing left to repair, so skip it afterwards.
+    const repairKey = `emperors-member-link-checked:${String(authState.user.id || "")}`;
+    let repairDone = false;
+    try { repairDone = window.sessionStorage.getItem(repairKey) === "1"; } catch (_) { repairDone = false; }
+    if (!repairDone) {
+      await repairCurrentUserMemberLink();
+      try { window.sessionStorage.setItem(repairKey, "1"); } catch (_) { /* storage unavailable */ }
+    }
 
     const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
     const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
@@ -4398,64 +4448,97 @@ Uni Wien Emperors`;
     }
   }
 
-  async function loadBootstrapDataWithCache() {
-    // Try cache first
-    const cached = getCacheWithTTL(BOOTSTRAP_CACHE_KEY);
-    if (cached) {
-      applyBootstrap(cached);
-      if (!(backendClient && authState.user)) {
-        if (backendClient && getRouteView() === "roster") {
-          try {
-            publicRosterLoadAttempted = true;
-            await loadPublicRosterBootstrap();
-            setCacheWithTTL(BOOTSTRAP_CACHE_KEY, {
-              members: state.members,
-              fees: state.fees,
-              events: state.events,
-              invites: state.invites,
-              equipment: state.equipment,
-              source: bootstrapMeta.source,
-              permissionsModel: bootstrapMeta.permissionsModel
-            });
-          } catch (error) {
-            publicRosterStatus = publicRosterErrorMessage(error);
-            authState.status = publicRosterStatus;
-          }
-        }
-        return;
-      }
-    }
+  let bootstrapWriteBatchDepth = 0;
+  let bootstrapReloadPending = false;
 
-    // Load from source and cache
-    await loadBootstrapData();
-
-    // Cache the loaded state
-    setCacheWithTTL(BOOTSTRAP_CACHE_KEY, {
+  function bootstrapSnapshot() {
+    return {
       members: state.members,
       fees: state.fees,
       events: state.events,
       invites: state.invites,
       equipment: state.equipment,
+      organization: state.organization,
+      hallOfFame: state.hallOfFame,
+      tryoutSettings: state.tryoutSettings,
       source: bootstrapMeta.source,
-      permissionsModel: bootstrapMeta.permissionsModel
-    });
+      permissionsModel: bootstrapMeta.permissionsModel,
+      accessRole: authState.user ? currentAccessRole : ""
+    };
+  }
+
+  // After this browser changed data: reload once and store the fresh snapshot.
+  // Inside withBatchedBootstrapReload() the reload waits until the whole batch is done.
+  async function reloadBootstrapAfterWrite() {
+    invalidateCache(bootstrapCacheKey());
+    if (bootstrapWriteBatchDepth > 0) {
+      bootstrapReloadPending = true;
+      return;
+    }
+    await loadBootstrapData();
+    setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
+  }
+
+  async function withBatchedBootstrapReload(work) {
+    bootstrapWriteBatchDepth += 1;
+    try {
+      return await work();
+    } finally {
+      bootstrapWriteBatchDepth -= 1;
+      if (bootstrapWriteBatchDepth === 0 && bootstrapReloadPending) {
+        bootstrapReloadPending = false;
+        await loadBootstrapData();
+        setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
+      }
+    }
+  }
+
+  async function loadBootstrapDataWithCache() {
+    const signedIn = Boolean(backendClient && authState.user);
+    const cached = getCacheWithTTL(bootstrapCacheKey(), signedIn ? CACHE_TTL : PUBLIC_CACHE_TTL);
+    if (cached) {
+      applyBootstrap(cached);
+      if (signedIn) {
+        if (cached.accessRole) {
+          currentAccessRole = cached.accessRole;
+          saveStoredValue(ACCESS_KEY, currentAccessRole);
+        }
+        // Cache is fresh: no database reads on this page load.
+        return;
+      }
+      const hasPublicRoster = Array.isArray(cached.members) && cached.members.length > 0;
+      if (backendClient && getRouteView() === "roster" && !hasPublicRoster) {
+        try {
+          publicRosterLoadAttempted = true;
+          await loadPublicRosterBootstrap();
+          setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
+        } catch (error) {
+          publicRosterStatus = publicRosterErrorMessage(error);
+          authState.status = publicRosterStatus;
+        }
+      }
+      return;
+    }
+
+    // Load from source and cache. On the first load on a device the role is only known
+    // after the data arrived; if it changed (e.g. player -> admin), load once more so
+    // role-gated tables (fees, passes) are included.
+    const roleBeforeLoad = currentAccessRole;
+    await loadBootstrapData();
+    if (signedIn && currentAccessRole !== roleBeforeLoad) {
+      await loadBootstrapData();
+    }
+    setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
   }
 
   async function loadEquipmentDataWithCache() {
-    // Try cache first
-    const cached = getCacheWithTTL(EQUIPMENT_CACHE_KEY);
+    const cached = getCacheWithTTL(equipmentCacheKey(), CACHE_TTL);
     if (cached) {
       state.equipment = cached;
-      if (!(backendClient && authState.user)) {
-        return;
-      }
+      return;
     }
-
-    // Load from source and cache
     await loadEquipmentData();
-
-    // Cache the loaded equipment
-    setCacheWithTTL(EQUIPMENT_CACHE_KEY, state.equipment);
+    setCacheWithTTL(equipmentCacheKey(), state.equipment);
   }
 
   async function backgroundLoadData() {
@@ -4882,8 +4965,7 @@ Uni Wien Emperors`;
         if (passResponse.error) throw passResponse.error;
       }
 
-      invalidateCache(BOOTSTRAP_CACHE_KEY);
-      await loadBootstrapData();
+      await reloadBootstrapAfterWrite();
       recordActivity("members", memberId ? "Member updated." : "Member created.", {
         action: memberId ? "member_updated" : "member_created",
         memberId: savedMemberId || memberId,
@@ -4910,8 +4992,7 @@ Uni Wien Emperors`;
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", memberId);
     if (response.error) throw response.error;
-    invalidateCache(BOOTSTRAP_CACHE_KEY);
-    await loadBootstrapData();
+    await reloadBootstrapAfterWrite();
     recordActivity("members", "Member deleted.", {
       action: "member_deleted",
       memberId: String(memberId || "").trim(),
@@ -4925,8 +5006,7 @@ Uni Wien Emperors`;
     const member = state.members.find((entry) => String(entry.id) === String(memberId || ""));
     const response = await backendClient.from("members").update({ deleted_at: null }).eq("id", memberId);
     if (response.error) throw response.error;
-    invalidateCache(BOOTSTRAP_CACHE_KEY);
-    await loadBootstrapData();
+    await reloadBootstrapAfterWrite();
     recordActivity("members", "Member restored.", {
       action: "member_restored",
       memberId: String(memberId || "").trim(),
@@ -4966,8 +5046,7 @@ Uni Wien Emperors`;
     const deleteMember = await backendClient.from("members").delete().eq("id", removeId);
     if (deleteMember.error) throw deleteMember.error;
 
-    invalidateCache(BOOTSTRAP_CACHE_KEY);
-    await loadBootstrapData();
+    await reloadBootstrapAfterWrite();
     recordActivity("members", "Members merged.", {
       action: "member_merged",
       keepMemberId: keepId,
@@ -5007,8 +5086,7 @@ Uni Wien Emperors`;
         if (update.error) throw update.error;
       }
 
-      invalidateCache(BOOTSTRAP_CACHE_KEY);
-      await loadBootstrapData();
+      await reloadBootstrapAfterWrite();
       recordActivity("fees", "Fee statuses updated in bulk.", {
         action: "fee_bulk_status_updated",
         feePeriod: String(feePeriod || "").trim(),
@@ -5049,8 +5127,7 @@ Uni Wien Emperors`;
         .eq("id", String(feeId || ""));
       if (response.error) throw response.error;
 
-      invalidateCache(BOOTSTRAP_CACHE_KEY);
-      await loadBootstrapData();
+      await reloadBootstrapAfterWrite();
       const currentRow = state.fees.find((fee) => String(fee.id) === String(feeId || ""));
       recordActivity("fees", "Fee row updated.", {
         action: "fee_updated",
@@ -5152,8 +5229,7 @@ Uni Wien Emperors`;
     const response = await backendClient.from("membership_fees").insert(rows).onProgress(onProgress);
     if (response.error) throw response.error;
 
-    invalidateCache(BOOTSTRAP_CACHE_KEY);
-    await loadBootstrapData();
+    await reloadBootstrapAfterWrite();
     selectedFeePeriod = normalizedPeriod;
     saveStoredValue(FEE_FILTER_KEY, selectedFeePeriod);
     recordActivity("fees", `Generated ${rows.length} fee row(s) for ${formatFeePeriod(normalizedPeriod)}.`, {
@@ -5173,8 +5249,7 @@ Uni Wien Emperors`;
     const response = await backendClient.from("membership_fees").delete().eq("fee_period", normalizedPeriod).onProgress(onProgress);
     if (response.error) throw response.error;
 
-    invalidateCache(BOOTSTRAP_CACHE_KEY);
-    await loadBootstrapData();
+    await reloadBootstrapAfterWrite();
     recordActivity("fees", `Deleted all fee rows for ${formatFeePeriod(normalizedPeriod)}.`, {
       action: "fee_quarter_deleted",
       feePeriod: normalizedPeriod
@@ -5405,8 +5480,7 @@ Uni Wien Emperors`;
   async function applyClubeePassSync(memberIds) {
     const functionPayload = await invokePassSyncFunction({ mode: "apply", memberIds });
     if (functionPayload) {
-      invalidateCache(BOOTSTRAP_CACHE_KEY);
-      await loadBootstrapData();
+      await reloadBootstrapAfterWrite();
       return functionPayload.passSyncApply || null;
     }
 
@@ -5431,8 +5505,7 @@ Uni Wien Emperors`;
     if (Array.isArray(payload?.members) || Array.isArray(payload?.fees)) {
       applyBootstrap(payload);
     } else {
-      invalidateCache(BOOTSTRAP_CACHE_KEY);
-      await loadBootstrapData();
+      await reloadBootstrapAfterWrite();
     }
     return payload.passSyncApply || null;
   }
@@ -9726,6 +9799,16 @@ Uni Wien Emperors`;
     return `sponsor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  function ensureSponsorOutreachLoaded() {
+    if (!canManageSponsorOutreach() || sponsorOutreachLoading) return;
+    const sponsorUserChanged = sponsorOutreachUserId !== String(authState.user?.id || "");
+    if (sponsorOutreachLoaded && !sponsorUserChanged) return;
+    sponsorOutreachLoaded = false;
+    loadSponsorOutreachData().finally(() => {
+      if (getRouteView() === "sponsor-outreach") mount();
+    });
+  }
+
   async function loadSponsorOutreachData() {
     if (!backendClient || !authState.user || String(currentAccessRole || "").toLowerCase() !== "admin") {
       sponsorOutreachRows = [];
@@ -9735,6 +9818,7 @@ Uni Wien Emperors`;
     }
     sponsorOutreachLoading = true;
     sponsorOutreachStatus = "";
+    sponsorOutreachUserId = String(authState.user.id || "");
     try {
       const [sponsorsResponse, messagesResponse] = await Promise.all([
         backendClient.from("sponsor_outreach").select("*"),
@@ -10517,6 +10601,12 @@ Uni Wien Emperors`;
       ensureTryoutSettingsLoaded();
       ensurePublicRosterLoaded("tryout");
     }
+    if (finalView === "sponsor-outreach") {
+      ensureSponsorOutreachLoaded();
+    }
+    if (finalView === "settings") {
+      ensureRemoteDiagnosticsLoaded();
+    }
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
       if (section) section.classList.toggle("active", viewId === finalView);
@@ -10640,9 +10730,11 @@ Uni Wien Emperors`;
         saveAllMemberChangesButton.disabled = true;
         saveAllMemberChangesButton.textContent = "Saving...";
         const results = [];
-        for (const id of ids) {
-          results.push(await saveMemberInlineRow(id));
-        }
+        await withBatchedBootstrapReload(async () => {
+          for (const id of ids) {
+            results.push(await saveMemberInlineRow(id));
+          }
+        });
         const failed = results.filter((entry) => !entry.ok);
         const succeeded = results.filter((entry) => entry.ok);
         if (failed.length) {
@@ -12057,6 +12149,13 @@ Uni Wien Emperors`;
       };
     }
 
+    if (getRouteView() === "settings") {
+      ensureRemoteDiagnosticsLoaded();
+    }
+  }
+
+  // Remote diagnostics are only fetched when the settings view is actually open.
+  function ensureRemoteDiagnosticsLoaded() {
     if (currentAccessRole === "admin" && backendClient && diagnosticsTableId() && !remoteDiagnosticsLoading && !remoteDiagnosticsLoadedAt) {
       void loadRemoteDiagnosticsLog(false);
     }
@@ -13724,7 +13823,6 @@ Uni Wien Emperors`;
         .then(() => promoteInvitedMemberOnFirstSignIn())
         .then(() => loadBootstrapDataWithCache())
         .then(() => loadEquipmentDataWithCache())
-        .then(() => loadSponsorOutreachData())
         .then(() => mount())
         .catch((error) => {
           authState.status = error.message;
@@ -13737,7 +13835,6 @@ Uni Wien Emperors`;
   try {
     await loadBootstrapDataWithCache();
     await loadEquipmentDataWithCache();
-    await loadSponsorOutreachData();
   } catch (error) {
     authState.status = error?.message || "Startup failed while loading remote data.";
   }

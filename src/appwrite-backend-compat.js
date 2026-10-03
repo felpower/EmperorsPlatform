@@ -99,14 +99,16 @@
   const Query = appwrite.Query;
   const ID = appwrite.ID;
 
-  function buildListQueries() {
-    return Query && typeof Query.limit === "function" ? [Query.limit(5000)] : [];
+  function buildListQueries(extraQueries, limit) {
+    const max = Number(limit) > 0 ? Math.min(Math.floor(Number(limit)), 5000) : 5000;
+    const base = Query && typeof Query.limit === "function" ? [Query.limit(max)] : [];
+    return (extraQueries || []).concat(base);
   }
 
   const dbApi = tablesService
     ? {
-        listRows: function (databaseId, tableId) {
-          return tablesService.listRows(databaseId, tableId, buildListQueries());
+        listRows: function (databaseId, tableId, extraQueries, limit) {
+          return tablesService.listRows(databaseId, tableId, buildListQueries(extraQueries, limit));
         },
         createRow: function (databaseId, tableId, rowId, data) {
           return tablesService.createRow(databaseId, tableId, rowId, data);
@@ -120,8 +122,8 @@
       }
     : databasesService
       ? {
-          listRows: function (databaseId, tableId) {
-            return databasesService.listDocuments(databaseId, tableId, buildListQueries());
+          listRows: function (databaseId, tableId, extraQueries, limit) {
+            return databasesService.listDocuments(databaseId, tableId, buildListQueries(extraQueries, limit));
           },
           createRow: function (databaseId, tableId, rowId, data) {
             return databasesService.createDocument(databaseId, tableId, rowId, data);
@@ -274,6 +276,39 @@
     return undefined;
   }
 
+  // Every row Appwrite returns counts as a database read (Free plan: 500k/month).
+  // eq()/in() filters on these columns are therefore sent to Appwrite as queries, so
+  // e.g. updating one member reads 1 row instead of the whole table. The client-side
+  // applyFilters() still runs afterwards, so results stay exactly the same; if Appwrite
+  // rejects a query (unknown column/type) the old full-table read is used as fallback.
+  const SERVER_FILTER_COLUMNS = {
+    "*": { id: "$id" },
+    member_roles: { profile_id: "profile_id" },
+    membership_fees: { member_id: "member_id", fee_period: "fee_period" },
+    player_passes: { member_id: "member_id" },
+    sponsor_communications: { sponsor_id: "sponsor_id" },
+    tryout_settings: { key: "key" }
+  };
+
+  function serverQueriesForFilters(tableName, filters) {
+    if (!Query || typeof Query.equal !== "function") return [];
+    const columns = Object.assign({}, SERVER_FILTER_COLUMNS["*"], SERVER_FILTER_COLUMNS[tableName] || {});
+    const queries = [];
+    (filters || []).forEach(function (filter) {
+      const column = columns[String(filter.field || "")];
+      if (!column) return;
+      const usable = function (value) {
+        return (typeof value === "string" && value.trim() !== "") || (typeof value === "number" && Number.isFinite(value));
+      };
+      if (filter.operator === "eq" && usable(filter.value)) {
+        queries.push(Query.equal(column, [String(filter.value)]));
+      } else if (filter.operator === "in" && Array.isArray(filter.value) && filter.value.length && filter.value.length <= 100 && filter.value.every(usable)) {
+        queries.push(Query.equal(column, filter.value.map(String)));
+      }
+    });
+    return queries;
+  }
+
   function applyFilters(rows, filters) {
     return rows.filter(function (row) {
       return filters.every(function (filter) {
@@ -413,6 +448,22 @@
       this.singleMode = "many";
       this.execution = null;
       this.progressCallback = null;
+      this.orderSpec = null;
+      this.limitCount = 0;
+    }
+
+    // order()/limit() are pushed to Appwrite (Query.orderAsc/orderDesc + Query.limit) so
+    // only the requested rows are read; every returned row counts as a database read.
+    order(field, options) {
+      const ascending = !(options && options.ascending === false);
+      this.orderSpec = { field: String(field || ""), ascending: ascending };
+      return this;
+    }
+
+    limit(count) {
+      const n = Math.floor(Number(count));
+      this.limitCount = n > 0 ? n : 0;
+      return this;
     }
 
     onProgress(callback) {
@@ -496,8 +547,27 @@
     async fetchRows() {
       const tableId = tableIdFor(this.tableName);
       if (!tableId) throw new Error("Missing table id for " + this.tableName + ".");
-      const response = await dbApi.listRows(String(config.databaseId), tableId);
-      const rows = response.rows || response.documents || [];
+      const serverQueries = serverQueriesForFilters(this.tableName, this.filters);
+      const orderSpec = this.orderSpec;
+      const orderColumn = orderSpec ? (orderSpec.field === "id" ? "$id" : orderSpec.field) : "";
+      if (orderColumn && Query && typeof Query.orderAsc === "function") {
+        serverQueries.push(orderSpec.ascending ? Query.orderAsc(orderColumn) : Query.orderDesc(orderColumn));
+      }
+      let response;
+      try {
+        response = await dbApi.listRows(String(config.databaseId), tableId, serverQueries, this.limitCount);
+      } catch (error) {
+        if (!serverQueries.length && !this.limitCount) throw error;
+        response = await dbApi.listRows(String(config.databaseId), tableId);
+      }
+      let rows = response.rows || response.documents || [];
+      if (orderColumn) {
+        const dir = orderSpec.ascending ? 1 : -1;
+        rows = rows.slice().sort(function (a, b) {
+          return String(a[orderColumn] == null ? "" : a[orderColumn]).localeCompare(String(b[orderColumn] == null ? "" : b[orderColumn])) * dir;
+        });
+      }
+      if (this.limitCount) rows = rows.slice(0, this.limitCount);
       const normalized = this.tableName === "members" ? rows.map(normalizeMembersRow) : rows.map(function (row) {
         return Object.assign({}, row, { id: row.$id || row.id });
       });
@@ -613,6 +683,10 @@
           const conflictField = String(this.options?.onConflict || "").trim();
           let target = null;
           if (conflictField) {
+            const conflictValue = rowValue(this.payload || {}, conflictField);
+            if (conflictValue !== undefined && conflictValue !== null && String(conflictValue) !== "") {
+              this.filters.push({ operator: "eq", field: conflictField, value: String(conflictValue) });
+            }
             const rows = await this.fetchRows();
             target = rows.find(function (row) {
               return String(rowValue(row, conflictField) || "") === String(rowValue(this.payload || {}, conflictField) || "");
