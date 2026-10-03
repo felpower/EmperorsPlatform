@@ -3,7 +3,7 @@
 //   true  = new setup: emperors-public + emperors-admin, one "media" bucket, Mailgun invite/reset links
 // Flip it only after the storage migration ran and both new functions are deployed and tested;
 // flipping it back is the rollback (nothing old is deleted until you do that by hand).
-const CLUBHUB_USE_FREE_PLAN_SETUP = false;
+const CLUBHUB_USE_FREE_PLAN_SETUP = true;
 
 const CLUBHUB_LEGACY_APPWRITE_SETUP = {
   inviteFunctionId: "CreateAuthAccount",
