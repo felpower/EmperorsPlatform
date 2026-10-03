@@ -4,8 +4,8 @@
 // and the footer says why the recipient gets this mail.
 
 const C = {
-  page: "#f4f1e8", card: "#ffffff", border: "#e6ddc7", header: "#123127", gold: "#d7ab39",
-  text: "#17211d", muted: "#5c6770", soft: "#73808a", link: "#166d94", footer: "#fcfaf5", rule: "#ece4cf", box: "#f8f5ec"
+  page: "#eef2f4", card: "#ffffff", border: "#dfe5e8", header: "#171d1d", gold: "#f6c316", blue: "#54b8e5",
+  text: "#171d1d", muted: "#5c6770", soft: "#73808a", link: "#1e6fa8", footer: "#f7f9fa", rule: "#e3e8eb", box: "#eef7fc"
 };
 
 const escapeHtml = (value) => String(value ?? "")
@@ -44,7 +44,7 @@ function renderBlock(lines) {
       const [, label, value] = detailMatch(line);
       return `<tr><td style="padding:6px 16px 6px 0; font-size:14px; font-weight:700; color:${C.muted}; white-space:nowrap; vertical-align:top;">${escapeHtml(label)}</td><td style="padding:6px 0; font-size:16px; line-height:1.5; color:${C.text};">${inline(value)}</td></tr>`;
     }).join("");
-    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:4px 0 20px; background:${C.box}; border-left:4px solid ${C.gold}; border-radius:12px;"><tr><td style="padding:14px 18px;"><table role="presentation" cellspacing="0" cellpadding="0">${rows}</table></td></tr></table>`;
+    return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:4px 0 20px; background:${C.box}; border-left:4px solid ${C.blue}; border-radius:12px;"><tr><td style="padding:14px 18px;"><table role="presentation" cellspacing="0" cellpadding="0">${rows}</table></td></tr></table>`;
   }
   return `<p style="${P}">${lines.map(inline).join("<br>")}</p>`;
 }
@@ -79,7 +79,7 @@ function renderTryoutEmail({ subject, text }) {
               <td style="background:${C.header}; padding:0; color:#ffffff;">
                 <div style="height:6px; background:${C.gold};"></div>
                 <div style="padding:28px 32px 30px;">
-                  <p style="margin:0 0 8px; font-size:12px; letter-spacing:1.8px; text-transform:uppercase; color:#d8e4de;">Uni Wien Emperors &middot; Tryout</p>
+                  <p style="margin:0 0 8px; font-size:12px; letter-spacing:1.8px; text-transform:uppercase; color:#54b8e5;">Uni Wien Emperors &middot; Tryout</p>
                   <h1 style="margin:0; font-size:26px; line-height:1.25; color:#ffffff;">${escapeHtml(subject)}</h1>
                 </div>
               </td>
