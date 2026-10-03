@@ -1,4 +1,5 @@
 // Tryout registrant emails via Mailgun (was TryoutEmail).
+const { renderTryoutEmail, plainTextFooter } = require("./tryoutEmailTemplate");
 module.exports = async ({ req, res, log }) => {
   const mailgunApiKey = String(process.env.MAILGUN_API_KEY || "").trim();
   const mailgunDomain = String(process.env.MAILGUN_DOMAIN || "").trim();
@@ -41,18 +42,15 @@ module.exports = async ({ req, res, log }) => {
       .replaceAll("{{email}}", String(recipient.email || "").trim());
   };
 
-  const bodyHtml = (text) => `
-    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#151b1c;white-space:pre-wrap;">${escapeHtml(text)}</div>
-  `;
-
   const sendViaMailgun = async (recipientEmail, subject, text) => {
     const form = new FormData();
     form.set("from", mailgunFromEmail);
     form.set("to", recipientEmail);
     if (replyToEmail) form.set("h:Reply-To", replyToEmail);
+    if (replyToEmail) form.set("h:List-Unsubscribe", `<mailto:${replyToEmail}?subject=Abmelden>`);
     form.set("subject", subject);
-    form.set("text", text);
-    form.set("html", bodyHtml(text));
+    form.set("text", `${text}${plainTextFooter()}`);
+    form.set("html", renderTryoutEmail({ subject, text }));
 
     const response = await fetch(`${mailgunApiBaseUrl}/v3/${encodeURIComponent(mailgunDomain)}/messages`, {
       method: "POST",
