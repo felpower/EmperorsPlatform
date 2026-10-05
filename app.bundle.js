@@ -2307,6 +2307,28 @@ Uni Wien Emperors`;
     return inviteRecipient({ email, fullName, roles });
   }
 
+  // Rookie season: 1 September – 31 August. rookie_season stores the start year of the season
+  // a player joined; they count as rookie only while that season is the current one.
+  function currentSeasonStartYear(date = new Date()) {
+    return date.getMonth() >= 8 ? date.getFullYear() : date.getFullYear() - 1;
+  }
+
+  function seasonLabel(startYear) {
+    return Number.isFinite(startYear) ? `${startYear}/${String((startYear + 1) % 100).padStart(2, "0")}` : "";
+  }
+
+  function parseRookieSeason(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const year = Number(value);
+    return Number.isFinite(year) ? year : null;
+  }
+
+  function memberRookieBadge(member) {
+    if (!member || !member.rookie) return "";
+    const season = member.rookieSeason;
+    return `<span class="rookie-badge" title="Rookie ${escapeHtml(seasonLabel(season))} – until 31.8.${season + 1}">Rookie</span>`;
+  }
+
   function normalizeMember(member, index) {
     const fallbackParts = splitNameParts(member.name || "");
     const firstName = String(member.firstName || fallbackParts.firstName || "").trim();
@@ -2327,7 +2349,10 @@ Uni Wien Emperors`;
       loanJersey: Boolean(member.loanJersey),
       sideOfBall: String(member.sideOfBall || "").trim(),
       active: Boolean(member.active),
-      rookie: Boolean(member.rookie),
+      rookieSeason: parseRookieSeason(member.rookieSeason ?? member.rookie_season),
+      rookie: (member.rookieSeason ?? member.rookie_season) !== undefined
+        ? parseRookieSeason(member.rookieSeason ?? member.rookie_season) === currentSeasonStartYear()
+        : Boolean(member.rookie),
       inClubee: Boolean(member.inClubee),
       membershipStatus: member.membershipStatus || (member.active ? "active" : "inactive"),
       membershipActiveSince: member.membershipActiveSince || "",
@@ -3660,6 +3685,7 @@ Uni Wien Emperors`;
       jerseyNumber: member.jerseyNumber ?? "",
       sideOfBall: sideOfBallLabel(member.sideOfBall),
       loanJersey: member.loanJersey ? "Yes" : "No",
+      rookie: member.rookie ? `Yes (${seasonLabel(member.rookieSeason)})` : "No",
       membershipStatus: member.membershipStatus || "",
       passStatus: member.passStatus || "",
       passExpiry: member.passExpiry || "",
@@ -4331,7 +4357,8 @@ Uni Wien Emperors`;
         loanJersey: Boolean(row.loan_jersey),
         sideOfBall: String(row.side_of_ball || "").trim(),
         active: String(row.membership_status || "") === "active",
-        rookie: false,
+        rookieSeason: parseRookieSeason(row.rookie_season),
+        rookie: parseRookieSeason(row.rookie_season) === currentSeasonStartYear(),
         inClubee: Boolean(row.profile_id),
         membershipStatus: row.membership_status || "pending",
         membershipActiveSince: normalizeToIsoDate(row.membership_active_since || ""),
@@ -4896,6 +4923,14 @@ Uni Wien Emperors`;
       });
       if (Object.prototype.hasOwnProperty.call(memberPayload, "iban")) {
         patch.iban = String(memberPayload.iban || "").trim() || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(memberPayload, "rookie")) {
+        // Only the member dialog sends "rookie"; inline edits leave rookie_season untouched.
+        const season = currentSeasonStartYear();
+        const previousSeason = memberId ? memberById(memberId)?.rookieSeason ?? null : null;
+        patch.rookie_season = memberPayload.rookie
+          ? season
+          : (previousSeason !== null && previousSeason < season ? previousSeason : null);
       }
 
       let savedMemberId = memberId;
@@ -8027,9 +8062,9 @@ Uni Wien Emperors`;
       return `
         <tr class="mi-row mi-${entry.kind}${entry.include || fuzzy ? "" : " mi-excluded"}" data-entry-id="${escapeHtml(entry.id)}">
           <td><input type="checkbox" class="mi-include" ${entry.include ? "checked" : ""} ${entry.kind === "unchanged" ? "disabled" : ""} aria-label="Include" /></td>
-          <td><span class="mi-kind mi-kind-${entry.kind === "update" && !entry.changes.some((c) => !c.optional) ? "unchanged" : entry.kind}">${entry.kind === "update" ? (entry.changes.some((c) => c.field === "restore") ? "Restore" : entry.changes.some((c) => !c.optional) ? "Update" : "Linked") : "OK"}</span></td>
+          <td><span class="mi-kind mi-kind-${entry.kind === "update" && !entry.changes.some((c) => c.accepted) ? "unchanged" : entry.kind}">${entry.kind === "update" ? (entry.changes.some((c) => c.field === "restore") ? "Restore" : entry.changes.some((c) => c.accepted) ? "Update" : "Linked") : "OK"}</span></td>
           <td>
-            <strong>${escapeHtml(`${member.firstName} ${member.lastName}`.trim() || member.name)}</strong>
+            <strong>${escapeHtml(`${member.firstName} ${member.lastName}`.trim() || member.name)}</strong>${memberRookieBadge(member)}
             ${fuzzy ? `<div class="mi-warn">Matched by similar name (${entry.score}%) with sheet: <b>${escapeHtml(`${entry.player.firstName} ${entry.player.lastName}`)}</b> – please check. <button type="button" class="ghost-button small-button mi-unlink">Not the same person</button></div>` : ""}
             ${sourceLabel}
           </td>
@@ -8039,7 +8074,7 @@ Uni Wien Emperors`;
                 <input type="checkbox" class="mi-change-toggle" data-change-index="${index}" ${change.accepted ? "checked" : ""} />
                 <span class="mi-field">${escapeHtml(change.label)}</span>
                 <span class="mi-old">${escapeHtml(change.current)}</span> → <span class="mi-new">${escapeHtml(change.next)}</span>
-                ${change.optional ? '<em>(optional)</em>' : ""}
+                ${change.note ? `<em>(${escapeHtml(change.note)})</em>` : change.optional ? '<em>(optional)</em>' : ""}
               </label>`).join("") : '<span class="meta">No differences</span>'}
           </td>
         </tr>`;
@@ -8068,6 +8103,7 @@ Uni Wien Emperors`;
               <label>Positions<input class="mi-draft" data-field="positions" value="${escapeHtml((d.positions || []).join(", "))}" placeholder="e.g. WR, DB" /></label>
               <label>Jersey #<input class="mi-draft" data-field="jerseyNumber" type="number" min="0" max="99" value="${d.jerseyNumber ?? ""}" /></label>
               <label>Status<select class="mi-draft" data-field="membershipStatus">${memberImportStatusOptions(d.membershipStatus)}</select></label>
+              <label class="mi-check"><input type="checkbox" class="mi-draft" data-field="rookie" ${d.rookie ? "checked" : ""} /> Rookie ${escapeHtml(seasonLabel(currentSeasonStartYear()))}</label>
             </div>
           </td>
         </tr>`;
@@ -8078,7 +8114,7 @@ Uni Wien Emperors`;
         <td></td>
         <td><span class="mi-kind mi-kind-missing">Not in sheet</span></td>
         <td>
-          <strong>${escapeHtml(`${member.firstName} ${member.lastName}`.trim() || member.name)}</strong>
+          <strong>${escapeHtml(`${member.firstName} ${member.lastName}`.trim() || member.name)}</strong>${memberRookieBadge(member)}
           <div class="meta">${escapeHtml(member.membershipStatus || "-")}${member.jerseyNumber !== null && member.jerseyNumber !== undefined ? ` · #${member.jerseyNumber}` : ""}${(member.positions || []).length ? ` · ${escapeHtml(member.positions.join(", "))}` : ""}</div>
           ${entry.hasPossibleMatch ? '<div class="mi-warn">A new sheet row looks similar – check the “New” rows first.</div>' : ""}
         </td>
@@ -8093,7 +8129,43 @@ Uni Wien Emperors`;
       </tr>`;
   }
 
+  // Re-rendering replaces the dialog HTML, which would reset the scroll position to the top.
+  // Keep scroll position and focus as long as the same step is shown.
   function renderMemberImport() {
+    const root = document.getElementById("member-import-root");
+    if (!root) return;
+    const s = memberImportState;
+    const viewKey = () => (s.result ? "result" : s.step === "confirm" && s.entries ? "confirm" : "compare");
+    const previousView = root.dataset.view || "";
+    const body = root.querySelector(".mi-body");
+    const tableWrap = root.querySelector(".mi-table-wrap");
+    const scroll = { body: body ? body.scrollTop : 0, root: root.scrollTop, dialog: root.parentElement ? root.parentElement.scrollTop : 0, tableLeft: tableWrap ? tableWrap.scrollLeft : 0 };
+    const active = document.activeElement;
+    let focus = null;
+    if (active instanceof HTMLElement && root.contains(active)) {
+      const row = active.closest("[data-entry-id]");
+      const cls = Array.from(active.classList).find((c) => c.startsWith("mi-"));
+      if (cls) focus = { entryId: row ? row.dataset.entryId : null, cls, field: active.dataset.field || null, changeIndex: active.dataset.changeIndex || null };
+    }
+    renderMemberImportView();
+    const nextView = viewKey();
+    root.dataset.view = nextView;
+    if (previousView !== nextView) return;
+    const nextBody = root.querySelector(".mi-body");
+    if (nextBody) nextBody.scrollTop = scroll.body;
+    root.scrollTop = scroll.root;
+    if (root.parentElement) root.parentElement.scrollTop = scroll.dialog;
+    const nextWrap = root.querySelector(".mi-table-wrap");
+    if (nextWrap) nextWrap.scrollLeft = scroll.tableLeft;
+    if (focus) {
+      const scope = focus.entryId ? Array.from(root.querySelectorAll("[data-entry-id]")).find((el) => el.dataset.entryId === focus.entryId) : root;
+      const candidates = scope ? Array.from(scope.querySelectorAll(`.${focus.cls}`)) : [];
+      const target = candidates.find((el) => (focus.field === null || el.dataset.field === focus.field) && (focus.changeIndex === null || el.dataset.changeIndex === focus.changeIndex));
+      if (target && typeof target.focus === "function") target.focus({ preventScroll: true });
+    }
+  }
+
+  function renderMemberImportView() {
     const root = document.getElementById("member-import-root");
     if (!root) return;
     const s = memberImportState;
@@ -8162,7 +8234,7 @@ Uni Wien Emperors`;
               <input class="mi-csv" type="file" accept=".csv,text/csv" />
             </label>
           </div>
-          <p class="meta">The sheet must be shared as “Anyone with the link can view”. Expected columns: First Name, Last Name, Position, Active, Jersey Number (In Clubee / Rookie are shown but not stored). ${s.csvFileName ? `CSV selected: <b>${escapeHtml(s.csvFileName)}</b>` : ""}</p>
+          <p class="meta">The sheet must be shared as “Anyone with the link can view”. Expected columns: First Name, Last Name, Position, Active, Jersey Number, Rookie (In Clubee is not stored). Rookie = first season, counts until 31.8. ${s.csvFileName ? `CSV selected: <b>${escapeHtml(s.csvFileName)}</b>` : ""}</p>
           <div class="button-row"><button type="button" class="primary-button mi-load" ${s.loading ? "disabled" : ""}>${s.loading ? "Loading …" : entries ? "Reload & compare again" : "Load & compare"}</button></div>
           ${s.error ? `<p class="mi-error">${escapeHtml(s.error)}</p>` : ""}
         </article>
@@ -8275,6 +8347,7 @@ Uni Wien Emperors`;
           if (c.field === "membershipStatus") Object.assign(patch, memberImportStatusPatch(c.value, entry.member));
           if (c.field === "name") { patch.first_name = c.value.firstName; patch.last_name = c.value.lastName; patch.display_name = `${c.value.firstName} ${c.value.lastName}`.trim(); }
           if (c.field === "restore") patch.deleted_at = null;
+          if (c.field === "rookie") patch.rookie_season = c.value;
         });
         work.push({ label: `Update ${entry.member.firstName} ${entry.member.lastName}`, run: () => backendClient.from("members").update(patch).eq("id", entry.member.id), count: "updated" });
       }
@@ -8293,6 +8366,7 @@ Uni Wien Emperors`;
           side_of_ball: null,
           notes: "Imported from player sheet",
           deleted_at: null,
+          rookie_season: d.rookie ? currentSeasonStartYear() : null,
           ...memberImportStatusPatch(status, null)
         };
         work.push({ label: `Create ${patch.display_name}`, run: () => backendClient.from("members").insert([patch]).select("id").single(), count: "created" });
@@ -8349,7 +8423,7 @@ Uni Wien Emperors`;
         const player = entry.player;
         const createEntry = {
           kind: "create", id: `create-unlinked-${entry.member.id}`, player,
-          draft: { firstName: player.firstName, lastName: player.lastName, positions: player.positions || [], jerseyNumber: player.jerseyNumber ?? null, membershipStatus: player.active === false ? "inactive" : "active" },
+          draft: { firstName: player.firstName, lastName: player.lastName, positions: player.positions || [], jerseyNumber: player.jerseyNumber ?? null, membershipStatus: player.active === false ? "inactive" : "active", rookie: player.rookie !== false },
           candidates: [{ id: entry.member.id, name: `${entry.member.firstName} ${entry.member.lastName}`.trim(), score: entry.score, deleted: Boolean(entry.member.deletedAt) }],
           action: "create", include: true
         };
@@ -8407,6 +8481,7 @@ Uni Wien Emperors`;
         const field = target.dataset.field;
         if (field === "positions") entry.draft.positions = target.value.split(/[,/;\s]+/).map((p) => p.trim().toUpperCase()).filter(Boolean);
         else if (field === "jerseyNumber") entry.draft.jerseyNumber = target.value === "" ? null : Number(target.value);
+        else if (field === "rookie") entry.draft.rookie = target.checked;
         else entry.draft[field] = target.value.trim();
         renderMemberImport();
       }
@@ -8566,8 +8641,8 @@ Uni Wien Emperors`;
                 ${showMemberIdColumn ? `<td><span class="meta">${member.id}</span></td>` : ""}
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${escapeAttribute(draftFirstName)}" />`
-                    : `<strong>${escapeHtml(member.firstName || "-")}</strong>`}
+                    ? `<div class="member-name-cell"><input class="member-inline-input member-inline-first-name" data-member-id="${member.id}" value="${escapeAttribute(draftFirstName)}" />${memberRookieBadge(member)}</div>`
+                    : `<strong>${escapeHtml(member.firstName || "-")}</strong>${memberRookieBadge(member)}`}
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
@@ -11203,6 +11278,13 @@ Uni Wien Emperors`;
     form.elements.jerseyNumber.value = member?.jerseyNumber ?? "";
     form.elements.sideOfBall.value = member?.sideOfBall || "";
     form.elements.loanJersey.checked = Boolean(member?.loanJersey);
+    if (form.elements.rookie) {
+      // New members are rookies by default (first season = current season).
+      form.elements.rookie.checked = member ? Boolean(member.rookie) : true;
+      const season = currentSeasonStartYear();
+      const rookieLabel = document.getElementById("member-rookie-label");
+      if (rookieLabel) rookieLabel.textContent = `Rookie ${seasonLabel(season)} (until 31.8.${season + 1})`;
+    }
     form.elements.membershipStatus.value = member?.membershipStatus || "active";
     MEMBERSHIP_DATE_FIELDS.forEach(([field]) => {
       if (form.elements[field]) form.elements[field].value = normalizeToIsoDate(member?.[field] || "") || "";
@@ -11610,6 +11692,7 @@ Uni Wien Emperors`;
           jerseyNumber: String(formData.get("jerseyNumber") || "").trim(),
           sideOfBall: String(formData.get("sideOfBall") || "").trim(),
           loanJersey: formData.get("loanJersey") === "yes",
+          ...(form.elements.rookie ? { rookie: formData.get("rookie") === "yes" } : {}),
           membershipStatus: String(formData.get("membershipStatus") || "active"),
           ...Object.fromEntries(MEMBERSHIP_DATE_FIELDS.map(([field]) => [field, String(formData.get(field) || "").trim()])),
           passStatus: String(formData.get("passStatus") || "missing").trim(),
@@ -12370,7 +12453,7 @@ Uni Wien Emperors`;
           { key: "roles", label: "Roles" },
           { key: "jerseyNumber", label: "Jersey" },
           { key: "sideOfBall", label: "Side of ball" },
-          { key: "loanJersey", label: "Leihjersey" },
+          { key: "loanJersey", label: "Leihjersey" }, { key: "rookie", label: "Rookie" },
           { key: "membershipStatus", label: "Membership" },
           { key: "passStatus", label: "Pass status" },
           { key: "passExpiry", label: "Pass expiry" },
@@ -12392,7 +12475,7 @@ Uni Wien Emperors`;
           { key: "roles", label: "Roles" },
           { key: "jerseyNumber", label: "Jersey" },
           { key: "sideOfBall", label: "Side of ball" },
-          { key: "loanJersey", label: "Leihjersey" },
+          { key: "loanJersey", label: "Leihjersey" }, { key: "rookie", label: "Rookie" },
           { key: "membershipStatus", label: "Membership" },
           { key: "passStatus", label: "Pass status" },
           { key: "passExpiry", label: "Pass expiry" },

@@ -90,14 +90,14 @@
       href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20260923a" />
+    <link rel="stylesheet" href="./styles.css?v=20261005b" />
     <script src="https://cdn.jsdelivr.net/npm/appwrite@26.2.0"></script>
     <script src="./src/appwrite-config.js?v=20261003a"></script>
-    <script src="./src/appwrite-backend-compat.js?v=20261003b"></script>
+    <script src="./src/appwrite-backend-compat.js?v=20261005b"></script>
     <script src="./src/modules/cache-utils.js?v=20260508a"></script>
     <script src="./src/modules/iban-utils.js?v=20260508a"></script>
     <script src="./src/modules/profile-finance.js?v=20260823a"></script>
-    <script src="./src/modules/member-import.js?v=20261005a"></script>
+    <script src="./src/modules/member-import.js?v=20261005b"></script>
   </head>
   <body>
     <noscript>
@@ -239,6 +239,11 @@
           <label class="status-check">
             <input type="checkbox" name="loanJersey" value="yes" />
             <span>Leihjersey (loan jersey)</span>
+          </label>
+
+          <label class="status-check">
+            <input type="checkbox" name="rookie" value="yes" />
+            <span id="member-rookie-label">Rookie (first season, until 31.8.)</span>
           </label>
         </div>
 
@@ -523,6 +528,6 @@
     </dialog>
 
     <script src="./src/vendor/qrcode.js?v=20260715a"></script>
-    <script defer src="./app.bundle.js?v=20261005a"></script>
+    <script defer src="./app.bundle.js?v=20261005b"></script>
   </body>
 </html>

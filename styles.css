@@ -3722,3 +3722,10 @@ code {
 .mi-progress{font-weight:600}
 .mi-errors{color:var(--danger)}
 @media (max-width: 860px){.mi-source-grid{grid-template-columns:1fr}.mi-edit-grid{grid-template-columns:1fr 1fr}.mi-table thead{display:none}.mi-table,.mi-table tbody,.mi-table tr,.mi-table td{display:block;width:100%}.mi-table tr{padding:10px 0;border-bottom:1px solid var(--line)}.mi-table td{border:0;padding:4px 0}.mi-header,.mi-body{padding-left:14px;padding-right:14px}}
+/* Rookie badge (members table, import) */
+.rookie-badge{display:inline-flex;align-items:center;margin-left:6px;padding:1px 7px;border-radius:999px;background:rgba(202,138,29,.16);color:#7a520f;font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle;white-space:nowrap;cursor:help}
+.member-name-cell{display:flex;align-items:center;gap:4px}
+.member-name-cell .member-inline-input{flex:1 1 auto;min-width:0}
+.member-name-cell .rookie-badge{margin-left:0}
+.mi-check{display:flex !important;flex-direction:row !important;align-items:center;gap:6px;align-self:end;padding-bottom:8px}
+.mi-check input{width:auto !important}

@@ -395,6 +395,10 @@
     }
 
     if (hasOwn(input, "loan_jersey")) sanitized.loan_jersey = Boolean(input.loan_jersey);
+    if (hasOwn(input, "rookie_season")) {
+      const season = input.rookie_season === null || input.rookie_season === "" || input.rookie_season === undefined ? null : Number(input.rookie_season);
+      sanitized.rookie_season = Number.isFinite(season) ? Math.trunc(season) : null;
+    }
     if (hasOwn(input, "side_of_ball")) sanitized.side_of_ball = input.side_of_ball ? String(input.side_of_ball).trim() : null;
 
     if (hasOwn(input, "email")) sanitized.email = input.email ? String(input.email).trim() : null;

@@ -6,6 +6,19 @@
     return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "");
   }
 
+  // Season = 1 September – 31 August. A rookie is a player whose first season is the current one,
+  // so rookie status ends automatically on 1 September (no cron needed).
+  function currentSeasonStartYear(date) {
+    const d = date instanceof Date ? date : new Date();
+    return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
+  }
+  function seasonLabel(startYear) {
+    return Number.isFinite(startYear) ? `${startYear}/${String((startYear + 1) % 100).padStart(2, "0")}` : "";
+  }
+  function isRookieSeason(rookieSeason, date) {
+    return rookieSeason !== null && rookieSeason !== undefined && rookieSeason !== "" && Number(rookieSeason) === currentSeasonStartYear(date);
+  }
+
   function nameKey(firstName, lastName) {
     return `${normalizeToken(firstName)}|${normalizeToken(lastName)}`;
   }
@@ -199,6 +212,25 @@
     if (normalizeToken(player.firstName) !== normalizeToken(member.firstName) || normalizeToken(player.lastName) !== normalizeToken(member.lastName)) {
       changes.push({ field: "name", label: "Name", current: `${member.firstName} ${member.lastName}`.trim(), next: `${player.firstName} ${player.lastName}`.trim(), value: { firstName: player.firstName, lastName: player.lastName }, optional: true });
     }
+    // Rookie (only when the sheet has a Rookie column).
+    if (player.rookie === true || player.rookie === false) {
+      const season = currentSeasonStartYear(options.today);
+      const memberSeason = member.rookieSeason === null || member.rookieSeason === undefined || member.rookieSeason === "" ? null : Number(member.rookieSeason);
+      const memberIsRookie = memberSeason === season;
+      if (player.rookie !== memberIsRookie) {
+        const earlierSeason = memberSeason !== null && memberSeason < season;
+        changes.push({
+          field: "rookie",
+          label: "Rookie",
+          current: memberIsRookie ? `yes (${seasonLabel(season)})` : earlierSeason ? `no (was rookie ${seasonLabel(memberSeason)})` : "no",
+          next: player.rookie ? `yes (${seasonLabel(season)}, until 31.8.${season + 1})` : "no",
+          value: player.rookie ? season : (earlierSeason ? memberSeason : null),
+          // Was already a rookie in an earlier season → the sheet was probably not updated yet.
+          optional: player.rookie && earlierSeason,
+          note: player.rookie && earlierSeason ? "already a rookie last season – sheet not updated?" : ""
+        });
+      }
+    }
     if (member.deletedAt) changes.push({ field: "restore", label: "Deleted", current: "deleted", next: "restored", value: true });
     return changes;
   }
@@ -240,7 +272,7 @@
           kind: "create",
           id: `create-${nameKey(player.firstName, player.lastName)}-${player.rowNumber}`,
           player,
-          draft: { firstName: player.firstName, lastName: player.lastName, positions: player.positions || [], jerseyNumber: player.jerseyNumber ?? null, membershipStatus: targetStatus(player, null) },
+          draft: { firstName: player.firstName, lastName: player.lastName, positions: player.positions || [], jerseyNumber: player.jerseyNumber ?? null, membershipStatus: targetStatus(player, null), rookie: player.rookie === false ? false : true },
           candidates: candidates.map((c) => ({ id: c.member.id, name: `${c.member.firstName} ${c.member.lastName}`.trim() || c.member.name, score: c.score, deleted: Boolean(c.member.deletedAt) })),
           action: candidates.length ? "review" : "create",
           include: !candidates.length
@@ -302,7 +334,7 @@
     return Array.from(result.entries()).map(([number, names]) => ({ number, names }));
   }
 
-  const api = { parseCsv, parseSheetReference, sheetCsvUrl, rowsToPlayers, mergePlayers, buildImportPlan, jerseyConflicts, similarity, normalizeToken };
+  const api = { parseCsv, parseSheetReference, sheetCsvUrl, rowsToPlayers, mergePlayers, buildImportPlan, jerseyConflicts, similarity, normalizeToken, currentSeasonStartYear, seasonLabel, isRookieSeason };
   if (typeof window !== "undefined") {
     window.ClubHubModules = window.ClubHubModules || {};
     window.ClubHubModules.memberImport = api;
