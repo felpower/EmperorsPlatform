@@ -7917,6 +7917,510 @@ Uni Wien Emperors`;
     return result;
   }
 
+  // ---------------------------------------------------------------------------
+  // Member import / sync from the player spreadsheet (Google Sheet or CSV).
+  // Flow: load sheet -> editable comparison -> confirm summary -> apply.
+  // Nothing is written before the admin confirms the summary.
+  // ---------------------------------------------------------------------------
+  const MEMBER_IMPORT_STORAGE_KEY = "clubhub.memberImport.v1";
+  const memberImportState = {
+    sheetUrl: "",
+    tabs: "Spieler, Rookies",
+    csvFileName: "",
+    csvText: "",
+    loading: false,
+    error: "",
+    entries: null,
+    duplicates: [],
+    stats: null,
+    filter: "changes",
+    step: "compare",
+    applying: false,
+    progress: "",
+    result: null
+  };
+
+  function memberImportModule() {
+    return (window.ClubHubModules || {}).memberImport || null;
+  }
+
+  function loadMemberImportPrefs() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MEMBER_IMPORT_STORAGE_KEY) || "{}");
+      if (saved.sheetUrl) memberImportState.sheetUrl = String(saved.sheetUrl);
+      if (saved.tabs) memberImportState.tabs = String(saved.tabs);
+    } catch (_) { /* ignore */ }
+  }
+
+  function saveMemberImportPrefs() {
+    try {
+      localStorage.setItem(MEMBER_IMPORT_STORAGE_KEY, JSON.stringify({ sheetUrl: memberImportState.sheetUrl, tabs: memberImportState.tabs }));
+    } catch (_) { /* ignore */ }
+  }
+
+  function memberImportDialog() {
+    let dialog = document.getElementById("member-import-dialog");
+    if (!dialog) {
+      dialog = document.createElement("dialog");
+      dialog.id = "member-import-dialog";
+      dialog.className = "dialog member-import-dialog";
+      dialog.innerHTML = '<div id="member-import-root" class="member-import-root"></div>';
+      document.body.appendChild(dialog);
+      bindMemberImportDialog(dialog);
+    }
+    return dialog;
+  }
+
+  function openMemberImport() {
+    if (currentAccessRole !== "admin") {
+      showToast("Only admins can import members.", "error");
+      return;
+    }
+    loadMemberImportPrefs();
+    memberImportState.result = null;
+    memberImportState.step = "compare";
+    const dialog = memberImportDialog();
+    renderMemberImport();
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function memberImportCounts(entries) {
+    const list = entries || [];
+    const updates = list.filter((e) => e.kind === "update" && e.include && e.changes.some((c) => c.accepted));
+    const creates = list.filter((e) => e.kind === "create" && e.include && e.action === "create");
+    const unresolved = list.filter((e) => e.kind === "create" && e.action === "review");
+    const missing = list.filter((e) => e.kind === "missing");
+    const missingActions = missing.filter((e) => e.action !== "keep");
+    return {
+      updates: updates.length,
+      creates: creates.length,
+      unresolved: unresolved.length,
+      unchanged: list.filter((e) => e.kind === "unchanged").length,
+      missing: missing.length,
+      deactivate: missingActions.filter((e) => e.action === "inactive").length,
+      exit: missingActions.filter((e) => e.action === "exited").length,
+      remove: missingActions.filter((e) => e.action === "delete").length,
+      restores: updates.filter((e) => e.changes.some((c) => c.field === "restore" && c.accepted)).length
+    };
+  }
+
+  function memberImportEntryVisible(entry) {
+    const filter = memberImportState.filter;
+    if (filter === "all") return true;
+    if (filter === "changes") return entry.kind !== "unchanged";
+    if (filter === "create") return entry.kind === "create";
+    if (filter === "update") return entry.kind === "update";
+    if (filter === "missing") return entry.kind === "missing";
+    if (filter === "unchanged") return entry.kind === "unchanged";
+    return true;
+  }
+
+  function memberImportStatusOptions(selected) {
+    return MEMBERSHIP_STATUSES.map((status) => `<option value="${status}" ${status === selected ? "selected" : ""}>${escapeHtml(MEMBERSHIP_STATUS_LABELS[status] || status)}</option>`).join("");
+  }
+
+  function renderMemberImportEntry(entry) {
+    const sourceLabel = entry.player ? `<span class="mi-source">${escapeHtml((entry.player.sources || [entry.player.source]).join(" + "))} · row ${entry.player.rowNumber}</span>` : "";
+    if (entry.kind === "update" || entry.kind === "unchanged") {
+      const member = entry.member;
+      const fuzzy = entry.score < 100;
+      return `
+        <tr class="mi-row mi-${entry.kind}${entry.include || fuzzy ? "" : " mi-excluded"}" data-entry-id="${escapeHtml(entry.id)}">
+          <td><input type="checkbox" class="mi-include" ${entry.include ? "checked" : ""} ${entry.kind === "unchanged" ? "disabled" : ""} aria-label="Include" /></td>
+          <td><span class="mi-kind mi-kind-${entry.kind === "update" && !entry.changes.some((c) => !c.optional) ? "unchanged" : entry.kind}">${entry.kind === "update" ? (entry.changes.some((c) => c.field === "restore") ? "Restore" : entry.changes.some((c) => !c.optional) ? "Update" : "Linked") : "OK"}</span></td>
+          <td>
+            <strong>${escapeHtml(`${member.firstName} ${member.lastName}`.trim() || member.name)}</strong>
+            ${fuzzy ? `<div class="mi-warn">Matched by similar name (${entry.score}%) with sheet: <b>${escapeHtml(`${entry.player.firstName} ${entry.player.lastName}`)}</b> – please check. <button type="button" class="ghost-button small-button mi-unlink">Not the same person</button></div>` : ""}
+            ${sourceLabel}
+          </td>
+          <td>
+            ${entry.changes.length ? entry.changes.map((change, index) => `
+              <label class="mi-change${change.optional ? " mi-optional" : ""}">
+                <input type="checkbox" class="mi-change-toggle" data-change-index="${index}" ${change.accepted ? "checked" : ""} />
+                <span class="mi-field">${escapeHtml(change.label)}</span>
+                <span class="mi-old">${escapeHtml(change.current)}</span> → <span class="mi-new">${escapeHtml(change.next)}</span>
+                ${change.optional ? '<em>(optional)</em>' : ""}
+              </label>`).join("") : '<span class="meta">No differences</span>'}
+          </td>
+        </tr>`;
+    }
+    if (entry.kind === "create") {
+      const d = entry.draft;
+      const options = [
+        `<option value="create" ${entry.action === "create" ? "selected" : ""}>Create new member</option>`,
+        ...entry.candidates.map((c) => `<option value="link:${escapeHtml(c.id)}">Same person as: ${escapeHtml(c.name)} (${c.score}%)${c.deleted ? " – deleted" : ""}</option>`),
+        `<option value="skip" ${entry.action === "skip" ? "selected" : ""}>Skip (do nothing)</option>`
+      ];
+      if (entry.action === "review") options.unshift('<option value="review" selected disabled>Please choose …</option>');
+      return `
+        <tr class="mi-row mi-create${entry.action === "review" ? " mi-needs-review" : ""}${entry.action === "skip" ? " mi-excluded" : ""}" data-entry-id="${escapeHtml(entry.id)}">
+          <td></td>
+          <td><span class="mi-kind mi-kind-create">New</span></td>
+          <td>
+            <select class="mi-create-action">${options.join("")}</select>
+            ${entry.candidates.length ? `<div class="mi-warn">Possible duplicate – an existing member has a similar name.</div>` : ""}
+            ${sourceLabel}
+          </td>
+          <td>
+            <div class="mi-edit-grid">
+              <label>First name<input class="mi-draft" data-field="firstName" value="${escapeHtml(d.firstName)}" /></label>
+              <label>Last name<input class="mi-draft" data-field="lastName" value="${escapeHtml(d.lastName)}" /></label>
+              <label>Positions<input class="mi-draft" data-field="positions" value="${escapeHtml((d.positions || []).join(", "))}" placeholder="e.g. WR, DB" /></label>
+              <label>Jersey #<input class="mi-draft" data-field="jerseyNumber" type="number" min="0" max="99" value="${d.jerseyNumber ?? ""}" /></label>
+              <label>Status<select class="mi-draft" data-field="membershipStatus">${memberImportStatusOptions(d.membershipStatus)}</select></label>
+            </div>
+          </td>
+        </tr>`;
+    }
+    const member = entry.member;
+    return `
+      <tr class="mi-row mi-missing${entry.action === "keep" ? " mi-excluded" : ""}" data-entry-id="${escapeHtml(entry.id)}">
+        <td></td>
+        <td><span class="mi-kind mi-kind-missing">Not in sheet</span></td>
+        <td>
+          <strong>${escapeHtml(`${member.firstName} ${member.lastName}`.trim() || member.name)}</strong>
+          <div class="meta">${escapeHtml(member.membershipStatus || "-")}${member.jerseyNumber !== null && member.jerseyNumber !== undefined ? ` · #${member.jerseyNumber}` : ""}${(member.positions || []).length ? ` · ${escapeHtml(member.positions.join(", "))}` : ""}</div>
+          ${entry.hasPossibleMatch ? '<div class="mi-warn">A new sheet row looks similar – check the “New” rows first.</div>' : ""}
+        </td>
+        <td>
+          <select class="mi-missing-action">
+            <option value="keep" ${entry.action === "keep" ? "selected" : ""}>Keep unchanged</option>
+            <option value="inactive" ${entry.action === "inactive" ? "selected" : ""}>Set inactive</option>
+            <option value="exited" ${entry.action === "exited" ? "selected" : ""}>Set exited</option>
+            <option value="delete" ${entry.action === "delete" ? "selected" : ""}>Delete (can be restored)</option>
+          </select>
+        </td>
+      </tr>`;
+  }
+
+  function renderMemberImport() {
+    const root = document.getElementById("member-import-root");
+    if (!root) return;
+    const s = memberImportState;
+    const entries = s.entries;
+    const counts = memberImportCounts(entries);
+    const module = memberImportModule();
+    const conflicts = entries && module ? module.jerseyConflicts(state.members, entries) : [];
+    const header = `
+      <div class="dialog-header mi-header">
+        <div><p class="eyebrow">Members</p><h3>Import / sync player list</h3></div>
+        <button class="ghost-icon mi-close" type="button" aria-label="Close">&times;</button>
+      </div>`;
+
+    if (s.result) {
+      root.innerHTML = `${header}
+        <div class="mi-body">
+          <article class="card mi-result">
+            <h3>${s.result.errors.length ? "Import finished with errors" : "Import finished"}</h3>
+            <div class="pill-row">${plainPill(`Created: ${s.result.created}`)}${plainPill(`Updated: ${s.result.updated}`)}${plainPill(`Inactive/exited: ${s.result.statusChanged}`)}${plainPill(`Deleted: ${s.result.deleted}`)}</div>
+            ${s.result.errors.length ? `<ul class="mi-errors">${s.result.errors.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>` : ""}
+          </article>
+          <div class="button-row mi-footer"><button type="button" class="ghost-button mi-restart">New comparison</button><button type="button" class="primary-button mi-close">Close</button></div>
+        </div>`;
+      return;
+    }
+
+    if (s.step === "confirm" && entries) {
+      root.innerHTML = `${header}
+        <div class="mi-body">
+          <article class="card mi-confirm">
+            <h3>Please confirm</h3>
+            <p>The following changes will be written to the member list:</p>
+            <ul>
+              ${counts.creates ? `<li><b>${counts.creates}</b> new member(s) will be created</li>` : ""}
+              ${counts.updates ? `<li><b>${counts.updates}</b> member(s) will be updated${counts.restores ? ` (incl. ${counts.restores} restored)` : ""}</li>` : ""}
+              ${counts.deactivate ? `<li><b>${counts.deactivate}</b> member(s) will be set <b>inactive</b></li>` : ""}
+              ${counts.exit ? `<li><b>${counts.exit}</b> member(s) will be set <b>exited</b></li>` : ""}
+              ${counts.remove ? `<li><b>${counts.remove}</b> member(s) will be <b>deleted</b> (restorable via “show deleted”)</li>` : ""}
+            </ul>
+            ${conflicts.length ? `<p class="mi-warn">Jersey numbers used twice afterwards: ${conflicts.map((c) => `#${c.number} (${escapeHtml(c.names.join(", "))})`).join("; ")}</p>` : ""}
+            <p class="meta">New members are created without e-mail and without an account invitation. You can invite them later from the member list.</p>
+          </article>
+          ${s.applying ? `<p class="mi-progress">${escapeHtml(s.progress || "Saving …")}</p>` : ""}
+          <div class="button-row mi-footer">
+            <button type="button" class="ghost-button mi-back" ${s.applying ? "disabled" : ""}>Back to comparison</button>
+            <button type="button" class="primary-button mi-apply" ${s.applying ? "disabled" : ""}>Yes, apply changes</button>
+          </div>
+        </div>`;
+      return;
+    }
+
+    const visible = entries ? entries.filter(memberImportEntryVisible) : [];
+    const filterButton = (key, label, count) => `<button type="button" class="mi-filter${s.filter === key ? " active" : ""}" data-filter="${key}">${label}${count !== undefined ? ` <b>${count}</b>` : ""}</button>`;
+    const changeTotal = counts.creates + counts.updates + counts.deactivate + counts.exit + counts.remove;
+    root.innerHTML = `${header}
+      <div class="mi-body">
+        <article class="card mi-source-card">
+          <div class="mi-source-grid">
+            <label>Google Sheet link
+              <input class="mi-sheet-url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" value="${escapeHtml(s.sheetUrl)}" />
+            </label>
+            <label>Tabs (comma separated)
+              <input class="mi-tabs" value="${escapeHtml(s.tabs)}" placeholder="Spieler, Rookies" />
+            </label>
+            <label>… or upload a CSV file
+              <input class="mi-csv" type="file" accept=".csv,text/csv" />
+            </label>
+          </div>
+          <p class="meta">The sheet must be shared as “Anyone with the link can view”. Expected columns: First Name, Last Name, Position, Active, Jersey Number (In Clubee / Rookie are shown but not stored). ${s.csvFileName ? `CSV selected: <b>${escapeHtml(s.csvFileName)}</b>` : ""}</p>
+          <div class="button-row"><button type="button" class="primary-button mi-load" ${s.loading ? "disabled" : ""}>${s.loading ? "Loading …" : entries ? "Reload & compare again" : "Load & compare"}</button></div>
+          ${s.error ? `<p class="mi-error">${escapeHtml(s.error)}</p>` : ""}
+        </article>
+        ${entries ? `
+          <div class="mi-summary">
+            ${s.stats ? plainPill(`Sheet rows: ${s.stats.players}`) : ""}
+            ${plainPill(`Will create: ${counts.creates}`)}${plainPill(`Will update: ${counts.updates}`)}${plainPill(`Unchanged: ${counts.unchanged}`)}${plainPill(`Not in sheet: ${counts.missing}`)}
+            ${counts.unresolved ? `<span class="mi-pill-warn">${counts.unresolved} possible duplicate(s) to decide</span>` : ""}
+          </div>
+          ${s.duplicates.length ? `<p class="mi-warn">Duplicate names inside the sheet (only the first row is used): ${escapeHtml(s.duplicates.join(", "))}</p>` : ""}
+          ${conflicts.length ? `<p class="mi-warn">Jersey numbers that would be used twice: ${conflicts.map((c) => `#${c.number} (${escapeHtml(c.names.join(", "))})`).join("; ")}</p>` : ""}
+          <div class="mi-filters">
+            ${filterButton("changes", "Changes")}${filterButton("create", "New", entries.filter((e) => e.kind === "create").length)}${filterButton("update", "Updates", entries.filter((e) => e.kind === "update").length)}${filterButton("missing", "Not in sheet", counts.missing)}${filterButton("unchanged", "Unchanged", counts.unchanged)}${filterButton("all", "All")}
+          </div>
+          <div class="table-wrap mi-table-wrap">
+            <table class="mi-table">
+              <thead><tr><th></th><th>Type</th><th>Member</th><th>What happens</th></tr></thead>
+              <tbody>${visible.map(renderMemberImportEntry).join("") || '<tr><td colspan="4" class="meta">Nothing in this view.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="button-row mi-footer">
+            <span class="meta">${counts.unresolved ? "Decide all possible duplicates before continuing." : `${changeTotal} change(s) selected. Nothing is saved yet.`}</span>
+            <button type="button" class="primary-button mi-review" ${!changeTotal || counts.unresolved ? "disabled" : ""}>Review & apply …</button>
+          </div>
+        ` : ""}
+      </div>`;
+  }
+
+  function findMemberImportEntry(element) {
+    const row = element.closest("[data-entry-id]");
+    if (!row || !memberImportState.entries) return null;
+    return memberImportState.entries.find((e) => e.id === row.dataset.entryId) || null;
+  }
+
+  async function fetchMemberImportPlayers() {
+    const module = memberImportModule();
+    if (!module) throw new Error("Import module not loaded. Please reload the page.");
+    const s = memberImportState;
+    const lists = [];
+    if (s.csvText) {
+      const parsed = module.rowsToPlayers(module.parseCsv(s.csvText), s.csvFileName || "CSV");
+      if (parsed.missingColumns.length) throw new Error(`Missing column(s) in the CSV: ${parsed.missingColumns.join(", ")}`);
+      lists.push(parsed.players);
+    } else {
+      const sheetId = module.parseSheetReference(s.sheetUrl);
+      if (!sheetId) throw new Error("Please paste the Google Sheet link (or upload a CSV file).");
+      const tabs = s.tabs.split(",").map((t) => t.trim()).filter(Boolean);
+      if (!tabs.length) throw new Error("Please enter at least one tab name, e.g. Spieler.");
+      for (const tab of tabs) {
+        const response = await fetch(module.sheetCsvUrl(sheetId, tab), { cache: "no-store" });
+        const text = await response.text();
+        if (!response.ok || /^\s*<!DOCTYPE|<html/i.test(text)) throw new Error(`Could not read tab “${tab}”. Is the sheet shared with “Anyone with the link”?`);
+        const parsed = module.rowsToPlayers(module.parseCsv(text), tab);
+        if (parsed.missingColumns.length) throw new Error(`Tab “${tab}” is missing column(s): ${parsed.missingColumns.join(", ")} (or the tab name is wrong).`);
+        lists.push(parsed.players);
+      }
+    }
+    return module.mergePlayers(lists);
+  }
+
+  async function loadMemberImportComparison() {
+    const s = memberImportState;
+    s.loading = true; s.error = "";
+    renderMemberImport();
+    try {
+      const { players, duplicates } = await fetchMemberImportPlayers();
+      s.entries = memberImportModule().buildImportPlan(players, state.members || []);
+      s.duplicates = duplicates;
+      s.stats = { players: players.length };
+      s.filter = "changes";
+      saveMemberImportPrefs();
+    } catch (error) {
+      s.error = String(error?.message || error);
+    } finally {
+      s.loading = false;
+      renderMemberImport();
+    }
+  }
+
+  function memberImportToday() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function memberImportStatusPatch(status, member) {
+    const patch = { membership_status: status };
+    const today = memberImportToday();
+    if (status === "active" && !(member && member.membershipActiveSince)) patch.membership_active_since = today;
+    if (status === "pending" && !(member && member.membershipPendingSince)) patch.membership_pending_since = today;
+    if (status === "inactive") patch.membership_inactive_from = today;
+    if (status === "exited") patch.membership_exited_on = today;
+    return patch;
+  }
+
+  async function applyMemberImport() {
+    const s = memberImportState;
+    if (!backendClient || currentAccessRole !== "admin") { showToast("Only admins can import members.", "error"); return; }
+    const entries = s.entries || [];
+    const result = { created: 0, updated: 0, statusChanged: 0, deleted: 0, errors: [] };
+    s.applying = true;
+    renderMemberImport();
+    const work = [];
+    entries.forEach((entry) => {
+      if (entry.kind === "update" && entry.include) {
+        const accepted = entry.changes.filter((c) => c.accepted);
+        if (!accepted.length) return;
+        const patch = {};
+        accepted.forEach((c) => {
+          if (c.field === "positions") patch.positions_json = c.value;
+          if (c.field === "jerseyNumber") patch.jersey_number = c.value;
+          if (c.field === "membershipStatus") Object.assign(patch, memberImportStatusPatch(c.value, entry.member));
+          if (c.field === "name") { patch.first_name = c.value.firstName; patch.last_name = c.value.lastName; patch.display_name = `${c.value.firstName} ${c.value.lastName}`.trim(); }
+          if (c.field === "restore") patch.deleted_at = null;
+        });
+        work.push({ label: `Update ${entry.member.firstName} ${entry.member.lastName}`, run: () => backendClient.from("members").update(patch).eq("id", entry.member.id), count: "updated" });
+      }
+      if (entry.kind === "create" && entry.include && entry.action === "create") {
+        const d = entry.draft;
+        const status = d.membershipStatus || "active";
+        const patch = {
+          first_name: d.firstName || null,
+          last_name: d.lastName || null,
+          display_name: `${d.firstName} ${d.lastName}`.trim(),
+          email: "",
+          positions_json: d.positions || [],
+          roles_json: ["player"],
+          jersey_number: Number.isFinite(d.jerseyNumber) ? d.jerseyNumber : null,
+          loan_jersey: false,
+          side_of_ball: null,
+          notes: "Imported from player sheet",
+          deleted_at: null,
+          ...memberImportStatusPatch(status, null)
+        };
+        work.push({ label: `Create ${patch.display_name}`, run: () => backendClient.from("members").insert([patch]).select("id").single(), count: "created" });
+      }
+      if (entry.kind === "missing" && entry.action !== "keep") {
+        const name = `${entry.member.firstName} ${entry.member.lastName}`.trim();
+        if (entry.action === "delete") work.push({ label: `Delete ${name}`, run: () => backendClient.from("members").update({ deleted_at: new Date().toISOString() }).eq("id", entry.member.id), count: "deleted" });
+        else work.push({ label: `Set ${entry.action} ${name}`, run: () => backendClient.from("members").update(memberImportStatusPatch(entry.action, entry.member)).eq("id", entry.member.id), count: "statusChanged" });
+      }
+    });
+
+    await withBatchedBootstrapReload(async () => {
+      for (let i = 0; i < work.length; i += 1) {
+        const job = work[i];
+        s.progress = `${i + 1} / ${work.length}: ${job.label}`;
+        renderMemberImport();
+        try {
+          const response = await job.run();
+          if (response?.error) throw response.error;
+          result[job.count] += 1;
+        } catch (error) {
+          result.errors.push(`${job.label}: ${String(error?.message || error)}`);
+        }
+      }
+    });
+    recordActivity("members", "Member list imported from sheet.", { action: "member_import", created: result.created, updated: result.updated, statusChanged: result.statusChanged, deleted: result.deleted, errors: result.errors.length });
+    s.applying = false;
+    s.result = result;
+    s.entries = null;
+    renderMemberImport();
+    showToast(result.errors.length ? `Import finished with ${result.errors.length} error(s).` : "Member import finished.", result.errors.length ? "error" : "success");
+  }
+
+  function bindMemberImportDialog(dialog) {
+    const s = memberImportState;
+    const module = () => memberImportModule();
+    dialog.addEventListener("cancel", (event) => { if (s.applying) event.preventDefault(); });
+    dialog.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".mi-close")) { if (!s.applying) dialog.close(); return; }
+      if (target.closest(".mi-load")) { loadMemberImportComparison(); return; }
+      if (target.closest(".mi-restart")) { s.result = null; s.step = "compare"; renderMemberImport(); return; }
+      if (target.closest(".mi-review")) { s.step = "confirm"; renderMemberImport(); return; }
+      if (target.closest(".mi-back")) { s.step = "compare"; renderMemberImport(); return; }
+      if (target.closest(".mi-apply")) { applyMemberImport(); return; }
+      const filter = target.closest(".mi-filter");
+      if (filter) { s.filter = filter.dataset.filter; renderMemberImport(); return; }
+      if (target.closest(".mi-unlink")) {
+        const entry = findMemberImportEntry(target);
+        if (!entry) return;
+        // Turn the fuzzy match into a "new" row and put the member back into "not in sheet".
+        const index = s.entries.indexOf(entry);
+        const player = entry.player;
+        const createEntry = {
+          kind: "create", id: `create-unlinked-${entry.member.id}`, player,
+          draft: { firstName: player.firstName, lastName: player.lastName, positions: player.positions || [], jerseyNumber: player.jerseyNumber ?? null, membershipStatus: player.active === false ? "inactive" : "active" },
+          candidates: [{ id: entry.member.id, name: `${entry.member.firstName} ${entry.member.lastName}`.trim(), score: entry.score, deleted: Boolean(entry.member.deletedAt) }],
+          action: "create", include: true
+        };
+        s.entries.splice(index, 1, createEntry);
+        if (!entry.member.deletedAt) s.entries.push({ kind: "missing", id: `missing-${entry.member.id}`, member: entry.member, action: "keep", include: false, hasPossibleMatch: true });
+        renderMemberImport();
+      }
+    });
+    dialog.addEventListener("change", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.matches(".mi-sheet-url")) { s.sheetUrl = target.value.trim(); s.csvText = ""; s.csvFileName = ""; return; }
+      if (target.matches(".mi-tabs")) { s.tabs = target.value; return; }
+      if (target.matches(".mi-csv")) {
+        const file = target.files && target.files[0];
+        s.csvFileName = file ? file.name : "";
+        s.csvText = file ? await file.text() : "";
+        renderMemberImport();
+        return;
+      }
+      const entry = findMemberImportEntry(target);
+      if (!entry) return;
+      if (target.matches(".mi-include")) { entry.include = target.checked; renderMemberImport(); return; }
+      if (target.matches(".mi-change-toggle")) {
+        const change = entry.changes[Number(target.dataset.changeIndex)];
+        if (change) change.accepted = target.checked;
+        entry.include = entry.changes.some((c) => c.accepted);
+        renderMemberImport();
+        return;
+      }
+      if (target.matches(".mi-missing-action")) { entry.action = target.value; entry.include = target.value !== "keep"; renderMemberImport(); return; }
+      if (target.matches(".mi-create-action")) {
+        const value = target.value;
+        if (value.startsWith("link:")) {
+          const memberId = value.slice(5);
+          const member = (state.members || []).find((m) => String(m.id) === memberId);
+          if (!member) return;
+          const linked = module().buildImportPlan([entry.player], [member], { autoLinkScore: 0, suggestScore: 0 }).find((e) => e.member && e.member.id === member.id && e.kind !== "missing");
+          if (!linked) return;
+          linked.score = Math.min(linked.score, 99);
+          const index = s.entries.indexOf(entry);
+          s.entries.splice(index, 1, linked);
+          // The member is now matched, so it is no longer "not in sheet".
+          s.entries = s.entries.filter((e) => !(e.kind === "missing" && e.member.id === member.id));
+          // Other "new" rows must not offer the same member any more.
+          s.entries.forEach((e) => { if (e.kind === "create") e.candidates = e.candidates.filter((c) => c.id !== member.id); });
+        } else {
+          entry.action = value;
+          entry.include = value === "create";
+        }
+        renderMemberImport();
+        return;
+      }
+      if (target.matches(".mi-draft")) {
+        const field = target.dataset.field;
+        if (field === "positions") entry.draft.positions = target.value.split(/[,/;\s]+/).map((p) => p.trim().toUpperCase()).filter(Boolean);
+        else if (field === "jerseyNumber") entry.draft.jerseyNumber = target.value === "" ? null : Number(target.value);
+        else entry.draft[field] = target.value.trim();
+        renderMemberImport();
+      }
+    });
+  }
+
+  function bindMemberImportButton() {
+    const button = document.getElementById("open-member-import");
+    if (button && !button.dataset.bound) {
+      button.dataset.bound = "true";
+      button.addEventListener("click", openMemberImport);
+    }
+  }
+
   function renderMembers() {
     if (shouldRequireAuth() && !authState.user) {
       return renderAuthGate();
@@ -7963,6 +8467,7 @@ Uni Wien Emperors`;
               <button class="ghost-button small-button" id="export-members-excel-option" type="button">Excel</button>
             </div>
           </details>
+          ${currentAccessRole === "admin" ? `<button class="ghost-button" id="open-member-import" type="button">Import / Sync</button>` : ""}
           ${canManageMembers ? `<button class="primary-button" id="open-member-dialog" type="button">Add member</button>` : ""}
           ${saveAllButton}
           ${mergeControls}
@@ -13773,6 +14278,7 @@ Uni Wien Emperors`;
       setViewHtml("settings", renderSettings());
       setViewHtml("recovery", renderRecoveryGate());
       bindMemberActions();
+      bindMemberImportButton();
       bindTryoutActions();
       bindContactActions();
       bindUserPageActions();
