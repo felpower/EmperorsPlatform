@@ -4104,6 +4104,7 @@ Uni Wien Emperors`;
       roles,
       rosterImage: String(publicRosterField(row, "rosterImage", "roster_image") || "").trim(),
       jerseyNumber: jerseyRaw === null || jerseyRaw === undefined || jerseyRaw === "" ? null : Number(jerseyRaw),
+      rookieSeason: publicRosterField(row, "rookie_season", "rookieSeason"),
       active: membershipStatus === "active",
       membershipStatus,
       deletedAt: publicRosterField(row, "deleted_at", "deletedAt") || null,
@@ -6079,6 +6080,7 @@ Uni Wien Emperors`;
             wrapperClass: "roster-player-media",
             eager: index < 8
           })}
+          ${member.rookie ? `<div class="roster-rookie-badge" title="Rookie ${escapeHtml(seasonLabel(member.rookieSeason))}">Rookie</div>` : ""}
           ${showNumberBadge ? `<div class="roster-number-badge">#${escapeHtml(numberLabel)}</div>` : ""}
           ${positionBadge ? `<div class="roster-position-badge">${escapeHtml(positionBadge)}</div>` : ""}
         </div>

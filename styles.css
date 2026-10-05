@@ -808,7 +808,8 @@ button {
 }
 
 .roster-number-badge,
-.roster-position-badge {
+.roster-position-badge,
+.roster-rookie-badge {
   position: absolute;
   display: inline-flex;
   align-items: center;
@@ -823,6 +824,17 @@ button {
   padding: 7px 11px;
   background: rgba(21, 27, 28, 0.9);
   color: #ffffff;
+}
+
+.roster-rookie-badge {
+  top: 12px;
+  left: 12px;
+  padding: 7px 11px;
+  background: rgba(84, 184, 229, 0.95);
+  color: #171d1d;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .roster-position-badge {
