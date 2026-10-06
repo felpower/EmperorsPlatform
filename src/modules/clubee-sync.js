@@ -15,6 +15,30 @@
   const today = () => new Date().toISOString().slice(0, 10);
   const fmt = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || "") ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : "–");
 
+  function lev(a, b) {
+    if (Math.abs(a.length - b.length) > 2) return 3;
+    const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i += 1) {
+      let prev = row[0]; row[0] = i;
+      for (let j = 1; j <= b.length; j += 1) {
+        const tmp = row[j];
+        row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = tmp;
+      }
+    }
+    return row[b.length];
+  }
+  const tokens = (first, last) => `${first || ""} ${last || ""}`.split(/[\s-]+/).map(norm).filter(Boolean);
+  const tokenMatch = (a, b) => a === b || (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a))) || lev(a, b) <= (Math.min(a.length, b.length) >= 6 ? 2 : 1);
+  /** Gleiche Person trotz Schreibvarianten? Alle Namensteile der kürzeren Seite (mind. 2) müssen passen. */
+  function similarName(c, m) {
+    const a = tokens(c.firstName, c.lastName), b = tokens(m.first_name, m.last_name);
+    const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+    if (short.length < 2) return false;
+    const used = new Set();
+    return short.every((t) => { const i = long.findIndex((u, k) => !used.has(k) && tokenMatch(t, u)); if (i < 0) return false; used.add(i); return true; });
+  }
+
   function passFromLicence(licence) {
     if (!licence) return null;
     const expired = licence.status === "expired" || (licence.expires && licence.expires < today());
@@ -29,17 +53,14 @@
     const byName = new Map();
     active.forEach((m) => { const k = nameKey(m.first_name, m.last_name); byName.set(k, byName.has(k) ? null : m); });
     const passByMember = new Map(passRows.map((p) => [String(p.member_id), p]));
+    const byEmail = new Map();
+    active.forEach((m) => { const e = String(m.email || "").trim().toLowerCase(); if (e) byEmail.set(e, byEmail.has(e) ? null : m); });
     const used = new Set();
-    const matched = [], onlyClubee = [];
-    clubeeMembers.forEach((c) => {
-      let m = byClubeeId.get(c.clubeeId);
-      let via = "Clubee-ID";
-      if (!m) { m = byName.get(nameKey(c.firstName, c.lastName)) || null; via = "Name"; }
-      if (!m || used.has(m.id)) { onlyClubee.push(c); return; }
-      used.add(m.id);
+    const matched = [], onlyClubee = [], suggested = [];
+    const describe = (m, c, via) => {
       const changes = [];
       const patch = {};
-      if (String(m.clubee_id || "") !== c.clubeeId) { patch.clubee_id = c.clubeeId; changes.push(`mit Clubee verknüpfen (${via})`); }
+      if (String(m.clubee_id || "") !== c.clubeeId) { patch.clubee_id = c.clubeeId; changes.push(via === "ähnlicher Name" ? `Clubee: ${c.firstName} ${c.lastName}` : `mit Clubee verknüpfen (${via})`); }
       if (c.email && !m.email) { patch.email = c.email; changes.push(`E-Mail ${c.email}`); }
       if (c.phone && !m.phone) { patch.phone = c.phone; changes.push(`Telefon ${c.phone}`); }
       if (c.birthday && m.birthday !== c.birthday) { patch.birthday = c.birthday; changes.push(`Geburtstag ${fmt(c.birthday)}`); }
@@ -50,10 +71,27 @@
         passChange = pass;
         changes.push(`Lizenz: ${pass.pass_status}${pass.expires_on ? " bis " + fmt(pass.expires_on) : ""}`);
       }
-      matched.push({ member: m, clubee: c, patch, passChange, changes });
+      return { member: m, clubee: c, patch, passChange, changes };
+    };
+    clubeeMembers.forEach((c) => {
+      let m = byClubeeId.get(c.clubeeId);
+      let via = "Clubee-ID";
+      if (!m) { m = byName.get(nameKey(c.firstName, c.lastName)) || null; via = "Name"; }
+      if (!m && c.email) { m = byEmail.get(String(c.email).toLowerCase()) || null; via = "E-Mail"; }
+      if (!m || used.has(m.id)) { onlyClubee.push(c); return; }
+      used.add(m.id);
+      matched.push(describe(m, c, via));
+    });
+    // Schreibvarianten (z. B. "Piuck"/"Piuk", "Huynh-Minh"/"Huynh"): nur als Vorschlag, eindeutig.
+    const rest = [];
+    onlyClubee.forEach((c) => {
+      const candidates = active.filter((m) => !used.has(m.id) && similarName(c, m));
+      if (candidates.length !== 1) { rest.push(c); return; }
+      used.add(candidates[0].id);
+      suggested.push(describe(candidates[0], c, "ähnlicher Name"));
     });
     const onlyWebsite = active.filter((m) => !used.has(m.id) && String(m.membership_status || "") === "active");
-    return { matched, onlyClubee, onlyWebsite };
+    return { matched, onlyClubee: rest, onlyWebsite, suggested };
   }
 
   function dialogShell() {
@@ -91,6 +129,7 @@
       <p class="clubee-sync-meta">${(payload.members || []).length} Mitglieder aus Clubee (gelesen ${at}) · ${plan.matched.length} zugeordnet · ${plan.matched.length - changed.length} ohne Änderung</p>
       <h3>Änderungen übernehmen (${changed.length})</h3>
       ${changed.length ? `<label class="clubee-sync-all"><input type="checkbox" data-all="upd" checked> alle</label><ul class="clubee-sync-list">${changed.map((r, i) => `<li><label><input type="checkbox" data-upd="${i}" checked><span><strong>${esc(r.member.first_name)} ${esc(r.member.last_name)}</strong><small>${r.changes.map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Alles aktuell.</p>`}
+      ${plan.suggested.length ? `<h3>Wahrscheinlich dieselbe Person (${plan.suggested.length})</h3><p class="clubee-sync-hint">Ähnlicher Name in Clubee und auf der Website – angehakt = verknüpfen (der Name auf der Website bleibt).</p><label class="clubee-sync-all"><input type="checkbox" data-all="sug" checked> alle</label><ul class="clubee-sync-list">${plan.suggested.map((r, i) => `<li><label><input type="checkbox" data-sug="${i}" checked><span><strong>${esc(r.member.first_name)} ${esc(r.member.last_name)}</strong><small>${r.changes.map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : ""}
       <h3>Nur in Clubee (${plan.onlyClubee.length})</h3>
       ${plan.onlyClubee.length ? `<p class="clubee-sync-hint">Auf der Website anlegen (Status „pending“) oder ignorieren (z. B. ehemalige Spieler).</p><ul class="clubee-sync-list">${plan.onlyClubee.map((c, i) => `<li><label><input type="checkbox" data-new="${i}"><span><strong>${esc(c.firstName)} ${esc(c.lastName)}</strong><small>${[c.licence ? `Lizenz ${c.licence.status}${c.licence.expires ? " bis " + fmt(c.licence.expires) : ""}` : "keine Lizenz", c.email].filter(Boolean).map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
       <h3>Nur auf der Website (${plan.onlyWebsite.length})</h3>
@@ -114,7 +153,8 @@
     };
     dlg.querySelector("[data-apply]").onclick = async (event) => {
       const btn = event.currentTarget;
-      const updates = [...dlg.querySelectorAll("[data-upd]:checked")].map((b) => changed[Number(b.dataset.upd)]);
+      const updates = [...dlg.querySelectorAll("[data-upd]:checked")].map((b) => changed[Number(b.dataset.upd)])
+        .concat([...dlg.querySelectorAll("[data-sug]:checked")].map((b) => plan.suggested[Number(b.dataset.sug)]));
       const creates = [...dlg.querySelectorAll("[data-new]:checked")].map((b) => plan.onlyClubee[Number(b.dataset.new)]);
       if (!updates.length && !creates.length) { status.textContent = "Nichts ausgewählt."; return; }
       if (!window.confirm(`${updates.length} Mitglied(er) aktualisieren und ${creates.length} neu anlegen?`)) return;
