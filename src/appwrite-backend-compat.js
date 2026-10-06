@@ -202,6 +202,7 @@
       sponsor_communications: String(config.sponsorCommunicationsTableId || "sponsor_communications"),
       equipment_inventory: String(config.equipmentTableId || "equipment_inventory"),
       diagnostics_logs: String(config.diagnosticsTableId || "diagnostics_logs"),
+      member_private: String(config.memberPrivateTableId || "member_private"),
       hall_of_fame: String(config.hallOfFameTableId || "hall_of_fame")
     };
   }
@@ -441,6 +442,88 @@
     return sanitized;
   }
 
+  // Private member data (IBAN, mandate date, internal notes) lives in member_private, which only
+  // admins/finance (Appwrite labels) can read. The members table stays readable for all signed-in
+  // users (roster). Reads merge the private row into each member; writes split it off.
+  const PRIVATE_MEMBER_FIELDS = ["iban", "mandate_date", "notes"];
+  let memberPrivateDenied = false;
+
+  function takePrivateFields(row) {
+    const part = {};
+    if (!row || typeof row !== "object") return part;
+    PRIVATE_MEMBER_FIELDS.forEach(function (key) {
+      const camel = key === "mandate_date" ? "mandateDate" : key;
+      const source = hasOwn(row, key) ? key : (hasOwn(row, camel) ? camel : null);
+      if (!source) return;
+      const value = row[source];
+      part[key] = value === undefined || value === null || String(value).trim() === "" ? null : String(value).trim();
+      delete row[key];
+      delete row[camel];
+    });
+    return part;
+  }
+
+  function isPermissionError(error) {
+    const code = Number(error && error.code);
+    return code === 401 || code === 403 || code === 404;
+  }
+
+  async function mergeMemberPrivate(rows) {
+    if (memberPrivateDenied || !rows.length) return;
+    let response;
+    try {
+      response = await dbApi.listRows(String(config.databaseId), tableIdFor("member_private"), [], 5000);
+    } catch (error) {
+      if (isPermissionError(error)) { memberPrivateDenied = true; return; }
+      throw error;
+    }
+    const byId = new Map((response.rows || response.documents || []).map(function (row) { return [String(row.$id), row]; }));
+    rows.forEach(function (row) {
+      const extra = byId.get(String(row.$id || row.id));
+      if (!extra) return;
+      PRIVATE_MEMBER_FIELDS.forEach(function (key) { row[key] = extra[key] === null || extra[key] === undefined ? (key === "mandate_date" ? null : "") : extra[key]; });
+    });
+  }
+
+  async function writeMemberPrivate(rowId, part) {
+    const tableId = tableIdFor("member_private");
+    try {
+      return await dbApi.updateRow(String(config.databaseId), tableId, rowId, part);
+    } catch (error) {
+      if (Number(error && error.code) === 404) {
+        try { return await dbApi.createRow(String(config.databaseId), tableId, rowId, Object.assign({ member_id: rowId }, part)); }
+        catch (createError) { if (isPermissionError(createError)) throw new Error("Keine Berechtigung, IBAN/Notizen zu speichern (nur Admin/Finance)."); throw createError; }
+      }
+      if (isPermissionError(error)) throw new Error("Keine Berechtigung, IBAN/Notizen zu speichern (nur Admin/Finance).");
+      throw error;
+    }
+  }
+
+  /** Stores the private part of each saved member row and clears legacy copies in members. */
+  async function saveMemberPrivateParts(rows, partForIndex) {
+    const membersTableId = tableIdFor("members");
+    for (let index = 0; index < rows.length; index += 1) {
+      let part = partForIndex(index);
+      if (!part || !Object.keys(part).length) continue;
+      const row = rows[index];
+      const rowId = String(row.$id || row.id);
+      // Carry over legacy values still stored in members (not yet migrated) before clearing them.
+      const full = Object.assign({}, part);
+      const legacy = {};
+      PRIVATE_MEMBER_FIELDS.forEach(function (key) {
+        if (row[key] === undefined || row[key] === null || String(row[key]) === "") return;
+        legacy[key] = null;
+        if (!hasOwn(full, key)) full[key] = String(row[key]);
+      });
+      part = full;
+      await writeMemberPrivate(rowId, part);
+      if (Object.keys(legacy).length) {
+        try { await dbApi.updateRow(String(config.databaseId), membersTableId, rowId, legacy); } catch (error) { /* legacy column may already be gone */ }
+      }
+      Object.keys(part).forEach(function (key) { row[key] = part[key] === null ? (key === "mandate_date" ? null : "") : part[key]; });
+    }
+  }
+
   class Builder {
     constructor(tableName) {
       this.tableName = String(tableName || "");
@@ -581,6 +664,10 @@
     async executeInternal() {
       try {
         let data = null;
+        let privateParts = null;
+        if (this.tableName === "members" && (this.action === "insert" || this.action === "update" || this.action === "upsert")) {
+          privateParts = Array.isArray(this.payload) ? this.payload.map(takePrivateFields) : takePrivateFields(this.payload);
+        }
 
         if (this.action === "select") {
           data = await this.fetchRows();
@@ -640,6 +727,7 @@
               ? sanitizeMembersPayload(this.payload || {})
               : sanitizeNonMembersPayload(this.payload || {});
             const rowId = String(row.$id || row.id);
+            if (!Object.keys(payload).length) { updated.push(row); continue; } // only private fields changed
             try {
               const next = await withRateLimitRetry(
                 function () {
@@ -700,12 +788,19 @@
             ? sanitizeMembersPayload(this.payload || {}, { forInsert: !target })
             : sanitizeNonMembersPayload(this.payload || {});
           const requestedDocumentId = String(this.payload?.id || this.payload?.$id || "").trim();
-          const saved = target
+          const saved = target && !Object.keys(payload).length
+            ? target
+            : target
             ? await dbApi.updateRow(String(config.databaseId), tableId, String(target.$id || target.id), payload)
             : await dbApi.createRow(String(config.databaseId), tableId, requestedDocumentId || ID.unique(), payload);
           data = [this.tableName === "members" ? normalizeMembersRow(saved) : Object.assign({}, saved, { id: saved.$id || saved.id })];
         } else {
           data = [];
+        }
+
+        if (this.tableName === "members" && Array.isArray(data) && data.length) {
+          if (this.action === "select") await mergeMemberPrivate(data);
+          else if (privateParts) await saveMemberPrivateParts(data, (index) => (Array.isArray(privateParts) ? privateParts[index] : privateParts));
         }
 
         if (this.singleMode === "single") {

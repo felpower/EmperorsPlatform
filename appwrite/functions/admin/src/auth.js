@@ -10,7 +10,8 @@ const DEFAULT_TASK_ROLES = {
   passSync: ["admin"],
   sepaExport: ["admin", "finance_admin"],
   tryoutEmail: ["admin", "coach"],
-  setPassword: ["self"]
+  setPassword: ["self"],
+  syncAccess: ["admin"]
 };
 
 function taskRoles() {

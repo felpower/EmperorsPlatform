@@ -4968,6 +4968,10 @@ Uni Wien Emperors`;
           const insertRows = (roles.length ? roles : ["player"]).map((role) => ({ profile_id: profileId, role_code: role }));
           const insertResponse = await backendClient.from("member_roles").insert(insertRows);
           if (insertResponse.error) throw insertResponse.error;
+          // Role-based table permissions use Appwrite user labels - refresh them after a role change.
+          const accessFunctionId = String(APPWRITE_CONFIG?.adminFunctionId || APPWRITE_CONFIG?.inviteFunctionId || "emperors-admin").trim();
+          executeAppwriteFunction(accessFunctionId, { task: "syncAccess" }, { maxPolls: 20, pollDelayMs: 400 })
+            .catch((error) => recordDiagnostic("warn", "access", "Could not sync access labels.", summarizeDiagnosticError(error)));
         }
       } else {
         const insertResponse = await backendClient.from("members").insert([patch]).select("id, profile_id").single();

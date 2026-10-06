@@ -4,6 +4,7 @@
 //   task "sepaExport"   SEPA XML export                           (was SepaExport)
 //   task "tryoutEmail"  emails to tryout registrants              (was TryoutEmail)
 //   task "setPassword"  set own password after invite/reset link  (new)
+//   task "syncAccess"   Appwrite user labels from member_roles     (role-based table permissions)
 const { parseBody, applyEnvDefaults } = require("./shared/runtime");
 const { authorize } = require("./auth");
 
@@ -12,7 +13,8 @@ const TASKS = {
   passSync: () => require("./tasks/passSync"),
   sepaExport: () => require("./tasks/sepaExport"),
   tryoutEmail: () => require("./tasks/tryoutEmail"),
-  setPassword: () => require("./tasks/setPassword")
+  setPassword: () => require("./tasks/setPassword"),
+  syncAccess: () => require("./tasks/syncAccess")
 };
 
 // Older frontends send no "task" field - infer it from the payload shape.

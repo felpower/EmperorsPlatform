@@ -194,6 +194,17 @@ module.exports = async ({ req, res, log }) => {
           listAppwriteRecords(feesCollectionId)
         ]);
 
+    // IBAN / mandate date live in member_private (not readable by regular users).
+    if (!(payloadMembers && payloadFees)) {
+      const privateRows = await listAppwriteRecords(String(process.env.APPWRITE_MEMBER_PRIVATE_TABLE_ID || "member_private")).catch(() => []);
+      const privateById = new Map(privateRows.map((row) => [String(row?.$id || "").trim(), row]));
+      memberRows.forEach((member) => {
+        const extra = privateById.get(String(member?.$id || member?.id || "").trim());
+        if (!extra) return;
+        if (extra.iban) member.iban = extra.iban;
+        if (extra.mandate_date) member.mandate_date = extra.mandate_date;
+      });
+    }
     const membersById = new Map(
       memberRows.map((member) => [String(member?.$id || member?.id || "").trim(), member])
     );
