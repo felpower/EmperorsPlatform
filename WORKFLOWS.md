@@ -50,6 +50,13 @@ zuerst den Mailprovider prüfen; es erfolgt keine automatische erneute Aussendun
 Normalbeiträge werden bis Q3 2026 mit 82,50 € und ab Q4 2026 mit 90 € angelegt.
 „Paid Rookie fee“ setzt Beitrag und bezahlten Betrag auf 50 €, auch bei der Sammeländerung.
 Beim Wechsel zurück auf „Paid“ wird der Normalbeitrag des jeweiligen Quartals eingesetzt.
+Unter „Contribution settings“ können Admins Normal- und Rookie-Beitrag ändern und
+das erste gültige Quartal auswählen. Die Werte gelten bis zum nächsten konfigurierten
+Wechsel. Appwrite speichert die Einstellungen in `fee_rates`; Einrichtung:
+`node scripts/setup-fee-rates.mjs`. Bereits vorhandene Beitragszeilen bleiben beim
+Speichern erhalten. Neue Quartale sowie die Auswahl „Paid“ / „Paid Rookie fee“
+nutzen die für das jeweilige Quartal gespeicherten Beträge. In der lokalen Vorschau
+liegen die Einstellungen in `tmp/fee-rates.json`, getrennt von Appwrite.
 
 Feldbezogene Optionen stehen in `src/modules/club-workflows.js`. Mitgliedschaft,
 Beiträge, Spielerpässe, Rollen, Sponsoren, Tryout und Spiele haben jeweils eigene Werte.

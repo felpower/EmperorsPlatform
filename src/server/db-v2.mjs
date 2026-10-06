@@ -1203,7 +1203,7 @@ export async function ensureFeeCoverage() {
   }
 }
 
-export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }) {
+export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }, rates) {
   const normalizedPeriod = normalizePeriodToken(feePeriod);
   if (!normalizedPeriod) {
     throw new Error("Fee period is required.");
@@ -1217,7 +1217,7 @@ export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }) {
   }
 
   const placeholders = normalizedMemberIds.map(() => "?").join(", ");
-  const fixedAmount = feeRules.feeCentsForStatus(normalizedStatus, normalizedPeriod, null);
+  const fixedAmount = feeRules.feeCentsForStatus(normalizedStatus, normalizedPeriod, null, rates);
   const amountSql = fixedAmount === null ? "amount_cents" : String(fixedAmount);
   const paidCentsSql = ["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalizedStatus)
     ? amountSql
@@ -1240,14 +1240,14 @@ export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }) {
   return result?.changes || 0;
 }
 
-export async function updateFeeRecord(feeId, payload) {
+export async function updateFeeRecord(feeId, payload, rates) {
   const normalizedFeeId = Number(feeId);
   if (!Number.isFinite(normalizedFeeId) || normalizedFeeId <= 0) {
     throw new Error("Valid fee id is required.");
   }
 
   const existing = await get(
-    "select id, amount_cents as amountCents, iban from membership_fees where id = ?",
+    "select id, amount_cents as amountCents, fee_period as feePeriod, iban from membership_fees where id = ?",
     [normalizedFeeId]
   );
   if (!existing) {
@@ -1255,7 +1255,7 @@ export async function updateFeeRecord(feeId, payload) {
   }
 
   const status = normalizeFeeStatusForUpdate(payload.status);
-  const amountCents = status === "paid_rookie_fee" ? 5000 : normalizeCurrencyToCents(payload.amount, "Fee amount");
+  const amountCents = status === "paid_rookie_fee" ? feeRules.feeCentsForStatus(status,existing.feePeriod,0,rates) : normalizeCurrencyToCents(payload.amount, "Fee amount");
   let paidCents = normalizeCurrencyToCents(payload.paidAmount, "Paid amount");
 
   if (["paid", "paid_rookie_fee"].includes(status)) {

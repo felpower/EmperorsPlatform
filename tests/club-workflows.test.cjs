@@ -49,3 +49,12 @@ test("fee tariffs change at Q4 2026 and rookie fees remain 50 EUR", () => {
   assert.equal(w.feeCentsForStatus("paid", "Q4_2026", 5000), 9000);
   assert.equal(w.feeCentsForStatus("partial", "Q4_2026", 4500), 4500);
 });
+
+test("editable contribution schedules apply chronologically and keep historical rates", () => {
+  const rates=[...w.DEFAULT_FEE_RATES,{fee_period:"Q2_2027",normal_cents:9500,rookie_cents:5500}];
+  assert.equal(w.standardFeeCents("Q1_2027",rates),9000);
+  assert.equal(w.standardFeeCents("Q2_2027",rates),9500);
+  assert.equal(w.standardFeeCents("Q4_2028",rates),9500);
+  assert.equal(w.feeCentsForStatus("paid_rookie_fee","Q3_2027",9000,rates),5500);
+  assert.equal(w.feeCentsForStatus("paid_rookie_fee","Q3_2026",8250,rates),5000);
+});

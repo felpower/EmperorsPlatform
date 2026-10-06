@@ -387,6 +387,18 @@
       ? window.ClubHubDataClient.createClient()
       : null;
 
+  let feeRates = loadStoredValue("emperors-local-fee-rates", workflows.DEFAULT_FEE_RATES);
+  let feeRatesPeriod = "Q4_2026";
+  async function loadFeeRates() {
+    if (isLocalPreviewMode() || !shouldUseRemoteData() || !backendClient) {
+      const response=await fetch(apiUrl("/api/fee-rates"));const data=await response.json();
+      if(!response.ok)throw Error(data.error||"Could not load contribution settings.");feeRates=data;return;
+    }
+    const result = await backendClient.from("fee_rates").select("*");
+    if (result.error) throw new Error("Contribution settings could not be loaded: " + result.error.message);
+    if (!result.data?.length) throw new Error("Contribution settings have not been configured.");
+    feeRates = result.data;
+  }
   let state = loadState();
   let bootstrapMeta = {
     source: state.source || "demo",
@@ -4296,6 +4308,7 @@ Uni Wien Emperors`;
       try { window.sessionStorage.setItem(repairKey, "1"); } catch (_) { /* storage unavailable */ }
     }
 
+    await loadFeeRates();
     const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
     const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
@@ -4605,6 +4618,7 @@ Uni Wien Emperors`;
 
   async function loadBootstrapDataWithCache() {
     const signedIn = Boolean(backendClient && authState.user);
+    if (signedIn) await loadFeeRates();
     const cached = getCacheWithTTL(bootstrapCacheKey(), signedIn ? CACHE_TTL : PUBLIC_CACHE_TTL);
     if (cached) {
       applyBootstrap(cached);
@@ -4669,6 +4683,7 @@ Uni Wien Emperors`;
   }
 
   async function loadBootstrapData() {
+    if (isLocalPreviewMode()) await loadFeeRates();
     // Pure Appwrite only
     if (backendClient && authState.user) {
       await loadRemoteBootstrap();
@@ -4695,6 +4710,7 @@ Uni Wien Emperors`;
   async function loadLocalBootstrap() {
     // Pure Appwrite - no local API
     if (isLocalPreviewMode()) {
+      hasBootstrapped = true;
       authState.status = "Local preview mode active. Role controls are available in the header.";
       bootstrapMeta = {
         source: state.source || "demo",
@@ -5197,7 +5213,7 @@ Uni Wien Emperors`;
 
       const rows = query.data || [];
       for (const row of rows) {
-        const amountCents = workflows.feeCentsForStatus(normalizedStatus, feePeriod, Number(row.amount_cents || 0));
+        const amountCents = workflows.feeCentsForStatus(normalizedStatus, feePeriod, Number(row.amount_cents || 0), feeRates);
         let paidCents = Number(row.paid_cents || 0);
         if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
         else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
@@ -5233,7 +5249,7 @@ Uni Wien Emperors`;
 
     try {
       const normalizedStatus = normalizeFeeStatusValue(status);
-      const amountCents = normalizedStatus === "paid_rookie_fee" ? 5000 : Math.max(0, Math.round(Number(amount || 0) * 100));
+      const amountCents = normalizedStatus === "paid_rookie_fee" ? workflows.feeCentsForStatus(normalizedStatus, state.fees.find((row) => String(row.id) === String(feeId))?.feePeriod, 0, feeRates) : Math.max(0, Math.round(Number(amount || 0) * 100));
       let paidCents = Math.max(0, Math.round(Number(paidAmount || 0) * 100));
 
       if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
@@ -5348,7 +5364,7 @@ Uni Wien Emperors`;
       member_id: member.id,
       season_label: normalizedPeriod.split("_")[1] || "",
       fee_period: normalizedPeriod,
-      amount_cents: workflows.standardFeeCents(normalizedPeriod),
+      amount_cents: workflows.standardFeeCents(normalizedPeriod, feeRates),
       paid_cents: 0,
       status: "not_collected",
       iban: String(memberIban(member.id) || "").trim() || null,
@@ -9299,6 +9315,16 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
           <button id="toggle-fee-edit-mode" class="ghost-button" type="button" ${selectedFeePeriod === "all" ? "disabled" : ""}>${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
         </div>
       </div>
+      <article class="card" style="margin-bottom:14px;">
+        <details><summary>Contribution settings</summary>
+          <form id="fee-rates-form" class="grid two-up" style="margin-top:12px;">
+            <label class="filter-label">Effective from quarter<select name="effectivePeriod" id="fee-rates-period">${Array.from(new Set([...feeRates.map(row=>row.fee_period),...periods,...Array.from({length:12},(_,i)=>shiftQuarterToken(currentQuarterToken(),i))])).sort((a,b)=>a.split('_')[1]-b.split('_')[1]||a.localeCompare(b)).map(period=>`<option value="${period}" ${period===feeRatesPeriod?"selected":""}>${formatFeePeriod(period)}</option>`).join("")}</select></label>
+            <label class="filter-label">Normaler Beitrag (€)<input name="normalAmount" type="number" min="0.01" max="10000" step="0.01" required value="${(workflows.feeRatesForPeriod(feeRatesPeriod,feeRates).normal_cents/100).toFixed(2)}"></label>
+            <label class="filter-label">Rookie-Beitrag (€)<input name="rookieAmount" type="number" min="0.01" max="10000" step="0.01" required value="${(workflows.feeRatesForPeriod(feeRatesPeriod,feeRates).rookie_cents/100).toFixed(2)}"></label>
+            <div><p class="meta">Applies from this quarter until the next configured change. Existing fee rows are preserved; new quarters and payment status selections use these amounts.</p><button class="primary-button" type="submit">Save contribution rates</button></div>
+          </form>
+        </details>
+      </article>
       ${isSyncing ? `<p class="meta" style="display:flex; align-items:center; gap:8px; margin-bottom: 10px;"><span class="auth-spinner" aria-hidden="true"></span>Refreshing finance data…</p>` : ""}
       <div class="grid two-up">
         <article class="card finance-summary-card">
@@ -12757,6 +12783,26 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindFeeQuarterActions() {
+    const ratesPeriod = document.getElementById("fee-rates-period");
+    if (ratesPeriod) ratesPeriod.onchange = () => { feeRatesPeriod = ratesPeriod.value; mount(); switchView("fees"); };
+    const ratesForm = document.getElementById("fee-rates-form");
+    if (ratesForm) ratesForm.onsubmit = async (event) => {
+      event.preventDefault();
+      try {
+        const period = ratesForm.elements.effectivePeriod.value;
+        const cents = name => { const value=Number(ratesForm.elements[name].value);if (!Number.isFinite(value)||value<=0||value>10000||Math.abs(value*100-Math.round(value*100))>0.000001) throw Error("Enter a positive amount with at most two decimal places.");return Math.round(value*100); };
+        const data={fee_period:period,normal_cents:cents("normalAmount"),rookie_cents:cents("rookieAmount")};
+        if (!isLocalPreviewMode() && shouldUseRemoteData()) {
+          const result=await backendClient.from("fee_rates").upsert({id:period,...data},{onConflict:"id"});
+          if (result.error) throw result.error;
+          await loadFeeRates();
+        } else {
+          const response=await fetch(apiUrl("/api/fee-rates"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+          const result=await response.json();if(!response.ok)throw Error(result.error||"Could not save contribution rates.");feeRates=result;saveStoredValue("emperors-local-fee-rates",feeRates);
+        }
+        workspaceUi.message("Contribution rates saved from " + formatFeePeriod(period) + ". Existing payments were preserved.","success");mount();switchView("fees");
+      } catch(error) {workspaceUi.message(error.message,"error");}
+    }
     const deleteButton = document.getElementById("delete-quarter-button");
     if (deleteButton) {
       deleteButton.onclick = async function () {
@@ -13270,7 +13316,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         if (!amountInput || !paidInput) return;
         if (["paid", "paid_rookie_fee"].includes(select.value)) {
           const fee = state.fees.find((row) => String(row.id) === feeId);
-          amountInput.value = (workflows.feeCentsForStatus(select.value, fee?.feePeriod, Number(amountInput.value) * 100) / 100).toFixed(2);
+          amountInput.value = (workflows.feeCentsForStatus(select.value, fee?.feePeriod, Number(amountInput.value) * 100, feeRates) / 100).toFixed(2);
           paidInput.value = amountInput.value;
           paidInput.readOnly = true;
         } else {
@@ -13286,7 +13332,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         const paidInput = document.querySelector(`.fee-row-paid[data-fee-id="${feeId}"]`);
         if (!statusSelect || !paidInput) return;
         if (["paid", "paid_rookie_fee"].includes(statusSelect.value)) {
-          if (statusSelect.value === "paid_rookie_fee") amountInput.value = "50.00";
+          if (statusSelect.value === "paid_rookie_fee") amountInput.value = (workflows.feeCentsForStatus(statusSelect.value, state.fees.find(row => String(row.id) === feeId)?.feePeriod, 0, feeRates) / 100).toFixed(2);
           paidInput.value = amountInput.value;
         }
       };

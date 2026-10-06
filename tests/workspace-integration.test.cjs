@@ -27,7 +27,8 @@ async function app() {
       tryoutOptions: tryoutSubmissionStatusOptions, tryoutLabel, renderTryouts:renderTryoutSubmissionsPanel,
       memberAction:renderTryoutMemberAction, updateStatus:updateTryoutSubmissionStatus,
       setBackend: value => {backendClient=value;reloadBootstrapAfterWrite=async()=>{};},
-      bulkFees:updateFeeStatusesBulkViaRemote, updateFee:updateFeeRowViaRemote
+      bulkFees:updateFeeStatusesBulkViaRemote, updateFee:updateFeeRowViaRemote,
+      setRates:value=>{feeRates=value;}, renderFees
     }; return;
   })();`;
   await vm.runInContext(source.slice(0, cut) + boot, context, { timeout: 3000 });
@@ -46,6 +47,13 @@ test("single and bulk rookie payments persist both amounts as 50 EUR; regular bu
   assert.equal(writes[2].amount_cents,9000);assert.equal(writes[2].paid_cents,9000);
   await a.bulkFees({feePeriod:"Q3_2026",status:"paid",memberIds:["member"]});
   assert.equal(writes[3].amount_cents,8250);
+  a.setRates([...w.DEFAULT_FEE_RATES,{fee_period:"Q2_2027",normal_cents:9500,rookie_cents:5500}]);
+  a.setData({fees:[{id:"fee",feePeriod:"Q2_2027",amount:95}]});
+  await a.updateFee({feeId:"fee",status:"paid_rookie_fee",amount:95,paidAmount:95});
+  assert.equal(writes[4].amount_cents,5500);assert.equal(writes[4].paid_cents,5500);
+  await a.bulkFees({feePeriod:"Q3_2027",status:"paid",memberIds:["member"]});
+  assert.equal(writes[5].amount_cents,9500);
+  assert.match(a.renderFees(),/Normaler Beitrag/);assert.match(a.renderFees(),/Rookie-Beitrag/);
 });
 
 test("admin overview excludes waived fees and inactive/deleted pass alerts", async () => {

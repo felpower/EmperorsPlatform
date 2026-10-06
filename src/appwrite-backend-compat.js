@@ -193,6 +193,7 @@
       player_passes: String(config.playerPassesTableId || "player_passes"),
       membership_fees: String(config.membershipFeesTableId || "membership_fees"),
       league_games: String(config.leagueGamesTableId || "league_games"),
+      fee_rates: "fee_rates",
       events: String(config.eventsTableId || "events"),
       event_recipients: String(config.eventRecipientsTableId || "event_recipients"),
       invites: String(config.invitesTableId || "invites"),

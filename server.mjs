@@ -760,9 +760,32 @@ async function updateMemberViaAppwriteAdmin(memberId, input) {
   }
 }
 
+async function readLocalFeeRates() {
+  try {return JSON.parse(await fs.readFile(path.join(__dirname,"tmp","fee-rates.json"),"utf8"));}
+  catch(error) {if(error.code==="ENOENT")return feeRules.DEFAULT_FEE_RATES;throw error;}
+}
+async function readRemoteFeeRates() {
+  const rows=await appwriteListCollectionDocuments("fee_rates");
+  if(!rows.length)throw Error("Contribution settings are missing.");return rows;
+}
+app.get("/api/fee-rates",async(req,res)=>{
+  try {if(!requireLocalDb(res,"Contribution settings"))return;res.json(await readLocalFeeRates());}
+  catch(error){res.status(400).json({error:error.message});}
+});
+app.put("/api/fee-rates",express.json({limit:"16kb"}),async(req,res)=>{
+  try {
+    if(!requireLocalDb(res,"Contribution settings"))return;
+    const data=req.body;
+    if(!/^Q[1-4]_\d{4}$/.test(data.fee_period)||![data.normal_cents,data.rookie_cents].every(v=>Number.isInteger(v)&&v>0&&v<=1000000))throw Error("Invalid contribution settings.");
+    const rates=[...(await readLocalFeeRates()).filter(row=>row.fee_period!==data.fee_period),{fee_period:data.fee_period,normal_cents:data.normal_cents,rookie_cents:data.rookie_cents}];
+    await fs.mkdir(path.join(__dirname,"tmp"),{recursive:true});await fs.writeFile(path.join(__dirname,"tmp","fee-rates.json"),JSON.stringify(rates));res.json(rates);
+  } catch(error){res.status(400).json({error:error.message});}
+});
 async function updateFeeRecordViaAppwriteAdmin(feeId, input) {
   const normalizedStatus = normalizeFeeStatusServer(input?.status);
-  const amountCents = normalizedStatus === "paid_rookie_fee" ? 5000 : Math.max(0, Math.round(Number(input?.amount || 0) * 100));
+  const rates=await readRemoteFeeRates();
+  const current=await appwriteAdminRequest("/databases/"+APPWRITE_DATABASE_ID+"/collections/"+APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID+"/documents/"+encodeURIComponent(feeId));
+  const amountCents = normalizedStatus === "paid_rookie_fee" ? feeRules.feeCentsForStatus(normalizedStatus,current.fee_period,0,rates) : Math.max(0, Math.round(Number(input?.amount || 0) * 100));
   let paidCents = Math.max(0, Math.round(Number(input?.paidAmount || 0) * 100));
 
   if (["paid", "paid_rookie_fee"].includes(normalizedStatus)) paidCents = amountCents;
@@ -792,11 +815,12 @@ async function bulkUpdateFeeStatusViaAppwriteAdmin(input) {
   if (!feePeriod) throw new Error("feePeriod is required.");
   if (!memberIds.size) throw new Error("Select at least one member.");
 
+  const rates=await readRemoteFeeRates();
   const rows = await appwriteListCollectionDocuments(APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID);
   const targets = rows.filter((row) => String(row?.fee_period || "") === feePeriod && memberIds.has(String(row?.member_id || "")));
 
   for (const row of targets) {
-    const amountCents = feeRules.feeCentsForStatus(normalizedStatus, feePeriod, Math.max(0, Number(row?.amount_cents || 0)));
+    const amountCents = feeRules.feeCentsForStatus(normalizedStatus, feePeriod, Math.max(0, Number(row?.amount_cents || 0)), rates);
     let paidCents = Math.max(0, Number(row?.paid_cents || 0));
     if (["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalizedStatus)) paidCents = amountCents;
     else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
@@ -1296,7 +1320,7 @@ app.post("/api/fees/bulk-status", async (req, res) => {
   try {
     if (isLocalDbEnabled()) {
       if (!requireLocalDb(res, "Fees bulk status API")) return;
-      await localDbApi.bulkUpdateFeeStatus(req.body || {});
+      await localDbApi.bulkUpdateFeeStatus(req.body || {}, await readLocalFeeRates());
       res.json(await localDbApi.getBootstrapData());
       return;
     }
@@ -1317,7 +1341,7 @@ app.put("/api/fees/:feeId", async (req, res) => {
   try {
     if (isLocalDbEnabled()) {
       if (!requireLocalDb(res, "Fee update API")) return;
-      await localDbApi.updateFeeRecord(Number(req.params.feeId), req.body || {});
+      await localDbApi.updateFeeRecord(Number(req.params.feeId), req.body || {}, await readLocalFeeRates());
       res.json(await localDbApi.getBootstrapData());
       return;
     }

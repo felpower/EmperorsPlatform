@@ -79,6 +79,8 @@ async function main() {
   console.log(`Target periods: ${targetPeriods.join(", ")}`);
   if (DRY_RUN) console.log("Running in DRY_RUN mode — no writes will be made.");
 
+  const rates = await listAllRows("fee_rates");
+  if(!rates.length)throw Error("Contribution settings are missing.");
   const members = await listAllRows(MEMBERS_COLLECTION_ID);
   const eligibleMembers = members.filter((member) => {
     const status = String(member.membership_status || member.membershipStatus || "").trim().toLowerCase();
@@ -116,7 +118,7 @@ async function main() {
         member_id: memberId,
         season_label: period.split("_")[1],
         fee_period: period,
-        amount_cents: feeRules.standardFeeCents(period),
+        amount_cents: feeRules.standardFeeCents(period,rates),
         paid_cents: 0,
         status: "not_collected",
         iban: memberIban,

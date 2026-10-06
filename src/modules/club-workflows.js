@@ -1,12 +1,18 @@
 (function (root) {
   "use strict";
-  function standardFeeCents(period) {
-    const match = /^Q([1-4])_(\d{4})$/.exec(String(period || ""));
-    return match && (Number(match[2]) > 2026 || (Number(match[2]) === 2026 && Number(match[1]) >= 4)) ? 9000 : 8250;
+  const DEFAULT_FEE_RATES = [{fee_period:"Q1_2020",normal_cents:8250,rookie_cents:5000},{fee_period:"Q4_2026",normal_cents:9000,rookie_cents:5000}];
+  function feeRatesForPeriod(period, rates = DEFAULT_FEE_RATES) {
+    const order = value => { const m=/^Q([1-4])_(\d{4})$/.exec(String(value || ""));return m ? Number(m[2])*4+Number(m[1]) : -1; };
+    const target=order(period);
+    const rows=rates.filter(row=>order(row.fee_period)<=target).sort((a,b)=>order(b.fee_period)-order(a.fee_period));
+    const row=rows[0] || rates.slice().sort((a,b)=>order(a.fee_period)-order(b.fee_period))[0];
+    if (!row || !Number.isInteger(row.normal_cents) || !Number.isInteger(row.rookie_cents)) throw Error("Contribution rates are missing or invalid.");
+    return row;
   }
-  function feeCentsForStatus(status, period, currentCents) {
-    if (status === "paid_rookie_fee") return 5000;
-    if (status === "paid") return standardFeeCents(period);
+  function standardFeeCents(period, rates) { return feeRatesForPeriod(period,rates).normal_cents; }
+  function feeCentsForStatus(status, period, currentCents, rates) {
+    if (status === "paid_rookie_fee") return feeRatesForPeriod(period,rates).rookie_cents;
+    if (status === "paid") return standardFeeCents(period,rates);
     return currentCents;
   }
   const MEMBERSHIP_STATUSES = Object.freeze(["active", "pending", "inactive", "exited", "coach"]);
@@ -134,7 +140,7 @@
     }
     return { succeeded, failed };
   }
-  const api = { standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, calendar, batch };
+  const api = { DEFAULT_FEE_RATES, feeRatesForPeriod, standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, calendar, batch };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else { root.ClubHubModules = root.ClubHubModules || {}; root.ClubHubModules.workflows = api; }
 })(typeof window !== "undefined" ? window : globalThis);
