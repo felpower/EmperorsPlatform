@@ -181,7 +181,7 @@
     "JKU Astros": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/jku-astros-6632_1773399167_small.png",
     "Med Uni Wien Serpents": "https://clubee-websites-prod.s3.eu-central-1.amazonaws.com/17538/logo/med-uni-wien-serpents-7756_1773399129_small.png"
   };
-  const LEAGUE_GAMES_SNAPSHOT = [
+  const LEGACY_LEAGUE_GAMES = [
     { id: "g-2025-10-11-emperors-beez", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T16:15:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "BOKU Beez" }, homeScore: 37, awayScore: 14 },
     { id: "g-2025-10-11-tigers-robots", stage: "Spieltag 1", subtitle: "", startsAt: "2025-10-11T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien", homeTeam: { name: "WU Tigers" }, awayTeam: { name: "TU Robots" }, homeScore: 23, awayScore: 14 },
     { id: "g-2025-10-18-astros-beez", stage: "Spieltag 2", subtitle: "", startsAt: "2025-10-18T14:15:00+02:00", venueName: "Footballzentrum Ravelin", venueCity: "Wien", homeTeam: { name: "JKU Astros" }, awayTeam: { name: "BOKU Beez" }, homeScore: 7, awayScore: 37 },
@@ -201,7 +201,7 @@
     { id: "g-2026-06-27-third-place", stage: "3rd place", subtitle: "ACSL Spiel um Platz 3", startsAt: "2026-06-27T14:00:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/@acslatsports/streams",  homeTeam: { name: "UNI-Wien Emperors" }, awayTeam: { name: "TU Robots" }, homeScore: 7, awayScore: 24 },
     { id: "g-2026-06-27-final", stage: "Final", subtitle: "ACSL Summer Bowl", startsAt: "2026-06-27T17:30:00+02:00", venueName: "Hohe Warte Stadion", venueCity: "Wien",streamLink:"https://www.youtube.com/watch?v=N7P02GYQ7bQ",  homeTeam: { name: "WU Tigers" }, awayTeam: { name: "JKU Astros" }, homeScore: 45, awayScore: 7 }
   ];
-  const LEAGUE_STANDINGS_SNAPSHOT = {
+  const LEGACY_LEAGUE_STANDINGS = {
     label: "RegularSeason 2025/26",
     updatedAt: "2026-05-16",
     rows: [
@@ -213,6 +213,48 @@
       { rank: 6, teamName: "Med Uni Wien Serpents", wins: 1, losses: 3, draws: 0, pointsFor: 21, pointsAgainst: 116, pct: 0.25, diff: -95 },
     ]
   };
+
+
+  const CURRENT_LEAGUE_GAMES = [
+    {"id": "g-2627-1", "stage": "ACSL Football Season Opener 2026", "subtitle": "ACSL Football Season Opener 2026", "startsAt": "2026-10-18", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "BOKU Beez"}, "awayTeam": {"name": "Med Uni Wien Serpents"}},
+    {"id": "g-2627-2", "stage": "ACSL Football Season Opener 2026", "subtitle": "ACSL Football Season Opener 2026", "startsAt": "2026-10-18", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "UNI-Wien Emperors"}, "awayTeam": {"name": "JKU Astros"}},
+    {"id": "g-2627-3", "stage": "ACSL Football Season Opener 2026", "subtitle": "ACSL Football Season Opener 2026", "startsAt": "2026-10-18", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "TU Robots"}, "awayTeam": {"name": "WU Tigers"}},
+    {"id": "g-2627-4", "stage": "ACSL Football Neon Lights Gameday", "subtitle": "ACSL Football Neon Lights Gameday", "startsAt": "2026-10-24", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "BOKU Beez"}, "awayTeam": {"name": "TU Robots"}},
+    {"id": "g-2627-5", "stage": "ACSL Football Neon Lights Gameday", "subtitle": "ACSL Football Neon Lights Gameday", "startsAt": "2026-10-24", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "WU Tigers"}, "awayTeam": {"name": "UNI-Wien Emperors"}},
+    {"id": "g-2627-6", "stage": "Saturday Night Lights in Linz", "subtitle": "Saturday Night Lights in Linz", "startsAt": "2026-11-07", "dateOnly": true, "venueName": "ABC Platz", "venueCity": "Linz", "homeTeam": {"name": "JKU Astros"}, "awayTeam": {"name": "Med Uni Wien Serpents"}},
+    {"id": "g-2627-7", "stage": "Friday Night Lights in Linz", "subtitle": "Friday Night Lights in Linz", "startsAt": "2027-04-16", "dateOnly": true, "venueName": "ABC Platz", "venueCity": "Linz", "homeTeam": {"name": "JKU Astros"}, "awayTeam": {"name": "TU Robots"}},
+    {"id": "g-2627-8", "stage": "ACSL Football Spring Opener", "subtitle": "ACSL Football Spring Opener", "startsAt": "2027-04-17", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "Med Uni Wien Serpents"}, "awayTeam": {"name": "UNI-Wien Emperors"}},
+    {"id": "g-2627-9", "stage": "ACSL Football Spring Opener", "subtitle": "ACSL Football Spring Opener", "startsAt": "2027-04-17", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "WU Tigers"}, "awayTeam": {"name": "BOKU Beez"}},
+    {"id": "g-2627-10", "stage": "ACSL Awareness Gameday", "subtitle": "ACSL Awareness Gameday", "startsAt": "2027-05-08", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "Med Uni Wien Serpents"}, "awayTeam": {"name": "TU Robots"}},
+    {"id": "g-2627-11", "stage": "ACSL Awareness Gameday", "subtitle": "ACSL Awareness Gameday", "startsAt": "2027-05-08", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "UNI-Wien Emperors"}, "awayTeam": {"name": "BOKU Beez"}},
+    {"id": "g-2627-12", "stage": "Friday Night Lights in Linz", "subtitle": "Friday Night Lights in Linz", "startsAt": "2027-05-14", "dateOnly": true, "venueName": "ABC Platz", "venueCity": "Linz", "homeTeam": {"name": "JKU Astros"}, "awayTeam": {"name": "WU Tigers"}},
+    {"id": "g-2627-13", "stage": "ACSL Football Season Ending Gameday", "subtitle": "ACSL Football Season Ending Gameday", "startsAt": "2027-05-22", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "WU Tigers"}, "awayTeam": {"name": "Med Uni Wien Serpents"}},
+    {"id": "g-2627-14", "stage": "ACSL Football Season Ending Gameday", "subtitle": "ACSL Football Season Ending Gameday", "startsAt": "2027-05-22", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "BOKU Beez"}, "awayTeam": {"name": "JKU Astros"}},
+    {"id": "g-2627-15", "stage": "ACSL Football Season Ending Gameday", "subtitle": "ACSL Football Season Ending Gameday", "startsAt": "2027-05-22", "dateOnly": true, "venueName": "Ravelin", "venueCity": "Wien", "homeTeam": {"name": "TU Robots"}, "awayTeam": {"name": "UNI-Wien Emperors"}},
+    {"id": "g-2627-16", "stage": "Semifinals", "subtitle": "ACSL Football Semifinals", "startsAt": "2027-06-05", "dateOnly": true, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "1st Seed"}, "awayTeam": {"name": "4th Seed"}},
+    {"id": "g-2627-17", "stage": "Semifinals", "subtitle": "ACSL Football Semifinals", "startsAt": "2027-06-05", "dateOnly": true, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "2nd Seed"}, "awayTeam": {"name": "3rd Seed"}},
+    {"id": "g-2627-18", "stage": "Final", "subtitle": "ACSL Summer Bowl 2027", "startsAt": "2027-06-26", "dateOnly": true, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "Winner Semifinal 1"}, "awayTeam": {"name": "Winner Semifinal 2"}}
+  ];
+  const CURRENT_LEAGUE_STANDINGS = { label: "Regular season 2026/27 – season starts 18 October", updatedAt: "", rows: [] };
+  let selectedGamesSeason = "2026/27";
+  let LEAGUE_GAMES_SNAPSHOT = CURRENT_LEAGUE_GAMES;
+  let LEAGUE_STANDINGS_SNAPSHOT = CURRENT_LEAGUE_STANDINGS;
+  let activeGamesRoute = false;
+
+  function selectGamesSeason(season) {
+    selectedGamesSeason = season === "2025/26" ? "2025/26" : "2026/27";
+    LEAGUE_GAMES_SNAPSHOT = selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_GAMES : CURRENT_LEAGUE_GAMES;
+    LEAGUE_STANDINGS_SNAPSHOT = selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_STANDINGS : CURRENT_LEAGUE_STANDINGS;
+  }
+
+  function formatGameDate(game) {
+    if (!game?.dateOnly) return formatDateTime(game?.startsAt || "");
+    return new Date(`${game.startsAt}T12:00:00`).toLocaleDateString("de-AT") + " · Kickoff TBA";
+  }
+
+  function renderCurrentSeasonPlayoffs() {
+    return `<section class="setup-card"><h3>Playoffs 2026/27</h3><p class="meta">The top four teams qualify. Seeds will be determined by the regular season.</p><div class="games-stage-list">${CURRENT_LEAGUE_GAMES.slice(15).map((game) => `<article class="playoff-match-card"><h3>${escapeHtml(game.subtitle)}</h3><p>${escapeHtml(formatGameDate(game))} · Venue TBA</p><div class="playoff-team-stack">${renderBracketTeamSlot({teamName: game.homeTeam.name})}${renderBracketTeamSlot({teamName: game.awayTeam.name})}</div></article>`).join("")}</div></section>`;
+  }
 
   const STORAGE_KEY = "emperors-local-state-v3";
   const DIAGNOSTICS_LOG_KEY = "emperors-diagnostics-log-v1";
@@ -9557,7 +9599,7 @@ Uni Wien Emperors`;
       return {
         id: String(game.id || ""),
         startsAt: String(game.startsAt || ""),
-        displayDateTime: formatDateTime(game.startsAt),
+        displayDateTime: formatGameDate(game),
         phase: String(game.phase || "").trim() || "Game",
         opponentName: String(opponent?.name || "Opponent").trim(),
         opponentLogo: String(opponent?.logo || "").trim(),
@@ -9688,7 +9730,7 @@ Uni Wien Emperors`;
           stage: String(game.stage || "Games").trim(),
           subtitle: String(game.subtitle || "").trim(),
           startsAt: String(game.startsAt || ""),
-          displayDateTime: formatDateTime(game.startsAt),
+          displayDateTime: formatGameDate(game),
           homeTeamName,
           awayTeamName,
           homeTeamLogo: teamLogoUrl(homeTeamName),
@@ -10077,7 +10119,7 @@ Uni Wien Emperors`;
     const games = buildLeagueGamesViewModel();
     const standings = buildRankedStandingsViewModel();
     const filterOptions = gameFilterTeamOptions();
-    const bracket = buildPlayoffBracketViewModel();
+    const bracket = selectedGamesSeason === "2025/26" ? buildPlayoffBracketViewModel() : null;
     if (!games.length) {
       return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
     }
@@ -10096,7 +10138,7 @@ Uni Wien Emperors`;
       <div class="section-head">
       <div>
         <p class="eyebrow">Austrian College Sports League</p>
-        <h3>Games & results</h3>
+        <h3>Games & results · ${escapeHtml(selectedGamesSeason)}</h3><label>Season <select id="games-season-select"><option value="2026/27" ${selectedGamesSeason === "2026/27" ? "selected" : ""}>2026/27</option><option value="2025/26" ${selectedGamesSeason === "2025/26" ? "selected" : ""}>2025/26</option></select></label>
       </div>
       <div class="pill-row" style="margin-top:0;">
         ${plainPill(`${games.length} games shown`)}
@@ -10104,7 +10146,7 @@ Uni Wien Emperors`;
         ${plainPill(`${upcomingGames.length} upcoming`)}
       </div>
       </div>
-      ${renderGamesStandingsPanel(standings)}
+      ${selectedGamesSeason === "2025/26" ? renderGamesStandingsPanel(standings) : `<article class="setup-card" style="margin-bottom:14px;"><h3>Season 2026/27 starts on 18 October 2026</h3><p class="meta">Standings will appear after the first results. Kickoff times have not been announced.</p></article>`}
       <article class="setup-card" style="margin-bottom: 14px;">
         <div class="button-row equipment-sheet-tabs" style="margin-bottom: 12px;">
           <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" data-games-view-mode="schedule" data-no-toast="true">Regular season</button>
@@ -10118,11 +10160,11 @@ Uni Wien Emperors`;
         `).join("")}
         </div>
         ` : `
-        <p class="meta" style="margin:0;">Wildcard pairings are prefilled from the current standings, and semifinal slots already follow the current seeding logic.</p>
+        <p class="meta" style="margin:0;">${selectedGamesSeason === "2025/26" ? "Archived playoff results from 2025/26." : "Semifinals: 1st vs 4th seed and 2nd vs 3rd seed. Final: winners of both semifinals."}</p>
         `}
-        <p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>
+        ${selectedGamesSeason === "2025/26" ? `<p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>` : `<p class="meta" style="margin:12px 0 0;">Source: ACSL season schedule 2026/27. Kickoff times and playoff venues TBA.</p>`}
       </article>
-      ${selectedGamesViewMode === "playoffs" ? renderPlayoffBracket(bracket) : ""}
+      ${selectedGamesViewMode === "playoffs" ? (selectedGamesSeason === "2025/26" ? renderPlayoffBracket(bracket) : renderCurrentSeasonPlayoffs()) : ""}
       ${selectedGamesViewMode === "schedule" ? `
       <div class="games-stage-stack">
       ${stageOrder.map((stage) => `
@@ -10181,6 +10223,9 @@ Uni Wien Emperors`;
   }
 
   function bindGamesActions() {
+    const seasonSelect = document.getElementById("games-season-select");
+    if (seasonSelect) seasonSelect.onchange = () => { selectGamesSeason(seasonSelect.value); mount(); };
+
     document.querySelectorAll("[data-games-view-mode]").forEach((button) => {
       button.addEventListener("click", () => {
         saveSelectedGamesViewMode(String(button.dataset.gamesViewMode || "schedule"));
@@ -11237,6 +11282,13 @@ Uni Wien Emperors`;
 
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
+    if (finalView === "events" && !activeGamesRoute) {
+      selectGamesSeason("2026/27");
+      selectedGamesViewMode = "schedule";
+      const section = document.getElementById("events");
+      if (section) { section.innerHTML = renderGamesBoard(); bindGamesActions(); }
+    }
+    activeGamesRoute = finalView === "events";
     updateSeoMeta(finalView);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
