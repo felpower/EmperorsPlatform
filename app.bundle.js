@@ -4114,9 +4114,29 @@ Uni Wien Emperors`;
     }, index);
   }
 
+  // Signed-out visitors get the roster from the emperors-public function ("roster" task), which
+  // returns only public fields - the members table itself is not readable without login.
+  async function loadPublicRosterViaFunction() {
+    const functionId = String(APPWRITE_CONFIG?.publicFunctionId || "").trim();
+    if (!functionId) throw new Error("Public function is not configured.");
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await executeAppwriteFunction(functionId, { task: "roster" }, { maxPolls: 20, pollDelayMs: 400 });
+        if (Array.isArray(result?.body?.members)) return result.body.members;
+        lastError = new Error("Roster response was empty.");
+      } catch (error) {
+        lastError = error; // first call after a cold start can time out - retry once
+      }
+    }
+    throw lastError;
+  }
+
   async function loadPublicRosterBootstrap() {
     if (!backendClient) return;
-    let response = await backendClient
+    let functionRows = null;
+    try { functionRows = await loadPublicRosterViaFunction(); } catch (error) { console.warn("Public roster function failed, trying direct read.", error); }
+    let response = functionRows ? { data: functionRows, error: null } : await backendClient
       .from("members")
       .select("id, first_name, last_name, display_name, positions_json, roles_json, rosterImage, jersey_number, membership_status, deleted_at");
     if (response.error && /rosterImage/i.test(String(response.error?.message || ""))) {
