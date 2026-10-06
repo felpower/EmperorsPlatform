@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Emperors ⇄ Clubee",
+  "version": "1.0.0",
+  "description": "Gleicht die Clubee-Mitgliederliste mit emperors.page ab und füllt neue Clubee-Mitglieder vor.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://clubee.com/*"],
+      "js": ["clubee.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://emperors.page/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["emperors.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

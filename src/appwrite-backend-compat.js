@@ -445,14 +445,14 @@
   // Private member data (IBAN, mandate date, internal notes) lives in member_private, which only
   // admins/finance (Appwrite labels) can read. The members table stays readable for all signed-in
   // users (roster). Reads merge the private row into each member; writes split it off.
-  const PRIVATE_MEMBER_FIELDS = ["iban", "mandate_date", "notes"];
+  const PRIVATE_MEMBER_FIELDS = ["iban", "mandate_date", "notes", "clubee_id", "birthday", "phone", "clubee_synced_at"];
   let memberPrivateDenied = false;
 
   function takePrivateFields(row) {
     const part = {};
     if (!row || typeof row !== "object") return part;
     PRIVATE_MEMBER_FIELDS.forEach(function (key) {
-      const camel = key === "mandate_date" ? "mandateDate" : key;
+      const camel = key.replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
       const source = hasOwn(row, key) ? key : (hasOwn(row, camel) ? camel : null);
       if (!source) return;
       const value = row[source];

@@ -4380,7 +4380,8 @@ Uni Wien Emperors`;
         active: String(row.membership_status || "") === "active",
         rookieSeason: parseRookieSeason(row.rookie_season),
         rookie: parseRookieSeason(row.rookie_season) === currentSeasonStartYear(),
-        inClubee: Boolean(row.profile_id),
+        inClubee: Boolean(row.clubee_id),
+        clubeeId: String(row.clubee_id || ""),
         membershipStatus: row.membership_status || "pending",
         membershipActiveSince: normalizeToIsoDate(row.membership_active_since || ""),
         membershipPendingSince: normalizeToIsoDate(row.membership_pending_since || ""),
@@ -4517,6 +4518,11 @@ Uni Wien Emperors`;
 
   // After this browser changed data: reload once and store the fresh snapshot.
   // Inside withBatchedBootstrapReload() the reload waits until the whole batch is done.
+  // Hook for modules (e.g. src/modules/clubee-sync.js) to refresh data after they wrote something.
+  window.ClubHubApp = Object.assign(window.ClubHubApp || {}, {
+    reloadData: () => reloadBootstrapAfterWrite().then(() => mount()).catch(() => undefined)
+  });
+
   async function reloadBootstrapAfterWrite() {
     invalidateCache(bootstrapCacheKey());
     if (bootstrapWriteBatchDepth > 0) {
