@@ -1,0 +1,17 @@
+name: Check club workflows
+
+on:
+  push:
+    paths: ["app.bundle.js", "index.html", "workspace.css", "src/**", "tests/**", "appwrite/functions/admin/**", "scripts/setup-club-workflows.mjs", "package.json", ".github/workflows/check-workflows.yml"]
+  pull_request:
+    paths: ["app.bundle.js", "index.html", "workspace.css", "src/**", "tests/**", "appwrite/functions/admin/**", "scripts/setup-club-workflows.mjs", "package.json", ".github/workflows/check-workflows.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run test:workflows

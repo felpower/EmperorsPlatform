@@ -14,7 +14,8 @@ const TASKS = {
   sepaExport: () => require("./tasks/sepaExport"),
   tryoutEmail: () => require("./tasks/tryoutEmail"),
   setPassword: () => require("./tasks/setPassword"),
-  syncAccess: () => require("./tasks/syncAccess")
+  syncAccess: () => require("./tasks/syncAccess"),
+  tryoutConvert: () => require("./tasks/tryoutConvert")
 };
 
 // Older frontends send no "task" field - infer it from the payload shape.

@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "start": "node server.mjs",
+    "test:workflows": "node --test tests/club-workflows.test.cjs tests/tryout-tasks.test.cjs tests/workspace-integration.test.cjs",
+    "setup:workflows": "node scripts/setup-club-workflows.mjs",
     "setup:appwrite": "node scripts/setup-appwrite-collections.mjs",
     "auth:create-user": "node scripts/create-appwrite-auth-user.mjs",
     "smoke:appwrite:auth-members": "node scripts/appwrite-smoke-test.mjs",

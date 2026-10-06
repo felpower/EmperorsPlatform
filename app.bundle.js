@@ -4,6 +4,17 @@
   const cacheModule = moduleRegistry.cache || null;
   const ibanModule = moduleRegistry.iban || null;
   const profileFinanceModule = moduleRegistry.profileFinance || null;
+  const workflows = moduleRegistry.workflows;
+  const workspaceUi = moduleRegistry.workspaceUi;
+  let leagueGamesStore = null;
+  let dashboardLoadAttempted = false;
+  let dashboardLoading = false;
+  let dashboardError = "";
+  let sponsorDueOnly = false;
+  let tryoutStatusRetryIds = [];
+  let tryoutEmailRetryRecipients = [];
+  let tryoutEmailRetryMessage = null;
+  let tryoutWorkflowBusy = false;
 
   const demoData = {
     source: "demo",
@@ -242,18 +253,19 @@
   let activeGamesRoute = false;
 
   function selectGamesSeason(season) {
-    selectedGamesSeason = season === "2025/26" ? "2025/26" : "2026/27";
-    LEAGUE_GAMES_SNAPSHOT = selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_GAMES : CURRENT_LEAGUE_GAMES;
-    LEAGUE_STANDINGS_SNAPSHOT = selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_STANDINGS : CURRENT_LEAGUE_STANDINGS;
+    const available = leagueGamesStore?.seasons() || ["2026/27", "2025/26"];
+    selectedGamesSeason = available.includes(season) ? season : (available[0] || "2026/27");
+    LEAGUE_GAMES_SNAPSHOT = leagueGamesStore ? leagueGamesStore.rows().filter((game) => game.season === selectedGamesSeason) : (selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_GAMES : CURRENT_LEAGUE_GAMES);
+    LEAGUE_STANDINGS_SNAPSHOT = selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_STANDINGS : { label: "Regular season " + selectedGamesSeason, rows: workflows.standings(LEAGUE_GAMES_SNAPSHOT), updatedAt: workflows.localDate() };
   }
 
   function formatGameDate(game) {
-    if (!game?.dateOnly) return formatDateTime(game?.startsAt || "");
+    if (!game?.dateOnly) return new Intl.DateTimeFormat("de-AT", {timeZone:"Europe/Vienna", dateStyle:"short", timeStyle:"short"}).format(new Date(game?.startsAt));
     return new Date(`${game.startsAt}T12:00:00`).toLocaleDateString("de-AT") + " · Kickoff TBA";
   }
 
   function renderCurrentSeasonPlayoffs() {
-    return `<section class="setup-card"><h3>Playoffs 2026/27</h3><p class="meta">The top four teams qualify. Seeds will be determined by the regular season.</p><div class="games-stage-list">${CURRENT_LEAGUE_GAMES.slice(15).map((game) => `<article class="playoff-match-card"><h3>${escapeHtml(game.subtitle)}</h3><p>${escapeHtml(formatGameDate(game))} · Venue TBA</p><div class="playoff-team-stack">${renderBracketTeamSlot({teamName: game.homeTeam.name})}${renderBracketTeamSlot({teamName: game.awayTeam.name})}</div></article>`).join("")}</div></section>`;
+    return `<section class="setup-card"><h3>Playoffs ${escapeHtml(selectedGamesSeason)}</h3><p class="meta">The top four teams qualify. Seeds will be determined by the regular season.</p><div class="games-stage-list">${LEAGUE_GAMES_SNAPSHOT.filter((game) => workflows.roundFor(game) !== "regular").map((game) => `<article class="playoff-match-card"><h3>${escapeHtml(game.subtitle)}</h3><p>${escapeHtml(formatGameDate(game))} · ${escapeHtml([game.venueName, game.venueCity].filter(Boolean).join(" · ") || "Venue TBA")}</p><div class="playoff-team-stack">${renderBracketTeamSlot({teamName: game.homeTeam.name, score: game.homeScore})}${renderBracketTeamSlot({teamName: game.awayTeam.name, score: game.awayScore})}</div></article>`).join("")}</div></section>`;
   }
 
   const STORAGE_KEY = "emperors-local-state-v3";
@@ -280,7 +292,7 @@
   ];
   const INVITE_ROLE_OPTIONS = ["admin", "coach", "finance_admin", "tech_admin", "player", "staff"];
   // "coach" = coach/staff without club membership (coaches who also play stay "active").
-  const MEMBERSHIP_STATUSES = ["active", "pending", "inactive", "exited", "coach"];
+  const MEMBERSHIP_STATUSES = workflows.MEMBERSHIP_STATUSES;
   const MEMBERSHIP_STATUS_LABELS = { coach: "Coach (no membership)" };
   // Membership status dates: [camelCase member field, Appwrite column, status it belongs to]
   const MEMBERSHIP_DATE_FIELDS = [
@@ -290,7 +302,7 @@
     ["membershipInactiveUntil", "membership_inactive_until", "inactive"],
     ["membershipExitedOn", "membership_exited_on", "exited"]
   ];
-  const FEE_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"];
+  const FEE_STATUSES = workflows.FEE_STATUSES;
   const FEE_PAID_STATUSES = ["paid", "paid_rookie_fee", "paid_with_fee"];
   const FEE_ZERO_PAID_STATUSES = ["pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"];
   const FEE_COLLECTIBLE_STATUSES = [...FEE_PAID_STATUSES, "partial", "pending", "not_collected", "deferred"];
@@ -343,7 +355,7 @@
   ];
   const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "sponsors", "members", "fees", "user", "passes", "organization", "sponsor-outreach", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
-  const memberRoleOptions = ["player", "coach", "admin", "finance_admin", "tech_admin", "staff"];
+  const memberRoleOptions = workflows.MEMBER_ROLES;
   const memberPositionOptions = [
     "QB", "RB", "FB", "WR", "TE", "OL", "DL", "LB", "DB", "CB", "S", "K", "P",
     "OT", "OG", "C", "DT", "DE", "NT", "ILB", "OLB", "Coach", "Staff"
@@ -383,6 +395,7 @@
   let currentAccessRole = loadStoredValue(ACCESS_KEY, "admin");
   let selectedFeePeriod = loadStoredValue(FEE_FILTER_KEY, "latest");
   let selectedFeeStatuses = loadStatusFilter();
+  let feeOpenBalancesOnly = false;
   let feeEditMode = false;
   let feeInlineEditId = null;
   let memberMergeMode = false;
@@ -395,17 +408,7 @@
   let selectedUserMemberId = "";
   let profileRouteMode = "member";
   let organizationDialogEditingId = "";
-  const sponsorOutreachStatuses = [
-    { value: "research", label: "Research" },
-    { value: "planned", label: "Planned" },
-    { value: "contacted", label: "Contacted" },
-    { value: "follow_up", label: "Follow-up" },
-    { value: "negotiating", label: "In discussion" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "declined", label: "Declined" },
-    { value: "no_response", label: "No response" },
-    { value: "postponed", label: "Follow up later" }
-  ];
+  const sponsorOutreachStatuses = workflows.SPONSOR_STATUSES;
   let sponsorOutreachRows = [];
   let sponsorOutreachMessages = [];
   let sponsorOutreachLoading = false;
@@ -529,6 +532,8 @@ Uni Wien Emperors`;
   let equipmentStatus = "";
   let isSyncing = false;
   let hasBootstrapped = false;
+  let bootstrapLoadError = "";
+  let bootstrapRetrying = false;
   const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   const PUBLIC_CACHE_TTL = 30 * 60 * 1000; // 30 minutes for signed-out visitors (roster rarely changes)
   // Every row Appwrite returns counts as a database read (Free plan: 500k/month), so the
@@ -1605,6 +1610,7 @@ Uni Wien Emperors`;
   function showToast(message, tone = "info") {
     const text = String(message || "").trim();
     if (!text) return;
+    if (tone === "error" || tone === "success") workspaceUi?.message(text, tone);
     const toastStack = ensureToastStack();
     const toast = document.createElement("div");
     toast.className = `toast toast-${tone}`;
@@ -1644,10 +1650,7 @@ Uni Wien Emperors`;
           button.classList.remove("is-clicked");
         }, 180);
 
-        const label = buttonLabelForToast(button);
-        if (label) {
-          showToast(label, button.classList.contains("danger-button") ? "error" : "info");
-        }
+
       },
       true
     );
@@ -1712,7 +1715,8 @@ Uni Wien Emperors`;
         statuses: Array.isArray(parsed?.statuses) ? parsed.statuses.filter(Boolean) : [],
         positions: Array.isArray(parsed?.positions) ? parsed.positions.filter(Boolean) : [],
         membership: Array.isArray(parsed?.membership) && parsed.membership.length ? parsed.membership.filter(Boolean) : ["active"],
-        showDeleted: Boolean(parsed?.showDeleted)
+        showDeleted: Boolean(parsed?.showDeleted),
+        needsReviewOnly: Boolean(parsed?.needsReviewOnly)
       };
     } catch {
       return {
@@ -1898,6 +1902,12 @@ Uni Wien Emperors`;
   function syncAuthSession(session) {
     authState.ready = true;
     authState.loading = false;
+    if (String(authState.user?.id || "") !== String(session?.user?.id || "")) {
+      dashboardLoadAttempted = false; dashboardError = ""; tryoutSubmissions = []; tryoutSubmissionsLoadedAt = 0;
+      tryoutEmailResult = null; tryoutStatusRetryIds = []; tryoutEmailRetryRecipients = []; tryoutEmailRetryMessage = null;
+      sponsorOutreachRows = []; sponsorOutreachLoaded = false;
+      restoreTryoutEmailOutcome(session?.user?.id || "local");
+    }
     authState.user = session?.user || null;
     authState.roles = extractUserRoles(session?.user);
     if (authState.user) {
@@ -3827,6 +3837,7 @@ Uni Wien Emperors`;
   }
 
   function ensureValidFeeFilter() {
+    if (selectedFeePeriod === "all") return;
     const periods = getFeePeriods();
     if (!periods.length) {
       selectedFeePeriod = "";
@@ -3844,6 +3855,7 @@ Uni Wien Emperors`;
   }
 
   function currentFeePeriod() {
+    if (selectedFeePeriod === "all") return "";
     const periods = getFeePeriods();
     if (!periods.length) return "";
     return periods.includes(selectedFeePeriod) ? selectedFeePeriod : periods[0];
@@ -3887,7 +3899,7 @@ Uni Wien Emperors`;
       positions: Array.from(new Set([...memberPositionOptions, ...state.members.flatMap((member) => member.positions || [])].filter(Boolean))).sort(),
       roles: Array.from(new Set([...memberRoleOptions, ...state.members.flatMap((member) => member.roles || [])].filter(Boolean))).sort(),
       membership: Array.from(new Set([...MEMBERSHIP_STATUSES, ...state.members.map((member) => member.membershipStatus)].filter(Boolean))).sort(),
-      passStatuses: ["valid", "missing", "expired"]
+      passStatuses: workflows.PASS_STATUSES
     };
   }
 
@@ -3932,7 +3944,7 @@ Uni Wien Emperors`;
     const includeDeleted = currentAccessRole === "admin" && Boolean(passFilters.showDeleted);
     const playerMembers = state.members.filter((member) => (member.roles || []).includes("player") && (includeDeleted || !member.deletedAt));
     return {
-      statuses: ["valid", "missing", "expired"],
+      statuses: workflows.PASS_STATUSES,
       positions: Array.from(new Set([...memberPositionOptions, ...playerMembers.flatMap((member) => member.positions || [])].filter(Boolean))).sort(),
       membership: Array.from(new Set([...MEMBERSHIP_STATUSES, ...playerMembers.map((member) => member.membershipStatus)].filter(Boolean))).sort()
     };
@@ -3941,6 +3953,7 @@ Uni Wien Emperors`;
   function filteredPassMembers() {
     const includeDeleted = currentAccessRole === "admin" && Boolean(passFilters.showDeleted);
     return state.members.filter((member) => {
+      if (passFilters.needsReviewOnly && !dashboardPassMembers().some((row) => row.id === member.id)) return false;
       if (!(member.roles || []).includes("player")) {
         return false;
       }
@@ -4029,6 +4042,7 @@ Uni Wien Emperors`;
     if (selectedFeeStatuses.length) {
       rows = rows.filter((fee) => selectedFeeStatuses.includes(fee.status));
     }
+    if (feeOpenBalancesOnly) rows = rows.filter((fee) => Math.max(Number(fee.amount || 0) - Number(fee.paidAmount || 0), 0) > 0 && !memberById(fee.memberId)?.deletedAt);
     return rows;
   }
 
@@ -4640,6 +4654,7 @@ Uni Wien Emperors`;
   async function backgroundLoadData() {
     try {
       isSyncing = true;
+      mount();
       renderHeroNotice(); // Update syncing indicator
       await loadBootstrapDataWithCache();
       await loadEquipmentDataWithCache();
@@ -4671,6 +4686,7 @@ Uni Wien Emperors`;
         permissionsModel: state.permissionsModel || demoData.permissionsModel
       };
       ensureValidFeeFilter();
+      if (selectedFeePeriod === "all") { feeEditMode = false; feeInlineEditId = null; }
     } else {
       await loadLocalBootstrap();
     }
@@ -5271,13 +5287,17 @@ Uni Wien Emperors`;
     overlay.id = "blocking-progress-overlay";
     overlay.className = "blocking-progress-overlay";
     overlay.innerHTML = `
-      <div class="blocking-progress-card">
+      <div class="blocking-progress-card" role="status" aria-live="polite" tabindex="-1"><span class="work-spinner" aria-hidden="true"></span>
         <p>${escapeHtml(message)}</p>
         <p class="blocking-progress-counter" id="blocking-progress-counter">0</p>
         <p class="meta" id="blocking-progress-note"></p>
       </div>
     `;
     document.body.appendChild(overlay);
+    document.querySelectorAll(".app-shell, #menu-toggle").forEach((element) => {
+      if (!element.inert) { element.inert = true; element.dataset.workInert = "true"; }
+    });
+    overlay.querySelector(".blocking-progress-card")?.focus();
   }
 
   function updateBlockingProgress(done, total, info) {
@@ -5300,6 +5320,7 @@ Uni Wien Emperors`;
   function hideBlockingProgress() {
     const overlay = document.getElementById("blocking-progress-overlay");
     if (overlay) overlay.remove();
+    document.querySelectorAll('[data-work-inert="true"]').forEach((element) => { element.inert = false; delete element.dataset.workInert; });
   }
 
   function missingFeeMembersForQuarter(period) {
@@ -5860,6 +5881,279 @@ Uni Wien Emperors`;
     });
   }
 
+  let gamesLoadAttempted = false;
+
+  function enumOptions(options, selected, label = statusLabel) {
+    return options.map((option) => {
+      const value = typeof option === "string" ? option : option.value;
+      const text = typeof option === "string" ? label(option) : option.label;
+      return `<option value="${escapeAttribute(value)}" ${String(selected || "") === value ? "selected" : ""}>${escapeHtml(text)}</option>`;
+    }).join("");
+  }
+
+  function dashboardFeeRows() {
+    return state.fees.filter((fee) => FEE_COLLECTIBLE_STATUSES.includes(fee.status) && !FEE_PAID_STATUSES.includes(fee.status)
+      && Math.max(Number(fee.amount || 0) - Number(fee.paidAmount || 0), 0) > 0
+      && !memberById(fee.memberId)?.deletedAt);
+  }
+
+  function dashboardPassMembers() {
+    return state.members.filter((member) => !member.deletedAt && member.membershipStatus === "active"
+      && (member.roles || []).includes("player")
+      && (["expiring", "expired", "missing", "pending"].includes(member.passStatus) || isPassExpiringSoon(member.passExpiry)));
+  }
+
+  async function loadAdminDashboard(force = false) {
+    if (currentAccessRole !== "admin" || dashboardLoading || (dashboardLoadAttempted && !force)) return;
+    dashboardLoadAttempted = true;
+    dashboardLoading = true;
+    dashboardError = "";
+    mount();
+    try {
+      const results = await Promise.allSettled([
+        loadTryoutSubmissions(true),
+        (async () => {
+          if (!authState.user || !backendClient || sponsorOutreachLoaded) return;
+          const response = await backendClient.from("sponsor_outreach").select("*");
+          if (response.error) throw response.error;
+          sponsorOutreachRows = response.data.map((row) => ({ ...row, id: row.id || row.$id }));
+        })()
+      ]);
+      dashboardError = results.filter((item) => item.status === "rejected").map((item) => item.reason.message).join("; ");
+      if (!tryoutSubmissionsLoadedAt) dashboardError += ` ${tryoutSubmissionsStatus}`;
+    } finally {
+      dashboardLoading = false;
+      mount();
+    }
+  }
+
+  function renderAdminDashboard() {
+    const fees = dashboardFeeRows();
+    const passes = dashboardPassMembers();
+    const today = workflows.localDate();
+    const followups = sponsorOutreachRows.filter((row) => sponsorDateValue(row.next_follow_up_at)
+      && sponsorDateValue(row.next_follow_up_at) <= today && !["confirmed", "declined"].includes(row.status));
+    const fresh = tryoutSubmissions.filter((row) => row.status === "new");
+    const card = (task, count, label, note) => `<a href="/${task === "tryout" ? "tryout" : task === "fees" ? "fees" : task === "passes" ? "passes" : "sponsor-outreach"}" class="admin-task-card" data-dashboard-task="${task}"><span>${label}</span><strong>${dashboardLoading && ["tryout", "sponsors"].includes(task) ? "…" : count}</strong><span class="meta">${escapeHtml(note)}</span></a>`;
+    return `<div class="section-head"><div><p class="eyebrow">Admin overview</p><h3>Club dashboard</h3><p class="meta">Tasks that need attention across the club.</p></div><button id="dashboard-refresh" class="ghost-button" type="button" ${dashboardLoading ? "disabled" : ""}>Refresh overview</button></div>
+      ${dashboardLoading ? `<div class="work-status" role="status"><span class="work-spinner"></span>Loading registrations and follow-ups…</div>` : ""}
+      ${dashboardError ? `<div class="work-status work-error" role="alert">Some overview data could not be loaded: ${escapeHtml(dashboardError)}</div>` : ""}
+      <div class="admin-task-grid">
+        ${card("tryout", fresh.length, "New tryout registrations", "Review and invite participants")}
+        ${card("fees", fees.length, "Open fee rows", formatMoney(fees.reduce((sum, row) => sum + Math.max(Number(row.amount) - Number(row.paidAmount), 0), 0)) + " across all quarters")}
+        ${card("passes", passes.length, "Player passes to review", "Missing, expired or expiring soon")}
+        ${card("sponsors", followups.length, "Sponsor follow-ups due", "Due today or overdue")}
+      </div>
+      ${leagueGamesStore?.nextCard(EMPERORS_TEAM_NAME) || ""}
+      <div class="grid two-up"><article class="setup-card"><h3>Next sponsor actions</h3><div class="admin-task-list">${followups.slice().sort((a, b) => sponsorDateValue(a.next_follow_up_at).localeCompare(sponsorDateValue(b.next_follow_up_at))).slice(0, 5).map((row) => `<a href="/sponsor-outreach" data-dashboard-task="sponsors"><strong>${escapeHtml(row.company_name)}</strong> · ${escapeHtml(row.next_action || "Follow up")}<span class="meta"> · ${escapeHtml(sponsorDateLabel(row.next_follow_up_at))}</span></a>`).join("") || `<p class="meta">${dashboardLoading ? "Loading…" : dashboardError ? "Follow-up data may be incomplete." : "No follow-ups due."}</p>`}</div></article>
+      <article class="setup-card"><h3>Quick actions</h3><div class="button-row"><a class="ghost-button" href="/members">Members</a><a class="ghost-button" href="/events">Manage games</a><a class="ghost-button" href="/equipment">Equipment</a><a class="ghost-button" href="/user/me">My profile</a></div></article></div>`;
+  }
+
+  function renderTryoutWorkflowTools() {
+    return `<div class="tryout-pipeline">${workflows.TRYOUT_STATUSES.map((option) => `<button type="button" class="ghost-button small-button ${tryoutSubmissionFilters.status === option.value ? "is-active" : ""}" data-tryout-stage="${option.value}">${escapeHtml(option.label)} (${tryoutSubmissions.filter((row) => row.status === option.value).length})</button>`).join("")}</div>
+      <div class="button-row"><button class="ghost-button" type="button" id="tryout-attendance-list">Attendance list (invited / attended)</button><button class="ghost-button" type="button" id="tryout-mark-attended" ${!selectedTryoutSubmissionIds.length || tryoutWorkflowBusy ? "disabled" : ""}>Mark selected as attended</button></div>`;
+  }
+
+  function renderTryoutMemberAction(row) {
+    if (row.linkedMemberId) return `<div class="tryout-workflow-actions"><a class="ghost-button small-button" href="/user/${encodeURIComponent(row.linkedMemberId)}">View member</a></div>`;
+    if (currentAccessRole !== "admin" || !["attended", "joined"].includes(row.status)) return "";
+    return `<div class="tryout-workflow-actions"><button class="ghost-button small-button" type="button" data-tryout-convert="${escapeAttribute(row.id)}" ${tryoutWorkflowBusy ? "disabled" : ""}>Create / link member</button></div>`;
+  }
+
+  function renderTryoutActionResult() {
+    if (!tryoutEmailResult && !tryoutStatusRetryIds.length) return "";
+    return `<article class="setup-card" role="status"><h3>Last email action</h3><p>${Number(tryoutEmailResult?.sentCount || 0)} email(s) sent · ${tryoutEmailRetryRecipients.length} send failure(s) · ${tryoutStatusRetryIds.length} status update(s) need retrying.</p>
+      <p class="meta">Retry status updates only saves the invitation status; it does not send another email.</p>
+      ${(tryoutEmailResult?.failed || []).map((item) => `<p class="work-error">${escapeHtml(item.email)}: ${escapeHtml(item.reason)}</p>`).join("")}
+      ${(tryoutEmailResult?.statusFailures || []).map((item) => `<p class="work-error">Status ${escapeHtml(item.email || item.id)}: ${escapeHtml(item.reason)}</p>`).join("")}
+      <div class="button-row">${tryoutStatusRetryIds.length ? `<button id="tryout-retry-status" type="button" class="primary-button" ${tryoutEmailSending ? "disabled" : ""}>Retry ${tryoutStatusRetryIds.length} status update(s)</button>` : ""}${tryoutEmailRetryRecipients.length ? `<button id="tryout-retry-emails" type="button" class="ghost-button" ${tryoutEmailSending ? "disabled" : ""}>Retry ${tryoutEmailRetryRecipients.length} failed email(s)</button>` : ""}</div></article>`;
+  }
+
+  function saveTryoutEmailOutcome() {
+    try {
+      sessionStorage.setItem(`emperors-tryout-last-email:${authState.user?.id || "local"}`, JSON.stringify({
+        result: tryoutEmailResult, statusRetryIds: tryoutStatusRetryIds, recipients: tryoutEmailRetryRecipients, message: tryoutEmailRetryMessage
+      }));
+    } catch { /* The result remains visible when browser storage is unavailable. */ }
+  }
+
+  function restoreTryoutEmailOutcome(userId) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(`emperors-tryout-last-email:${userId || "local"}`) || "null");
+      if (!saved) return;
+      tryoutEmailResult = saved.result || null;
+      tryoutStatusRetryIds = Array.isArray(saved.statusRetryIds) ? saved.statusRetryIds : [];
+      tryoutEmailRetryRecipients = Array.isArray(saved.recipients) ? saved.recipients : [];
+      tryoutEmailRetryMessage = saved.message || null;
+    } catch { /* Ignore a malformed local result. */ }
+  }
+
+  async function saveInvitedStatuses(ids) {
+    const eligible = ids.filter((id) => {
+      const row = tryoutSubmissions.find((row) => String(row.id) === String(id));
+      return row && ["new", "contacted", "invited"].includes(row.status) && !row.linkedMemberId;
+    });
+    const result = await workflows.batch(eligible, async (id) => {
+      const updated = await updateTryoutSubmissionStatus(id, "invited");
+      tryoutSubmissions = tryoutSubmissions.map((row) => String(row.id) === String(id) ? { ...row, ...updated } : row);
+    }, updateBlockingProgress);
+    tryoutStatusRetryIds = result.failed.map((item) => item.item);
+    if (tryoutEmailResult) tryoutEmailResult.statusFailures = result.failed.map((item) => ({ id: item.item, reason: item.reason }));
+    return result;
+  }
+
+  async function performTryoutEmailSend(recipients, message) {
+    if (tryoutEmailSending) return;
+    tryoutEmailSending = true;
+    showBlockingProgress(`Sending ${recipients.length} tryout email(s)…`);
+    document.getElementById("blocking-progress-counter").textContent = "Waiting for delivery results…";
+    try {
+      const result = await sendTryoutEmailsViaFunction({ ...message, recipients });
+      tryoutEmailResult = result;
+      tryoutEmailRetryMessage = { ...message };
+      const failedEmails = new Set((result.failed || []).map((item) => String(item.email).toLowerCase()));
+      tryoutEmailRetryRecipients = recipients.filter((item) => failedEmails.has(String(item.email).toLowerCase()));
+      // New backend versions save status server-side. Keep compatibility with older deployments.
+      if (Array.isArray(result.statusFailures)) {
+        tryoutStatusRetryIds = result.statusFailures.map((item) => String(item.id)).filter(Boolean);
+        const updated = new Set((result.statusUpdatedIds || []).map(String));
+        tryoutSubmissions = tryoutSubmissions.map((row) => updated.has(String(row.id)) ? { ...row, status: "invited" } : row);
+      } else {
+        document.querySelector(".blocking-progress-card > p").textContent = "Saving invitation statuses…";
+        await saveInvitedStatuses((result.sent || []).map((item) => String(item.id)).filter(Boolean));
+      }
+      selectedTryoutSubmissionIds = [];
+      tryoutSubmissionsStatus = `${result.sentCount} email(s) sent; ${result.failedCount} send failure(s); ${tryoutStatusRetryIds.length} status update(s) failed.`;
+      showToast(tryoutSubmissionsStatus, result.failedCount || tryoutStatusRetryIds.length ? "error" : "success");
+    } catch (error) {
+      tryoutSubmissionsStatus = `${error.message || "Email action failed."} If the connection was interrupted, check the mail provider before sending again.`;
+      showToast(tryoutSubmissionsStatus, "error");
+    } finally {
+      saveTryoutEmailOutcome(); hideBlockingProgress(); tryoutEmailSending = false; mount();
+    }
+  }
+
+  async function convertTryoutToMember(row) {
+    if (currentAccessRole !== "admin") throw new Error("Only admins can create members from registrations.");
+    if (backendClient && authState.user) {
+      const sdk = window.Appwrite || window.appwrite;
+      const client = new sdk.Client().setEndpoint(APPWRITE_CONFIG.endpoint).setProject(APPWRITE_CONFIG.projectId);
+      const api = new sdk.Functions(client);
+      const execution = await api.createExecution(APPWRITE_CONFIG.adminFunctionId, JSON.stringify({ task: "tryoutConvert", submissionId: row.id }), false);
+      const result = JSON.parse(execution.responseBody || "{}");
+      if (!result.ok) throw new Error(result.error || "Member conversion failed.");
+      const next = normalizeTryoutSubmissionRow(result.submission);
+      tryoutSubmissions = tryoutSubmissions.map((item) => item.id === row.id ? next : item);
+      await reloadBootstrapAfterWrite();
+      return;
+    }
+    const matches = state.members.filter((member) => !member.deletedAt && String(member.email || "").toLowerCase() === row.email.toLowerCase());
+    if (matches.length > 1) throw new Error("Multiple members have this email; resolve duplicates first.");
+    if (matches[0] && ["inactive", "exited"].includes(matches[0].membershipStatus)) throw new Error("Reactivate the existing member explicitly before linking.");
+    const memberId = matches[0]?.id || `tryout-${row.id}`.slice(0, 36);
+    if (!matches.length) {
+      state.members.push({ id: memberId, firstName: row.firstName, lastName: row.lastName, name: `${row.firstName} ${row.lastName}`.trim(), email: row.email, roles: ["player"], positions: [], membershipStatus: "pending", passStatus: "missing", notes: `Tryout · Phone: ${row.phone} · Age: ${row.age}` });
+      saveState();
+    }
+    const saved = localTryoutSubmissionRows().map((item) => item.id === row.id ? { ...item, status: "joined", linkedMemberId: memberId } : item);
+    localStorage.setItem(TRYOUT_REGISTRATIONS_STORAGE_KEY, JSON.stringify(saved));
+    tryoutSubmissions = saved;
+  }
+
+  function bindTryoutWorkflowActions() {
+    document.querySelectorAll("[data-tryout-stage]").forEach((button) => button.onclick = () => { tryoutSubmissionFilters.status = button.dataset.tryoutStage; mount(); });
+    const attendance = document.getElementById("tryout-attendance-list");
+    if (attendance) attendance.onclick = () => { tryoutSubmissionFilters = { ...tryoutSubmissionFilters, status: "attendance", search: "", uniWien: "all", experience: "all" }; mount(); };
+    const mark = document.getElementById("tryout-mark-attended");
+    if (mark) mark.onclick = async () => {
+      if (tryoutWorkflowBusy) return;
+      const ids = selectedTryoutSubmissionIds.filter((id) => { const row = tryoutSubmissions.find((row) => row.id === id); return row && ["new", "contacted", "invited", "no_show"].includes(row.status) && !row.linkedMemberId; });
+      if (!ids.length) { showToast("Select participants who have not already attended or joined.", "error"); return; }
+      tryoutWorkflowBusy = true; showBlockingProgress("Saving attendance…");
+      try {
+        const result = await workflows.batch(ids, async (id) => {
+          const updated = await updateTryoutSubmissionStatus(id, "attended");
+          tryoutSubmissions = tryoutSubmissions.map((row) => row.id === id ? updated : row);
+        }, updateBlockingProgress);
+        selectedTryoutSubmissionIds = result.failed.map((item) => item.item);
+        tryoutSubmissionsStatus = `${result.succeeded.length} marked as attended; ${result.failed.length} failed.${result.failed.map((item) => ` ${item.reason}`).join("")}`;
+        showToast(tryoutSubmissionsStatus, result.failed.length ? "error" : "success");
+      } finally { tryoutWorkflowBusy = false; hideBlockingProgress(); mount(); }
+    };
+    document.querySelectorAll("[data-tryout-convert]").forEach((button) => button.onclick = async () => {
+      if (tryoutWorkflowBusy) return;
+      const row = tryoutSubmissions.find((item) => item.id === button.dataset.tryoutConvert);
+      if (!row || !confirm(`Create or link a pending member for ${row.firstName} ${row.lastName}? This does not send an account invitation.`)) return;
+      tryoutWorkflowBusy = true; showBlockingProgress("Creating / linking member…");
+      try { await convertTryoutToMember(row); showToast("Registration linked to member. New members start as Pending; an account invitation can be sent from Members.", "success"); }
+      catch (error) { showToast(error.message, "error"); }
+      finally { tryoutWorkflowBusy = false; hideBlockingProgress(); mount(); }
+    });
+    const retryStatus = document.getElementById("tryout-retry-status");
+    if (retryStatus) retryStatus.onclick = async () => {
+      if (tryoutEmailSending) return;
+      tryoutEmailSending = true; showBlockingProgress("Retrying status updates only…");
+      try { const result = await saveInvitedStatuses(tryoutStatusRetryIds); showToast(`${result.succeeded.length} invitation status(es) saved; ${result.failed.length} failed. No emails resent.`, result.failed.length ? "error" : "success"); }
+      finally { saveTryoutEmailOutcome(); tryoutEmailSending = false; hideBlockingProgress(); mount(); }
+    };
+    const retryEmails = document.getElementById("tryout-retry-emails");
+    if (retryEmails) retryEmails.onclick = async () => {
+      if (!tryoutEmailRetryMessage || !confirm(`Resend the original message to only ${tryoutEmailRetryRecipients.length} failed recipient(s)?`)) return;
+      const previousStatusFailures = tryoutStatusRetryIds.slice();
+      await performTryoutEmailSend(tryoutEmailRetryRecipients.slice(), tryoutEmailRetryMessage);
+      tryoutStatusRetryIds = [...new Set([...previousStatusFailures, ...tryoutStatusRetryIds])];
+      saveTryoutEmailOutcome();
+      mount();
+    };
+  }
+
+  function bindWorkspaceActions() {
+    document.querySelectorAll("[data-bootstrap-retry]").forEach((button) => button.onclick = async () => {
+      if (bootstrapRetrying) return;
+      bootstrapRetrying = true; bootstrapLoadError = ""; showBlockingProgress("Loading club data…");
+      try { await loadBootstrapDataWithCache(); await loadEquipmentDataWithCache(); }
+      catch (error) { bootstrapLoadError = error.message || "Club data could not be loaded."; showToast(bootstrapLoadError, "error"); }
+      finally { bootstrapRetrying = false; hideBlockingProgress(); mount(); }
+    });
+    leagueGamesStore?.bind(selectedGamesSeason, EMPERORS_TEAM_NAME);
+    const refresh = document.getElementById("dashboard-refresh");
+    const openFees = document.getElementById("fee-open-balances-only");
+    if (openFees) openFees.onchange = () => { feeOpenBalancesOnly = openFees.checked; mount(); };
+    if (refresh) refresh.onclick = async () => { await Promise.all([loadAdminDashboard(true), leagueGamesStore.load(true)]); };
+    const review = document.getElementById("pass-needs-review");
+    if (review) review.onchange = () => { passFilters.needsReviewOnly = review.checked; savePassFilters(); mount(); };
+    const due = document.getElementById("sponsor-due-filter");
+    if (due) due.onchange = () => { sponsorDueOnly = due.value === "due"; mount(); };
+    document.querySelectorAll("[data-dashboard-task]").forEach((link) => link.onclick = (event) => {
+      event.preventDefault();
+      const task = link.dataset.dashboardTask;
+      if (task === "tryout") { tryoutSubmissionFilters = { search: "", status: "new", uniWien: "all", experience: "all" }; navigateToRoute("tryout"); }
+      if (task === "sponsors") { sponsorDueOnly = true; sponsorOutreachSearch = ""; sponsorOutreachStatusFilter = "all"; navigateToRoute("sponsor-outreach"); }
+      if (task === "fees") { feeEditMode = false; feeOpenBalancesOnly = true; selectedFeePeriod = "all"; selectedFeeStatuses = FEE_COLLECTIBLE_STATUSES.filter((status) => !FEE_PAID_STATUSES.includes(status)); saveStatusFilter(); navigateToRoute("fees"); }
+      if (task === "passes") { passFilters = { search: "", statuses: [], positions: [], membership: ["active"], from: "", to: "", showDeleted: false, needsReviewOnly: true }; navigateToRoute("passes"); }
+      mount();
+    });
+    // The same reset affordance is available beside each administration filter group.
+    for (const [view, selector] of [["members", ".member-filters-dropdown"], ["fees", ".fee-filters-dropdown"], ["passes", ".pass-filters-dropdown"], ["tryout", ".tryout-admin-filters"], ["sponsor-outreach", ".sponsor-filter-card"], ["equipment", ".equipment-sheet-tabs"]]) {
+      const section = document.getElementById(view);
+      const filter = section?.querySelector(selector);
+      if (!filter || section.querySelector(".work-filter-reset")) continue;
+      const existingReset = section.querySelector(`#clear-${view === "members" ? "member" : view === "fees" ? "fee" : "pass"}-filters`);
+      if (["members", "fees", "passes"].includes(view) && existingReset) { existingReset.textContent = "Reset filters"; continue; }
+      const button = document.createElement("button"); button.type = "button"; button.className = "ghost-button small-button work-filter-reset"; button.textContent = "Reset filters";
+      filter.after(button);
+      button.onclick = () => {
+        if (view === "members") { memberFilters = { positions: [], roles: [], membership: ["active"], passStatuses: [], showDeleted: false, search: "" }; saveMemberFilters(); }
+        if (view === "fees") { feeOpenBalancesOnly = false; selectedFeeStatuses = defaultFeeStatuses(); selectedFeePeriod = "latest"; saveStatusFilter(); }
+        if (view === "passes") { passFilters = { search: "", from: "", to: "", statuses: [], positions: [], membership: ["active"], showDeleted: false, needsReviewOnly: false }; savePassFilters(); }
+        if (view === "tryout") { tryoutSubmissionFilters = { search: "", status: "new", uniWien: "all", experience: "all" }; saveTryoutSubmissionFilters(); }
+        if (view === "sponsor-outreach") { sponsorDueOnly = false; sponsorOutreachSearch = ""; sponsorOutreachStatusFilter = "all"; }
+        if (view === "equipment") { selectedEquipmentSheet = "all"; selectedEquipmentKindFilter = "all"; }
+        mount();
+      };
+    }
+  }
+
   function computeDashboardStats() {
     return {
       activeMembers: state.members.filter((member) => member.membershipStatus === "active").length,
@@ -5912,6 +6206,7 @@ Uni Wien Emperors`;
           <img src="./assets/emperors-mark.png" alt="" class="contact-hero-mark" loading="lazy" />
         </div>
 
+        ${leagueGamesStore?.nextCard(EMPERORS_TEAM_NAME) || ""}
         <nav class="landing-quicklinks" aria-label="Explore the team">
           <a href="/roster">Roster</a>
           <a href="/hall-of-fame">Hall of Fame</a>
@@ -5929,6 +6224,7 @@ Uni Wien Emperors`;
       return renderPublicLanding();
     }
     const userMember = signedInMemberRecord();
+    if (currentAccessRole === "admin") return renderAdminDashboard();
     const quarterToken = currentQuarterToken();
     const quarterFormatted = quarterToken.replace("_", " ");
     const currentQuarterFee = userMember ? memberFeesByPeriod(userMember.id).get(quarterToken) : null;
@@ -6003,6 +6299,7 @@ Uni Wien Emperors`;
     `;
     return `
       <div style="max-width: 760px; display: grid; gap: 12px;">
+        ${leagueGamesStore?.nextCard(EMPERORS_TEAM_NAME) || ""}
         ${athleteStatsHtml}
       </div>
     `;
@@ -6885,6 +7182,7 @@ Uni Wien Emperors`;
       contactConsent: Boolean(tryoutValue(row, "contact_consent", "contactConsent")),
       tryoutCycle: String(tryoutValue(row, "tryout_cycle", "tryoutCycle") || "next").trim(),
       status: String(tryoutValue(row, "status") || "new").trim(),
+      linkedMemberId: String(tryoutValue(row, "linked_member_id", "linkedMemberId") || ""),
       source: String(tryoutValue(row, "source") || "").trim(),
       submittedAt: String(tryoutValue(row, "submitted_at", "submittedAt", "$createdAt") || "").trim()
     };
@@ -6892,37 +7190,9 @@ Uni Wien Emperors`;
 
   function tryoutLabel(kind, value) {
     const normalized = String(value || "").trim();
-    const labels = {
-      uniWienStudent: {
-        yes: "Uni Wien student",
-        accepted_or_starting: "Accepted / starting soon",
-        no: "No",
-        prefer_to_discuss: "Not sure"
-      },
-      footballExperience: {
-        none: "No football experience",
-        flag_football: "Flag Football",
-        tackle_training: "Tackle training",
-        tackle_team: "Tackle team",
-        coaching_or_staff: "Coaching / staff",
-        other: "Other"
-      },
-      preferredPosition: {
-        offense: "Offense",
-        defense: "Defense",
-        special_teams: "Special Teams",
-        line: "Line",
-        skill_position: "Skill position",
-        coach_or_staff: "Coach / staff"
-      },
-      status: {
-        new: "New",
-        contacted: "Contacted",
-        invited: "Invited",
-        archived: "Archived"
-      }
-    };
-    return labels[kind]?.[normalized] || normalized || "-";
+    const catalogs = {status:workflows.TRYOUT_STATUSES, uniWienStudent:workflows.TRYOUT_STUDENT_OPTIONS, footballExperience:workflows.TRYOUT_EXPERIENCE_OPTIONS, preferredPosition:workflows.TRYOUT_POSITION_OPTIONS};
+    if (kind === "status" && normalized === "attendance") return "Attendance list";
+    return catalogs[kind]?.find(option => option.value === normalized)?.label || normalized || "-";
   }
 
   function tryoutReferralRouteSlug() {
@@ -6968,7 +7238,7 @@ Uni Wien Emperors`;
   }
 
   function tryoutSubmissionStatusOptions() {
-    return ["new", "contacted", "invited", "archived"];
+    return workflows.TRYOUT_STATUSES.map((option) => option.value);
   }
 
   function localTryoutSubmissionRows() {
@@ -6980,12 +7250,12 @@ Uni Wien Emperors`;
     }
   }
 
-  async function loadTryoutSubmissions() {
-    if (!canManageTryoutSubmissions()) return;
+  async function loadTryoutSubmissions(stayOnPage = false) {
+    if (!canManageTryoutSubmissions() || tryoutSubmissionsLoading) return;
     tryoutSubmissionsLoading = true;
     tryoutSubmissionsStatus = "Loading tryout submissions...";
     mount();
-    switchView("tryout");
+    if (!stayOnPage) switchView("tryout");
     try {
       if (!backendClient || !authState.user) {
         tryoutSubmissions = localTryoutSubmissionRows();
@@ -7006,7 +7276,7 @@ Uni Wien Emperors`;
     } finally {
       tryoutSubmissionsLoading = false;
       mount();
-      switchView("tryout");
+      if (!stayOnPage) switchView("tryout");
     }
   }
 
@@ -7022,7 +7292,8 @@ Uni Wien Emperors`;
     return sortedTryoutSubmissions().filter((row) => {
       if (uniWien !== "all" && row.uniWienStudent !== uniWien) return false;
       if (experience !== "all" && row.footballExperience !== experience) return false;
-      if (status !== "all" && row.status !== status) return false;
+      if (status === "attendance") { if (!["invited", "attended", "no_show"].includes(row.status)) return false; }
+      else if (status !== "all" && row.status !== status) return false;
       if (!search) return true;
       const haystack = [
         row.firstName,
@@ -7369,7 +7640,7 @@ Uni Wien Emperors`;
   }
 
   async function saveTryoutRegistration(payload) {
-    if (!backendClient) {
+    if (!backendClient || isLocalPreviewMode()) {
       return { localOnly: true, data: saveTryoutRegistrationLocally(payload) };
     }
     const response = await backendClient.from("tryout_registrations").insert([payload]);
@@ -7381,6 +7652,9 @@ Uni Wien Emperors`;
     const normalizedId = String(submissionId || "").trim();
     const normalizedStatus = String(status || "").trim();
     if (!normalizedId) throw new Error("Missing tryout submission id.");
+    if (normalizedStatus === "joined") throw new Error("Use Create / link member to set Became a member.");
+    const currentRow = tryoutSubmissions.find((row) => String(row.id) === normalizedId);
+    if (currentRow?.linkedMemberId) throw new Error("This registration is already linked to a member.");
     if (!tryoutSubmissionStatusOptions().includes(normalizedStatus)) {
       throw new Error("Unsupported tryout submission status.");
     }
@@ -7430,13 +7704,13 @@ Uni Wien Emperors`;
   function renderTryoutSubmissionsPanel() {
     if (!canManageTryoutSubmissions()) return "";
     const filteredRows = filteredTryoutSubmissions();
-    const loaded = Boolean(tryoutSubmissionsLoadedAt);
+    const loaded = Boolean(tryoutSubmissionsLoadedAt) && !tryoutSubmissionsLoading;
     const exportDisabled = filteredRows.length ? "" : "disabled";
     const loadedLabel = loaded
       ? `Last loaded ${new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(tryoutSubmissionsLoadedAt))}`
       : "Not loaded yet";
-    const uniOptions = Array.from(new Set(["yes", "accepted_or_starting", "no", "prefer_to_discuss", ...tryoutSubmissionFilterOptions("uniWienStudent")]));
-    const experienceOptions = Array.from(new Set(["none", "flag_football", "tackle_training", "tackle_team", "coaching_or_staff", "other", ...tryoutSubmissionFilterOptions("footballExperience")]));
+    const uniOptions = Array.from(new Set([...workflows.TRYOUT_STUDENT_OPTIONS.map(option=>option.value), ...tryoutSubmissionFilterOptions("uniWienStudent")]));
+    const experienceOptions = Array.from(new Set([...workflows.TRYOUT_EXPERIENCE_OPTIONS.map(option=>option.value), ...tryoutSubmissionFilterOptions("footballExperience")]));
     const statusOptions = Array.from(new Set([...tryoutSubmissionStatusOptions(), ...tryoutSubmissionFilterOptions("status")]));
     const duplicateInfo = tryoutDuplicateRegistrationInfo();
     const duplicateCounts = duplicateInfo.countsByRow;
@@ -7461,6 +7735,7 @@ Uni Wien Emperors`;
           </div>
         </div>
 
+        ${renderTryoutWorkflowTools()}
         <div class="tryout-admin-filters">
           <label>Search
             <input id="tryout-submission-search" value="${escapeAttribute(tryoutSubmissionFilters.search || "")}" placeholder="Name, email, referral, notes" />
@@ -7483,7 +7758,7 @@ Uni Wien Emperors`;
             id: "tryout-filter-status",
             label: "Status",
             value: tryoutSubmissionFilters.status || "new",
-            options: statusOptions,
+            options: [...statusOptions, "attendance"],
             kind: "status"
           })}
         </div>
@@ -7553,20 +7828,22 @@ Uni Wien Emperors`;
                     </details>
                   </td>
                   <td>
-                    <select class="tryout-status-select" data-tryout-submission-id="${escapeAttribute(row.id)}" aria-label="Tryout status for ${escapeAttribute(`${row.firstName} ${row.lastName}`.trim() || "submission")}">
-                      ${statusOptions.map((status) => `<option value="${escapeAttribute(status)}" ${String(row.status || "new") === status ? "selected" : ""}>${escapeHtml(tryoutLabel("status", status))}</option>`).join("")}
+                    <select class="tryout-status-select" data-tryout-submission-id="${escapeAttribute(row.id)}" ${row.linkedMemberId ? "disabled" : ""} aria-label="Tryout status for ${escapeAttribute(`${row.firstName} ${row.lastName}`.trim() || "submission")}">
+                      ${statusOptions.filter((status) => status !== "joined" || row.status === "joined").map((status) => `<option value="${escapeAttribute(status)}" ${String(row.status || "new") === status ? "selected" : ""}>${escapeHtml(tryoutLabel("status", status))}</option>`).join("")}
                     </select>
+                    ${renderTryoutMemberAction(row)}
                   </td>
                 </tr>
               `).join("") || `
                 <tr><td colspan="8" class="meta">No submissions match the current filters.</td></tr>
               `) : `
-                <tr><td colspan="8" class="meta">Load submissions to review tryout registrations.</td></tr>
+                <tr><td colspan="8" class="meta">${tryoutSubmissionsLoading ? `<span class="work-spinner" aria-hidden="true"></span>Loading submissions…` : "Load submissions to review tryout registrations."}</td></tr>
               `}
             </tbody>
           </table>
         </div>
 
+        ${renderTryoutActionResult()}
         ${loaded ? renderTryoutEmailComposer() : ""}
       </section>
     `;
@@ -7713,10 +7990,7 @@ Uni Wien Emperors`;
             <fieldset class="tryout-fieldset">
               <legend>Are you a student at the University of Vienna?</legend>
               <div class="tryout-choice-grid">
-                <label class="status-check"><input type="radio" name="uniWienStudent" value="yes" required /><span>Yes, Uni Wien student</span></label>
-                <label class="status-check"><input type="radio" name="uniWienStudent" value="accepted_or_starting" /><span>Accepted / starting soon</span></label>
-                <label class="status-check"><input type="radio" name="uniWienStudent" value="no" /><span>No</span></label>
-                <label class="status-check"><input type="radio" name="uniWienStudent" value="prefer_to_discuss" /><span>Not sure yet</span></label>
+${workflows.TRYOUT_STUDENT_OPTIONS.map(option => `<label class="status-check"><input type="radio" name="uniWienStudent" value="${option.value}" required /><span>${escapeHtml(option.label)}</span></label>`).join("")}
               </div>
             </fieldset>
 
@@ -7728,23 +8002,13 @@ Uni Wien Emperors`;
               <label>American Football experience
                 <select name="footballExperience" required>
                   <option value="">Select one</option>
-                  <option value="none">No American Football experience yet</option>
-                  <option value="flag_football">Flag Football</option>
-                  <option value="tackle_training">Tackle Football training</option>
-                  <option value="tackle_team">Played on a tackle team</option>
-                  <option value="coaching_or_staff">Coaching / staff background</option>
-                  <option value="other">Other football experience</option>
+${enumOptions(workflows.TRYOUT_EXPERIENCE_OPTIONS, "")}
                 </select>
               </label>
               <label>Preferred position or role
                 <select name="preferredPosition">
                   <option value="">Undecided</option>
-                  <option value="offense">Offense</option>
-                  <option value="defense">Defense</option>
-                  <option value="special_teams">Special Teams</option>
-                  <option value="line">Line</option>
-                  <option value="skill_position">Skill position</option>
-                  <option value="coach_or_staff">Coach / staff</option>
+${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
                 </select>
               </label>
             </div>
@@ -8740,7 +9004,7 @@ Uni Wien Emperors`;
                 </td>
                 <td>
                   ${adminActionsEnabled && !member.deletedAt
-                    ? `<select class="member-inline-input member-inline-side" data-member-id="${member.id}"><option value="" ${!draftSide ? "selected" : ""}>Not set</option><option value="offense" ${draftSide === "offense" ? "selected" : ""}>Offense</option><option value="defense" ${draftSide === "defense" ? "selected" : ""}>Defense</option><option value="both" ${draftSide === "both" ? "selected" : ""}>Both</option></select>`
+                    ? `<select class="member-inline-input member-inline-side" data-member-id="${member.id}">${enumOptions(workflows.SIDE_OF_BALL, draftSide)}</select>`
                     : escapeHtml(sideOfBallLabel(member.sideOfBall))}
                 </td>
                 <td>
@@ -8757,7 +9021,7 @@ Uni Wien Emperors`;
                   </td>
                   <td>
                     ${adminActionsEnabled && !member.deletedAt
-                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}"><option value="valid" ${draftPassStatus === "valid" ? "selected" : ""}>valid</option><option value="missing" ${draftPassStatus === "missing" ? "selected" : ""}>missing</option><option value="expired" ${draftPassStatus === "expired" ? "selected" : ""}>expired</option></select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(draftPassExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${draftPassExpiry}" /></div>`
+                      ? `<div class="member-pass-stack"><select class="member-inline-input member-inline-pass-status" data-member-id="${member.id}">${enumOptions(workflows.PASS_STATUSES, draftPassStatus)}</select><input type="date" class="member-inline-input member-inline-pass-expiry ${isPassExpiringSoon(draftPassExpiry) ? "is-expiring-soon" : ""}" data-member-id="${member.id}" value="${draftPassExpiry}" /></div>`
                       : `<div class="member-pass-stack"><span>${statusPill(displayPassStatus(member.passStatus))}</span><div class="meta ${isPassExpiringSoon(member.passExpiry) ? "is-expiring-soon" : ""}">${member.passExpiry ? `Until ${formatDate(member.passExpiry)}` : escapeHtml(member.licenseName || "No pass data")}</div></div>`}
                   </td>
                 ` : ""}
@@ -9003,7 +9267,7 @@ Uni Wien Emperors`;
     const visibleMemberIds = Array.from(new Set(visibleFees.map((fee) => String(fee.memberId))));
     const selectedVisibleCount = visibleMemberIds.filter((memberId) => selectedSet.has(memberId)).length;
     const editableStatuses = FEE_STATUSES;
-    const sepaExportAvailable = hasSepaExportCapability();
+    const sepaExportAvailable = hasSepaExportCapability() && selectedFeePeriod !== "all";
     const sepaIncluded = Array.isArray(sepaExportPreview?.included) ? sepaExportPreview.included : [];
     const sepaSkipped = Array.isArray(sepaExportPreview?.skipped) ? sepaExportPreview.skipped : [];
     const sepaEstimatedDateCount = sepaIncluded.filter((item) => item.mandateDateEstimated).length;
@@ -9032,15 +9296,15 @@ Uni Wien Emperors`;
               <button id="export-fees-sepa-xml-option" class="ghost-button small-button" type="button" ${sepaExportAvailable ? "" : "disabled title=\"Configure a SEPA Appwrite Function or backend endpoint first.\""}>SEPA XML</button>
             </div>
           </details>
-          <button id="toggle-fee-edit-mode" class="ghost-button" type="button">${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
+          <button id="toggle-fee-edit-mode" class="ghost-button" type="button" ${selectedFeePeriod === "all" ? "disabled" : ""}>${feeEditMode ? "Exit edit mode" : "Enter edit mode"}</button>
         </div>
       </div>
       ${isSyncing ? `<p class="meta" style="display:flex; align-items:center; gap:8px; margin-bottom: 10px;"><span class="auth-spinner" aria-hidden="true"></span>Refreshing finance data…</p>` : ""}
       <div class="grid two-up">
         <article class="card finance-summary-card">
           <p>${formatMoney(totalPaid)} collected of ${formatMoney(totalTarget)} target. <strong>${collectedCount}/${collectibleCount} collected</strong> (${missingCount} missing)</p>
-          <label class="filter-label" style="margin-top: 8px;">Choose fee quarter<select id="fee-period-select">${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
-          ${periods.length ? `<div class="button-row" style="margin-top: 10px;"><button id="delete-quarter-button" class="ghost-button small-button" type="button">Delete ${formatFeePeriod(selectedLabel)}</button></div>` : ""}
+          <label class="filter-label" style="margin-top: 8px;">Choose fee quarter<select id="fee-period-select"><option value="all" ${selectedFeePeriod === "all" ? "selected" : ""}>All quarters</option>${periods.map((period) => `<option value="${period}" ${period === selectedFeePeriod ? "selected" : ""}>${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}</option>`).join("")}</select></label>
+          ${periods.length && selectedFeePeriod !== "all" ? `<div class="button-row" style="margin-top: 10px;"><button id="delete-quarter-button" class="ghost-button small-button" type="button">Delete ${formatFeePeriod(selectedLabel)}</button></div>` : ""}
           <label class="filter-label" style="margin-top: 10px;">Create or complete a quarter
             <div class="inline-form">
               <select id="create-quarter-select">${quarterCandidates.map((period) => `<option value="${period}">${formatFeePeriod(period)}${period === currentQuarter ? " (current)" : ""}${periods.includes(period) ? " (incomplete)" : ""}</option>`).join("")}</select>
@@ -9050,6 +9314,7 @@ Uni Wien Emperors`;
         </article>
       </div>
       <article class="card filter-card fees-filter-sticky fees-filter-card" style="margin-bottom: 14px;">
+        <label class="status-check"><input type="checkbox" id="fee-open-balances-only" ${feeOpenBalancesOnly ? "checked" : ""}>Open balances only</label>
         <details class="fee-filters-dropdown" ${feeFiltersExpanded ? "open" : ""}>
           <summary>
             <span class="member-filter-summary-label">Filters</span>
@@ -9161,6 +9426,7 @@ Uni Wien Emperors`;
         ${currentAccessRole === "admin" ? `<div class="button-row"><button type="button" class="ghost-button" id="open-pass-sync-review">Sync review</button></div>` : ""}
       </div>
       <article class="card filter-card members-filter-sticky members-filter-card" style="margin-bottom: 14px;">
+        <label class="status-check"><input type="checkbox" id="pass-needs-review" ${passFilters.needsReviewOnly ? "checked" : ""}>Needs review (missing, expired or expiring soon)</label>
         <details class="pass-filters-dropdown" ${passFiltersExpanded ? "open" : ""}>
           <summary>
             <span class="member-filter-summary-label">Filters</span>
@@ -9738,9 +10004,10 @@ Uni Wien Emperors`;
           homeScore: Number.isFinite(game.homeScore) ? game.homeScore : null,
           awayScore: Number.isFinite(game.awayScore) ? game.awayScore : null,
           hasScore,
-          statusTone: hasScore ? "paid" : "pending",
-          statusLabel: hasScore ? "Result" : "Scheduled",
+          statusTone: game.status === "cancelled" ? "expired" : hasScore ? "paid" : "pending",
+          statusLabel: workflows.GAME_STATUSES.find((option) => option.value === game.status)?.label || (hasScore ? "Result" : "Scheduled"),
           venue: venueParts.join(" · "),
+          ticketLink: String(game.ticketLink || "").trim(),
           streamLink: String(game.streamLink || "").trim(),
           isReplay: Boolean(game.isReplay)
         };
@@ -10116,18 +10383,18 @@ Uni Wien Emperors`;
   }
 
   function renderGamesBoard() {
+    selectGamesSeason(selectedGamesSeason);
     const games = buildLeagueGamesViewModel();
     const standings = buildRankedStandingsViewModel();
     const filterOptions = gameFilterTeamOptions();
     const bracket = selectedGamesSeason === "2025/26" ? buildPlayoffBracketViewModel() : null;
-    if (!games.length) {
-      return emptyState("No games match this filter", "Try clearing the team filter to show the full ACSL schedule.");
-    }
+
     const completedGames = games.filter((game) => game.hasScore);
     const upcomingGames = games.filter((game) => !game.hasScore);
     const stageOrder = [];
     const gamesByStage = new Map();
     games.forEach((game) => {
+      game.stage = `${game.stage} · ${game.startsAt.slice(0, 10)}`;
       if (!gamesByStage.has(game.stage)) {
         stageOrder.push(game.stage);
         gamesByStage.set(game.stage, []);
@@ -10138,7 +10405,7 @@ Uni Wien Emperors`;
       <div class="section-head">
       <div>
         <p class="eyebrow">Austrian College Sports League</p>
-        <h3>Games & results · ${escapeHtml(selectedGamesSeason)}</h3><label>Season <select id="games-season-select"><option value="2026/27" ${selectedGamesSeason === "2026/27" ? "selected" : ""}>2026/27</option><option value="2025/26" ${selectedGamesSeason === "2025/26" ? "selected" : ""}>2025/26</option></select></label>
+        <h3>Games & results · ${escapeHtml(selectedGamesSeason)}</h3><label>Season <select id="games-season-select">${(leagueGamesStore?.seasons() || ["2026/27", "2025/26"]).map((season) => `<option value="${escapeAttribute(season)}" ${selectedGamesSeason === season ? "selected" : ""}>${escapeHtml(season)}</option>`).join("")}</select></label>
       </div>
       <div class="pill-row" style="margin-top:0;">
         ${plainPill(`${games.length} games shown`)}
@@ -10146,7 +10413,12 @@ Uni Wien Emperors`;
         ${plainPill(`${upcomingGames.length} upcoming`)}
       </div>
       </div>
-      ${selectedGamesSeason === "2025/26" ? renderGamesStandingsPanel(standings) : `<article class="setup-card" style="margin-bottom:14px;"><h3>Season 2026/27 starts on 18 October 2026</h3><p class="meta">Standings will appear after the first results. Kickoff times for single-game days are TBA.</p></article>`}
+      ${leagueGamesStore?.notice() || ""}
+      ${leagueGamesStore?.nextCard(EMPERORS_TEAM_NAME).replace(leagueGamesStore.notice(), "") || ""}
+      <div class="button-row" style="margin-bottom:14px"><button type="button" class="ghost-button" data-calendar-season>Add Emperors season to calendar</button></div>
+      ${leagueGamesStore?.editor(selectedGamesSeason, gameFilterTeamOptions()) || ""}
+      ${selectedGamesSeason !== "2025/26" && LEAGUE_GAMES_SNAPSHOT.some(game => Number.isFinite(game.homeScore)) ? `<p class="meta">Standings calculated from entered regular-season results; ties are sorted by point difference.</p>` : ""}
+      ${selectedGamesSeason === "2025/26" || LEAGUE_GAMES_SNAPSHOT.some((game) => workflows.roundFor(game) === "regular" && Number.isFinite(game.homeScore)) ? renderGamesStandingsPanel(standings) : `<article class="setup-card"><p class="meta">No regular-season results yet. Standings appear after the first results.</p></article>`}
       <article class="setup-card" style="margin-bottom: 14px;">
         <div class="button-row equipment-sheet-tabs" style="margin-bottom: 12px;">
           <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" data-games-view-mode="schedule" data-no-toast="true">Regular season</button>
@@ -10162,10 +10434,11 @@ Uni Wien Emperors`;
         ` : `
         <p class="meta" style="margin:0;">${selectedGamesSeason === "2025/26" ? "Archived playoff results from 2025/26." : "Semifinals: 1st vs 4th seed and 2nd vs 3rd seed. Final: winners of both semifinals."}</p>
         `}
-        ${selectedGamesSeason === "2025/26" ? `<p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>` : `<p class="meta" style="margin:12px 0 0;">Source: ACSL season schedule 2026/27. Kickoffs: double headers 15:30 / 18:30, triple headers 12:30 / 15:30 / 18:30. Single-game kickoffs and playoff venues TBA.</p>`}
+        ${selectedGamesSeason === "2025/26" ? `<p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>` : `<p class="meta" style="margin:12px 0 0;">ACSL season schedule ${escapeHtml(selectedGamesSeason)}. All kickoff times are shown in Vienna local time.</p>`}
       </article>
       ${selectedGamesViewMode === "playoffs" ? (selectedGamesSeason === "2025/26" ? renderPlayoffBracket(bracket) : renderCurrentSeasonPlayoffs()) : ""}
       ${selectedGamesViewMode === "schedule" ? `
+      ${!games.length ? emptyState("No games match this filter", "Clear the team filter or add a game for this season.") : ""}
       <div class="games-stage-stack">
       ${stageOrder.map((stage) => `
         <section class="setup-card games-stage">
@@ -10202,7 +10475,8 @@ Uni Wien Emperors`;
               ? `<div class="game-match-score"><span>${game.homeScore}</span><span class="game-match-score-separator">:</span><span>${game.awayScore}</span></div>`
               : `<div class="game-match-kickoff">${escapeHtml(game.displayDateTime)}</div>`}
               <p class="meta">${escapeHtml(game.venue || "Venue TBA")}</p>
-              ${game.streamLink ? `<a href="${game.streamLink}" target="_blank" rel="noreferrer" class="ghost-button">${new Date(game.startsAt).getTime() > Date.now() ? "Watch live" : "Watch replay"}</a>` : ""}
+              <div class="button-row"><button type="button" class="ghost-button small-button" data-calendar-game="${escapeAttribute(game.id)}">Add to calendar</button>${game.ticketLink ? `<a class="ghost-button small-button" href="${escapeAttribute(game.ticketLink)}" target="_blank" rel="noreferrer">Tickets</a>` : ""}</div>
+              ${game.streamLink ? `<a href="${escapeAttribute(game.streamLink)}" target="_blank" rel="noreferrer" class="ghost-button">${new Date(game.startsAt).getTime() > Date.now() ? "Watch live" : "Watch replay"}</a>` : ""}
             </div>
             <div class="game-match-team game-match-team-away">
               <div>
@@ -10223,6 +10497,7 @@ Uni Wien Emperors`;
   }
 
   function bindGamesActions() {
+    leagueGamesStore?.bind(selectedGamesSeason, EMPERORS_TEAM_NAME);
     const seasonSelect = document.getElementById("games-season-select");
     if (seasonSelect) seasonSelect.onchange = () => { selectGamesSeason(seasonSelect.value); mount(); };
 
@@ -10497,7 +10772,7 @@ Uni Wien Emperors`;
     if (sponsorOutreachLoaded && !sponsorUserChanged) return;
     sponsorOutreachLoaded = false;
     loadSponsorOutreachData().finally(() => {
-      if (getRouteView() === "sponsor-outreach") mount();
+      if (["sponsor-outreach", "dashboard"].includes(getRouteView())) mount();
     });
   }
 
@@ -10546,6 +10821,7 @@ Uni Wien Emperors`;
   function sponsorOutreachVisibleRows() {
     const query = normalizeLookupToken(sponsorOutreachSearch);
     return sponsorOutreachRows
+      .filter((row) => !sponsorDueOnly || (sponsorDateValue(row.next_follow_up_at) && sponsorDateValue(row.next_follow_up_at) <= workflows.localDate() && !["confirmed", "declined"].includes(row.status)))
       .filter((row) => sponsorOutreachStatusFilter === "all" || String(row.status) === sponsorOutreachStatusFilter)
       .filter((row) => {
         if (!query) return true;
@@ -10638,7 +10914,7 @@ Uni Wien Emperors`;
       return `<article class="setup-card"><p class="eyebrow">Admin only</p><h3>Sponsor outreach</h3><p>This page is available only to administrators.</p></article>`;
     }
     const rows = sponsorOutreachVisibleRows();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = workflows.localDate();
     const confirmedCount = sponsorOutreachRows.filter((row) => row.status === "confirmed").length;
     const openCount = sponsorOutreachRows.filter((row) => ["planned", "contacted", "follow_up", "negotiating", "no_response"].includes(row.status)).length;
     const dueCount = sponsorOutreachRows.filter((row) => {
@@ -10659,6 +10935,7 @@ Uni Wien Emperors`;
       </div>
       <article class="card sponsor-filter-card">
         <label>Search<input id="sponsor-outreach-search" type="search" value="${escapeAttribute(sponsorOutreachSearch)}" placeholder="Company, contact, offer…" /></label>
+        <label><span>Follow-ups</span><select id="sponsor-due-filter"><option value="all">All dates</option><option value="due" ${sponsorDueOnly ? "selected" : ""}>Due now</option></select></label>
         <label>Status<select id="sponsor-outreach-status-filter"><option value="all">All statuses</option>${statusOptions}</select></label>
       </article>
       ${sponsorOutreachStatus ? `<p class="auth-status">${escapeHtml(sponsorOutreachStatus)}</p>` : ""}
@@ -11283,12 +11560,16 @@ Uni Wien Emperors`;
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
     if (finalView === "events" && !activeGamesRoute) {
-      selectGamesSeason("2026/27");
+      selectGamesSeason(leagueGamesStore?.seasons()[0] || "2026/27");
       selectedGamesViewMode = "schedule";
       const section = document.getElementById("events");
       if (section) { section.innerHTML = renderGamesBoard(); bindGamesActions(); }
     }
     activeGamesRoute = finalView === "events";
+    if (finalView === "dashboard" || finalView === "events") {
+      if (!leagueGamesStore?.loaded() && !leagueGamesStore?.loading() && !gamesLoadAttempted) { gamesLoadAttempted = true; void leagueGamesStore?.load(); }
+    }
+    if (finalView === "dashboard" && currentAccessRole === "admin" && !dashboardLoadAttempted) void loadAdminDashboard();
     updateSeoMeta(finalView);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
@@ -11400,6 +11681,8 @@ Uni Wien Emperors`;
     const dialogPassExpiryInput = form?.elements?.passExpiry || null;
 
     if (form && !form.dataset.enumsRendered) {
+      if (form.elements.passStatus) form.elements.passStatus.innerHTML = enumOptions(workflows.PASS_STATUSES, form.elements.passStatus.value);
+      if (form.elements.sideOfBall) form.elements.sideOfBall.innerHTML = enumOptions(workflows.SIDE_OF_BALL, form.elements.sideOfBall.value);
       const membershipSelect = form.elements.membershipStatus;
       if (membershipSelect) {
         membershipSelect.addEventListener("change", () => syncMembershipDateFields(form));
@@ -12607,6 +12890,7 @@ Uni Wien Emperors`;
     if (exportFeesSepaXmlButton) {
       exportFeesSepaXmlButton.onclick = async function () {
         exportFeesSepaXmlButton.disabled = true;
+        showBlockingProgress("Generating SEPA XML…");
         exportFeesSepaXmlButton.innerHTML = `<span class="auth-spinner" aria-hidden="true"></span> Generating…`;
         try {
           const period = currentFeePeriod();
@@ -12619,6 +12903,7 @@ Uni Wien Emperors`;
             await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
           }
           authState.status = "SEPA XML exported.";
+          showToast(authState.status, "success");
           mount();
           switchView("fees");
         } catch (error) {
@@ -12628,8 +12913,12 @@ Uni Wien Emperors`;
           authState.status = noFunctionConfigured && isGithubPages
             ? `${baseMessage} Configure ClubHubAppwriteConfig.sepaExportFunctionId to run SEPA export through Appwrite on GitHub Pages.`
             : baseMessage;
+          showToast(authState.status, "error");
           mount();
           switchView("fees");
+        } finally {
+          hideBlockingProgress();
+          exportFeesSepaXmlButton.disabled = false;
         }
       };
     }
@@ -12883,6 +13172,7 @@ Uni Wien Emperors`;
     const clearButton = document.getElementById("clear-fee-filters");
     if (clearButton) {
       clearButton.onclick = function () {
+        feeOpenBalancesOnly = false;
         selectedFeeStatuses = defaultFeeStatuses();
         feeInlineEditId = null;
         saveStatusFilter();
@@ -13393,7 +13683,8 @@ Uni Wien Emperors`;
           statuses: [],
           positions: [],
           membership: ["active"],
-          showDeleted: false
+          showDeleted: false,
+          needsReviewOnly: false
         };
         savePassFilters();
         mount();
@@ -13816,6 +14107,7 @@ Uni Wien Emperors`;
   }
 
   function bindTryoutActions() {
+    bindTryoutWorkflowActions();
     const qrDialog = document.getElementById("tryout-qr-dialog");
     const qrOpenButton = document.getElementById("open-tryout-qr-dialog");
     const qrCloseButton = document.getElementById("tryout-qr-dialog-close");
@@ -14040,8 +14332,8 @@ Uni Wien Emperors`;
 
     const loadButton = document.getElementById("tryout-load-submissions");
     if (loadButton) {
-      loadButton.onclick = function () {
-        loadTryoutSubmissions();
+      loadButton.onclick = async function () {
+        await loadTryoutSubmissions();
       };
     }
 
@@ -14208,45 +14500,10 @@ Uni Wien Emperors`;
         const confirmed = window.confirm(`Send this email to ${recipients.length} registrant(s)?${dateLine}`);
         if (!confirmed) return;
 
-        showBlockingProgress(`Sending tryout emails…`);
-        updateBlockingProgress(0, recipients.length);
-        try {
-          const result = await sendTryoutEmailsViaFunction({
-            subject: applyTryoutDatePlaceholders(tryoutEmailSubject),
-            bodyTemplate: applyTryoutDatePlaceholders(tryoutEmailBody),
-            recipients
-          });
-          tryoutEmailResult = result;
-          hideBlockingProgress();
-
-          let statusUpdateWarning = "";
-          const sentIds = (result.sent || []).map((item) => String(item.id)).filter(Boolean);
-          if (sentIds.length && backendClient && authState.user) {
-            const bulkUpdate = await backendClient
-              .from("tryout_registrations")
-              .update({ status: "invited" })
-              .in("id", sentIds);
-            const failedIds = new Set((bulkUpdate.partialFailures || []).map((item) => String(item.id)));
-            const updatedRows = Array.isArray(bulkUpdate.data) ? bulkUpdate.data : [];
-            const updatedIds = new Set(updatedRows.map((row) => String(row.id || row.$id)));
-            tryoutSubmissions = tryoutSubmissions.map((row) => updatedIds.has(String(row.id)) ? { ...row, status: "invited" } : row);
-            if (bulkUpdate.error) {
-              const failedCount = failedIds.size || sentIds.length;
-              statusUpdateWarning = ` Emails sent, but updating status to "invited" failed for ${failedCount} of ${sentIds.length}: ${bulkUpdate.error.message}`;
-            }
-          }
-
-          selectedTryoutSubmissionIds = [];
-          tryoutSubmissionsStatus = `Sent ${result.sentCount} email(s)${result.failedCount ? `, ${result.failedCount} failed` : ""}.${statusUpdateWarning}`;
-          showToast(tryoutSubmissionsStatus, result.failedCount || statusUpdateWarning ? "error" : "success");
-        } catch (error) {
-          hideBlockingProgress();
-          tryoutSubmissionsStatus = error?.message || "Could not send tryout emails.";
-          showToast(tryoutSubmissionsStatus, "error");
-        } finally {
-          mount();
-          switchView("tryout");
-        }
+        await performTryoutEmailSend(recipients, {
+          subject: applyTryoutDatePlaceholders(tryoutEmailSubject),
+          bodyTemplate: applyTryoutDatePlaceholders(tryoutEmailBody)
+        });
       };
     }
   }
@@ -14423,7 +14680,11 @@ Uni Wien Emperors`;
       bindLocalPreviewActions();
       const setViewHtml = (viewId, html) => {
         const section = document.getElementById(viewId);
-        if (section) section.innerHTML = html;
+        if (section) {
+          if (!hasBootstrapped && authState.user && ["dashboard", "members", "fees", "passes", "user", "organization", "equipment"].includes(viewId)) html = bootstrapLoadError
+            ? `<article class="setup-card" role="alert"><h3>Club data could not be loaded</h3><p class="work-error">${escapeHtml(bootstrapLoadError)}</p><button class="primary-button" type="button" data-bootstrap-retry>Retry loading</button></article>`
+            : `<article class="setup-card work-status" role="status"><span class="work-spinner" aria-hidden="true"></span>Loading club data…</article>`;
+          section.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close()); section.innerHTML = html; }
       };
       setViewHtml("dashboard", renderDashboard());
       bindDashboardActions();
@@ -14475,6 +14736,8 @@ Uni Wien Emperors`;
       setupMembersStickyHeader();
       setupFeesStickyHeader();
       setupPassesStickyHeader();
+      bindWorkspaceActions();
+      workspaceUi?.enhance();
     } catch (error) {
       console.error("Emperors bundle mount failed", error);
       recordDiagnostic("error", "app", "App bundle mount failed.", summarizeDiagnosticError(error));
@@ -14500,12 +14763,22 @@ Uni Wien Emperors`;
     }
   }
 
+  leagueGamesStore = moduleRegistry.gamesWorkspace.create({
+    backend: backendClient, workflows,
+    fallback: [...LEGACY_LEAGUE_GAMES.map((game) => ({ ...game, season: "2025/26" })), ...CURRENT_LEAGUE_GAMES.map((game) => ({ ...game, season: "2026/27" }))],
+    canManage: () => currentAccessRole === "admin" && Boolean(authState.user || isLocalPreviewMode()),
+    isLocal: () => !backendClient || isLocalPreviewMode(),
+    changed: (season) => { if (season) selectGamesSeason(season); mount(); },
+    escape: escapeAttribute,
+    download: (content, type, filename) => downloadBlobFile(content, type, filename)
+  });
+
   redirectLegacyHashRoute();
   bindNavigation();
   bindButtonFeedback();
   bindMobileMenu();
   window.addEventListener("beforeunload", function (event) {
-    if (memberInlineDrafts.size) {
+    if (memberInlineDrafts.size || leagueGamesStore?.hasDraft()) {
       event.preventDefault();
       event.returnValue = "";
     }
@@ -14549,11 +14822,14 @@ Uni Wien Emperors`;
   } else {
     syncAuthSession(null);
   }
+  mount();
   try {
     await loadBootstrapDataWithCache();
     await loadEquipmentDataWithCache();
   } catch (error) {
     authState.status = error?.message || "Startup failed while loading remote data.";
+    bootstrapLoadError = authState.status;
+    showToast(bootstrapLoadError, "error");
   }
   mount();
 

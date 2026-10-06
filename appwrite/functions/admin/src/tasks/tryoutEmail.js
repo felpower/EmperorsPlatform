@@ -1,5 +1,6 @@
 // Tryout registrant emails via Mailgun (was TryoutEmail).
 const { renderTryoutEmail, plainTextFooter } = require("./tryoutEmailTemplate");
+const { appwriteConfig, appwriteRequest } = require("../shared/runtime");
 module.exports = async ({ req, res, log }) => {
   const mailgunApiKey = String(process.env.MAILGUN_API_KEY || "").trim();
   const mailgunDomain = String(process.env.MAILGUN_DOMAIN || "").trim();
@@ -83,6 +84,8 @@ module.exports = async ({ req, res, log }) => {
 
     const sent = [];
     const failed = [];
+    const statusFailures = [];
+    const statusUpdatedIds = [];
 
     for (const recipient of recipients) {
       const email = String(recipient?.email || "").trim();
@@ -103,13 +106,36 @@ module.exports = async ({ req, res, log }) => {
       }
     }
 
+    // Mail delivery and database updates are separate outcomes. The API-key-backed
+    // writes avoid the browser's per-user write rate limit for larger batches.
+    const config = appwriteConfig();
+    const collection = process.env.APPWRITE_TRYOUT_REGISTRATIONS_COLLECTION_ID || "tryout_registrations";
+    const base = `/databases/${encodeURIComponent(config.databaseId)}/collections/${encodeURIComponent(collection)}/documents`;
+    for (const recipient of sent) {
+      if (!recipient.id) continue;
+      try {
+        const current = await appwriteRequest(`${base}/${encodeURIComponent(recipient.id)}`);
+        if (!current.response.ok) throw new Error(current.payload?.message || "Registration could not be read.");
+        if (String(current.payload.email || "").trim().toLowerCase() !== recipient.email.toLowerCase()) throw new Error("Registration email differs from the recipient; status was not changed.");
+        // An invitation must never move an attended or joined participant backwards.
+        if (!["new", "contacted", "invited"].includes(current.payload.status) || current.payload.linked_member_id) continue;
+        const updated = await appwriteRequest(`${base}/${encodeURIComponent(recipient.id)}`, { method: "PATCH", body: { data: { status: "invited" } } });
+        if (!updated.response.ok) throw new Error(updated.payload?.message || "Database status update failed.");
+        statusUpdatedIds.push(recipient.id);
+      } catch (error) {
+        statusFailures.push({ id: recipient.id, email: recipient.email, reason: error.message || "Database status update failed." });
+      }
+    }
+
     log(`Tryout email batch: ${sent.length} sent, ${failed.length} failed.`);
     return res.json({
       ok: true,
       sentCount: sent.length,
       failedCount: failed.length,
       sent,
-      failed
+      failed,
+      statusUpdatedIds,
+      statusFailures
     });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Unknown tryout email error.", 500);

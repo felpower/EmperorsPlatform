@@ -58,6 +58,7 @@ window.ClubHubAppwriteConfig = Object.assign({
   memberRolesTableId: "member_roles",
   playerPassesTableId: "player_passes",
   membershipFeesTableId: "membership_fees",
+  leagueGamesTableId: "league_games",
   eventsTableId: "events",
   eventRecipientsTableId: "event_recipients",
   invitesTableId: "invites",

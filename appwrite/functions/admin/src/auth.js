@@ -11,7 +11,8 @@ const DEFAULT_TASK_ROLES = {
   sepaExport: ["admin", "finance_admin"],
   tryoutEmail: ["admin", "coach"],
   setPassword: ["self"],
-  syncAccess: ["admin"]
+  syncAccess: ["admin"],
+  tryoutConvert: ["admin"]
 };
 
 function taskRoles() {

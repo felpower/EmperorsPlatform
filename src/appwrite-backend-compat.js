@@ -192,6 +192,7 @@
       member_roles: String(config.memberRolesTableId || "member_roles"),
       player_passes: String(config.playerPassesTableId || "player_passes"),
       membership_fees: String(config.membershipFeesTableId || "membership_fees"),
+      league_games: String(config.leagueGamesTableId || "league_games"),
       events: String(config.eventsTableId || "events"),
       event_recipients: String(config.eventRecipientsTableId || "event_recipients"),
       invites: String(config.invitesTableId || "invites"),
@@ -626,7 +627,12 @@
 
     async execute() {
       if (!this.execution) {
-        this.execution = this.executeInternal();
+        this.execution = this.executeInternal().then((result) => {
+          if (!["select", "none"].includes(this.action) && result.error && typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") {
+            window.dispatchEvent(new CustomEvent("emperors:write-result", { detail: { table: this.tableName, action: this.action, result } }));
+          }
+          return result;
+        });
       }
       return this.execution;
     }
@@ -803,6 +809,14 @@
           else if (privateParts) await saveMemberPrivateParts(data, (index) => (Array.isArray(privateParts) ? privateParts[index] : privateParts));
         }
 
+        if (this.partialFailures && this.partialFailures.length) {
+          return {
+            data: data,
+            error: createError(`${this.partialFailures.length} of ${data.length + this.partialFailures.length} row(s) failed: ${this.partialFailures.map(function (f) { return f.message; }).join("; ")}`),
+            partialFailures: this.partialFailures,
+            status: 207
+          };
+        }
         if (this.singleMode === "single") {
           if (!Array.isArray(data) || data.length !== 1) {
             return { data: null, error: createError("Expected a single row."), status: 406 };
@@ -820,14 +834,6 @@
           return { data: data[0], error: null, status: 200 };
         }
 
-        if (this.partialFailures && this.partialFailures.length) {
-          return {
-            data: data,
-            error: createError(`${this.partialFailures.length} of ${data.length + this.partialFailures.length} row(s) failed: ${this.partialFailures.map(function (f) { return f.message; }).join("; ")}`),
-            partialFailures: this.partialFailures,
-            status: 207
-          };
-        }
         return { data: data, error: null, status: 200 };
       } catch (error) {
         const rawMessage = error && error.message ? String(error.message) : "Appwrite query failed.";
