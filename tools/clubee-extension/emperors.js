@@ -14,12 +14,22 @@
     window.postMessage({ source: SOURCE, type: "clubee-members", at: clubeeSync.at, members: clubeeSync.members }, location.origin);
   }
 
+  // Robust gegen späte Seiten-Initialisierung (und 404.html mit document.write, das Listener
+  // entfernt): einige Sekunden lang wiederholt anbieten, bis die Seite den Empfang bestätigt.
+  let received = false;
+  let tries = 0;
+  const retry = setInterval(() => {
+    if (received || ++tries > 20) { clearInterval(retry); return; }
+    window.postMessage({ source: SOURCE, type: "hello" }, location.origin);
+    deliver();
+  }, 1000);
+
   window.addEventListener("message", async (event) => {
     if (event.source !== window || event.origin !== location.origin) return;
     const data = event.data || {};
     if (data.source !== "emperors-page") return;
     if (data.type === "ready") deliver();
-    if (data.type === "clubee-received") await chrome.storage.local.remove("clubeeSync");
+    if (data.type === "clubee-received") { received = true; await chrome.storage.local.remove("clubeeSync"); }
     if (data.type === "clubee-create") {
       const people = (Array.isArray(data.people) ? data.people : []).map((p) => ({ firstName: String(p.firstName || ""), lastName: String(p.lastName || ""), email: String(p.email || "") })).filter((p) => p.firstName || p.lastName);
       await chrome.storage.local.set({ clubeeCreateQueue: people });

@@ -6,7 +6,9 @@
 //    Vorname/Nachname/E-Mail aus. DSGVO-Haken und Speichern macht man selbst.
 (function () {
   const API = "https://apiv3.clubee.com";
-  const SITE = "https://emperors.page/members?clubee=1";
+  // Startseite statt /members: Unterseiten laufen über 404.html (document.write), das würde
+  // den Nachrichten-Listener der Erweiterung entfernen.
+  const SITE = "https://emperors.page/?clubee=1";
   const PAGE_SIZE = 50;
 
   const token = () => decodeURIComponent((document.cookie.match(/(?:^|; )token=([^;]*)/) || [])[1] || "");
