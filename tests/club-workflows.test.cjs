@@ -39,3 +39,13 @@ test("batch records partial failures and retries only failed entries", async () 
   const retried = []; await w.batch(result.failed.map((item) => item.item), async (id) => retried.push(id));
   assert.deepEqual(retried, ["b"]);
 });
+test("fee tariffs change at Q4 2026 and rookie fees remain 50 EUR", () => {
+  assert.equal(w.standardFeeCents("Q3_2026"), 8250);
+  assert.equal(w.standardFeeCents("Q4_2025"), 8250);
+  assert.equal(w.standardFeeCents("Q4_2026"), 9000);
+  assert.equal(w.standardFeeCents("Q1_2027"), 9000);
+  assert.equal(w.feeCentsForStatus("paid_rookie_fee", "Q3_2026", 8250), 5000);
+  assert.equal(w.feeCentsForStatus("paid_rookie_fee", "Q1_2027", 9000), 5000);
+  assert.equal(w.feeCentsForStatus("paid", "Q4_2026", 5000), 9000);
+  assert.equal(w.feeCentsForStatus("partial", "Q4_2026", 4500), 4500);
+});

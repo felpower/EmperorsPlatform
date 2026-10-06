@@ -1,3 +1,4 @@
+import feeRules from "./src/modules/club-workflows.js";
 import express from "express";
 import fs from "node:fs/promises";
 import net from "node:net";
@@ -761,7 +762,7 @@ async function updateMemberViaAppwriteAdmin(memberId, input) {
 
 async function updateFeeRecordViaAppwriteAdmin(feeId, input) {
   const normalizedStatus = normalizeFeeStatusServer(input?.status);
-  const amountCents = Math.max(0, Math.round(Number(input?.amount || 0) * 100));
+  const amountCents = normalizedStatus === "paid_rookie_fee" ? 5000 : Math.max(0, Math.round(Number(input?.amount || 0) * 100));
   let paidCents = Math.max(0, Math.round(Number(input?.paidAmount || 0) * 100));
 
   if (["paid", "paid_rookie_fee"].includes(normalizedStatus)) paidCents = amountCents;
@@ -795,7 +796,7 @@ async function bulkUpdateFeeStatusViaAppwriteAdmin(input) {
   const targets = rows.filter((row) => String(row?.fee_period || "") === feePeriod && memberIds.has(String(row?.member_id || "")));
 
   for (const row of targets) {
-    const amountCents = Math.max(0, Number(row?.amount_cents || 0));
+    const amountCents = feeRules.feeCentsForStatus(normalizedStatus, feePeriod, Math.max(0, Number(row?.amount_cents || 0)));
     let paidCents = Math.max(0, Number(row?.paid_cents || 0));
     if (["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalizedStatus)) paidCents = amountCents;
     else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
@@ -808,6 +809,7 @@ async function bulkUpdateFeeStatusViaAppwriteAdmin(input) {
         body: {
           data: {
             status: normalizedStatus,
+            amount_cents: amountCents,
             paid_cents: paidCents
           }
         }

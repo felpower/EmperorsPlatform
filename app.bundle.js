@@ -5197,7 +5197,7 @@ Uni Wien Emperors`;
 
       const rows = query.data || [];
       for (const row of rows) {
-        const amountCents = Number(row.amount_cents || 0);
+        const amountCents = workflows.feeCentsForStatus(normalizedStatus, feePeriod, Number(row.amount_cents || 0));
         let paidCents = Number(row.paid_cents || 0);
         if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
         else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
@@ -5205,7 +5205,7 @@ Uni Wien Emperors`;
 
         const update = await backendClient
           .from("membership_fees")
-          .update({ status: normalizedStatus, paid_cents: paidCents })
+          .update({ status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents })
           .eq("id", row.id);
         if (update.error) throw update.error;
       }
@@ -5233,7 +5233,7 @@ Uni Wien Emperors`;
 
     try {
       const normalizedStatus = normalizeFeeStatusValue(status);
-      const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
+      const amountCents = normalizedStatus === "paid_rookie_fee" ? 5000 : Math.max(0, Math.round(Number(amount || 0) * 100));
       let paidCents = Math.max(0, Math.round(Number(paidAmount || 0) * 100));
 
       if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
@@ -5348,7 +5348,7 @@ Uni Wien Emperors`;
       member_id: member.id,
       season_label: normalizedPeriod.split("_")[1] || "",
       fee_period: normalizedPeriod,
-      amount_cents: 8250,
+      amount_cents: workflows.standardFeeCents(normalizedPeriod),
       paid_cents: 0,
       status: "not_collected",
       iban: String(memberIban(member.id) || "").trim() || null,
@@ -13269,6 +13269,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         const paidInput = document.querySelector(`.fee-row-paid[data-fee-id="${feeId}"]`);
         if (!amountInput || !paidInput) return;
         if (["paid", "paid_rookie_fee"].includes(select.value)) {
+          const fee = state.fees.find((row) => String(row.id) === feeId);
+          amountInput.value = (workflows.feeCentsForStatus(select.value, fee?.feePeriod, Number(amountInput.value) * 100) / 100).toFixed(2);
           paidInput.value = amountInput.value;
           paidInput.readOnly = true;
         } else {
@@ -13283,7 +13285,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         const statusSelect = document.querySelector(`.fee-row-status-select[data-fee-id="${feeId}"]`);
         const paidInput = document.querySelector(`.fee-row-paid[data-fee-id="${feeId}"]`);
         if (!statusSelect || !paidInput) return;
-        if (statusSelect.value === "paid") {
+        if (["paid", "paid_rookie_fee"].includes(statusSelect.value)) {
+          if (statusSelect.value === "paid_rookie_fee") amountInput.value = "50.00";
           paidInput.value = amountInput.value;
         }
       };

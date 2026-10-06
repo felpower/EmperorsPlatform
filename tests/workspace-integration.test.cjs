@@ -12,7 +12,7 @@ async function app() {
   const sandbox = { window, document, localStorage, sessionStorage, URL, URLSearchParams, Blob, TextEncoder, console, setTimeout, clearTimeout, navigator: {}, crypto: require("node:crypto").webcrypto };
   const context = vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync("src/modules/games-workspace.js", "utf8"), context);
-  const source = fs.readFileSync("app.bundle.js", "utf8");
+  const source = fs.readFileSync("app.bundle.js", "utf8").replace("const backendClient =", "let backendClient =");
   const cut = source.indexOf("  leagueGamesStore = moduleRegistry.gamesWorkspace.create({");
   const boot = `
     authState.user = { id: "admin", user_metadata: {password_set: true} }; currentAccessRole = "admin"; hasBootstrapped = true;
@@ -25,13 +25,28 @@ async function app() {
       renderGames: renderGamesBoard, selectSeason: selectGamesSeason, season:()=>selectedGamesSeason,
       filteredFees, currentFeePeriod, ensureValidFeeFilter, filteredTryouts: filteredTryoutSubmissions, filteredPasses: filteredPassMembers,
       tryoutOptions: tryoutSubmissionStatusOptions, tryoutLabel, renderTryouts:renderTryoutSubmissionsPanel,
-      memberAction:renderTryoutMemberAction, updateStatus:updateTryoutSubmissionStatus
+      memberAction:renderTryoutMemberAction, updateStatus:updateTryoutSubmissionStatus,
+      setBackend: value => {backendClient=value;reloadBootstrapAfterWrite=async()=>{};},
+      bulkFees:updateFeeStatusesBulkViaRemote, updateFee:updateFeeRowViaRemote
     }; return;
   })();`;
   await vm.runInContext(source.slice(0, cut) + boot, context, { timeout: 3000 });
   return window.testApp;
 }
 const member = (patch = {}) => ({ id: "member", name: "Test Player", firstName: "Test", lastName: "Player", roles: ["player"], positions: [], membershipStatus: "active", passStatus: "missing", ...patch });
+
+test("single and bulk rookie payments persist both amounts as 50 EUR; regular bulk uses the quarter tariff", async () => {
+  const a = await app(), writes = [];
+  a.setBackend({from:()=>({select(){return this;},eq(){return this;},in(){return Promise.resolve({data:[{id:"fee",amount_cents:8250,paid_cents:0}]});},update(patch){writes.push(patch);return {eq:()=>Promise.resolve({error:null})};}})});
+  await a.updateFee({feeId:"fee",status:"paid_rookie_fee",amount:90,paidAmount:90});
+  assert.equal(writes[0].amount_cents,5000);assert.equal(writes[0].paid_cents,5000);
+  await a.bulkFees({feePeriod:"Q4_2026",status:"paid_rookie_fee",memberIds:["member"]});
+  assert.equal(writes[1].amount_cents,5000);assert.equal(writes[1].paid_cents,5000);
+  await a.bulkFees({feePeriod:"Q4_2026",status:"paid",memberIds:["member"]});
+  assert.equal(writes[2].amount_cents,9000);assert.equal(writes[2].paid_cents,9000);
+  await a.bulkFees({feePeriod:"Q3_2026",status:"paid",memberIds:["member"]});
+  assert.equal(writes[3].amount_cents,8250);
+});
 
 test("admin overview excludes waived fees and inactive/deleted pass alerts", async () => {
   const a = await app(); a.setData({ members:[member(),member({id:"inactive",membershipStatus:"exited"}),member({id:"deleted",deletedAt:"2026-10-01"})], fees:[{memberId:"member",amount:82.5,paidAmount:0,status:"pending"},{memberId:"member",amount:82.5,paidAmount:0,status:"exempt"},{memberId:"deleted",amount:82.5,paidAmount:0,status:"pending"}] });

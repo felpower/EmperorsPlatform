@@ -1,3 +1,4 @@
+import feeRules from "../src/modules/club-workflows.js";
 import { Client, Databases, Query, ID } from "node-appwrite";
 
 const ENDPOINT = process.env.APPWRITE_ENDPOINT || "https://fra.cloud.appwrite.io/v1";
@@ -7,7 +8,7 @@ const DATABASE_ID = process.env.APPWRITE_DATABASE_ID || "69dd11140002e2b4254a";
 const MEMBERS_COLLECTION_ID = process.env.APPWRITE_MEMBERS_COLLECTION_ID || "members";
 const FEES_COLLECTION_ID = process.env.APPWRITE_MEMBERSHIP_FEES_COLLECTION_ID || "membership_fees";
 const QUARTERS_AHEAD = Number(process.env.QUARTERS_AHEAD || 4);
-const DEFAULT_AMOUNT_CENTS = Number(process.env.DEFAULT_FEE_AMOUNT_CENTS || 8250);
+
 const DRY_RUN = String(process.env.DRY_RUN || "false").trim().toLowerCase() === "true";
 const PAGE_SIZE = 100;
 
@@ -115,7 +116,7 @@ async function main() {
         member_id: memberId,
         season_label: period.split("_")[1],
         fee_period: period,
-        amount_cents: DEFAULT_AMOUNT_CENTS,
+        amount_cents: feeRules.standardFeeCents(period),
         paid_cents: 0,
         status: "not_collected",
         iban: memberIban,

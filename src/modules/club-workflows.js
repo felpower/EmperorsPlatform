@@ -1,5 +1,14 @@
 (function (root) {
   "use strict";
+  function standardFeeCents(period) {
+    const match = /^Q([1-4])_(\d{4})$/.exec(String(period || ""));
+    return match && (Number(match[2]) > 2026 || (Number(match[2]) === 2026 && Number(match[1]) >= 4)) ? 9000 : 8250;
+  }
+  function feeCentsForStatus(status, period, currentCents) {
+    if (status === "paid_rookie_fee") return 5000;
+    if (status === "paid") return standardFeeCents(period);
+    return currentCents;
+  }
   const MEMBERSHIP_STATUSES = Object.freeze(["active", "pending", "inactive", "exited", "coach"]);
   const FEE_STATUSES = Object.freeze(["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"]);
   const PASS_STATUSES = Object.freeze(["valid", "missing", "expired"]);
@@ -125,7 +134,7 @@
     }
     return { succeeded, failed };
   }
-  const api = { MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, calendar, batch };
+  const api = { standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, calendar, batch };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else { root.ClubHubModules = root.ClubHubModules || {}; root.ClubHubModules.workflows = api; }
 })(typeof window !== "undefined" ? window : globalThis);

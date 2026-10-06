@@ -47,6 +47,10 @@ zuerst den Mailprovider prüfen; es erfolgt keine automatische erneute Aussendun
 
 ## Einheitliche Bedienung
 
+Normalbeiträge werden bis Q3 2026 mit 82,50 € und ab Q4 2026 mit 90 € angelegt.
+„Paid Rookie fee“ setzt Beitrag und bezahlten Betrag auf 50 €, auch bei der Sammeländerung.
+Beim Wechsel zurück auf „Paid“ wird der Normalbeitrag des jeweiligen Quartals eingesetzt.
+
 Feldbezogene Optionen stehen in `src/modules/club-workflows.js`. Mitgliedschaft,
 Beiträge, Spielerpässe, Rollen, Sponsoren, Tryout und Spiele haben jeweils eigene Werte.
 Speicheraktionen sperren den betreffenden Button während des Vorgangs. Fehler bleiben

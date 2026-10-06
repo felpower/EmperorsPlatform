@@ -1,3 +1,4 @@
+import feeRules from "../modules/club-workflows.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import sqlite3 from "sqlite3";
@@ -1216,8 +1217,10 @@ export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }) {
   }
 
   const placeholders = normalizedMemberIds.map(() => "?").join(", ");
+  const fixedAmount = feeRules.feeCentsForStatus(normalizedStatus, normalizedPeriod, null);
+  const amountSql = fixedAmount === null ? "amount_cents" : String(fixedAmount);
   const paidCentsSql = ["paid", "paid_rookie_fee", "paid_with_fee"].includes(normalizedStatus)
-    ? "amount_cents"
+    ? amountSql
     : normalizedStatus === "partial"
       ? "paid_cents"
       : "0";
@@ -1226,6 +1229,7 @@ export async function bulkUpdateFeeStatus({ feePeriod, status, memberIds }) {
     `
       update membership_fees
       set status = ?,
+          amount_cents = ${amountSql},
           paid_cents = ${paidCentsSql}
       where fee_period = ?
         and member_id in (${placeholders})
@@ -1251,7 +1255,7 @@ export async function updateFeeRecord(feeId, payload) {
   }
 
   const status = normalizeFeeStatusForUpdate(payload.status);
-  const amountCents = normalizeCurrencyToCents(payload.amount, "Fee amount");
+  const amountCents = status === "paid_rookie_fee" ? 5000 : normalizeCurrencyToCents(payload.amount, "Fee amount");
   let paidCents = normalizeCurrencyToCents(payload.paidAmount, "Paid amount");
 
   if (["paid", "paid_rookie_fee"].includes(status)) {
