@@ -4,5 +4,16 @@ Disallow: /src/
 Disallow: /appwrite/
 Disallow: /scripts/
 Disallow: /dist/
+Disallow: /organization
+Disallow: /members
+Disallow: /fees
+Disallow: /user
+Disallow: /passes
+Disallow: /equipment
+Disallow: /pass-sync
+Disallow: /invites
+Disallow: /settings
+Disallow: /recovery
+Disallow: /sponsor-outreach
 
 Sitemap: https://emperors.page/sitemap.xml

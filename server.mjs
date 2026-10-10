@@ -1383,9 +1383,16 @@ app.get("/api/status", (req, res) => {
 });
 
 if (SERVE_STATIC_FRONTEND) {
-  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|contact|sponsors|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery)\/?$/i;
+  const appRoutePattern = /^\/(?:roster|hall-of-fame|tryout(?:\/[^/]+)?|contact|sponsors|members|fees|user(?:\/.*)?|passes|organization|equipment|pass-sync|events|invites|settings|recovery|sponsor-outreach)\/?$/i;
   app.get(appRoutePattern, (_req, res) => {
     res.sendFile(path.join(__dirname, "index.html"));
+  });
+}
+
+if (SERVE_STATIC_FRONTEND) {
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
+    res.status(404).sendFile(path.join(__dirname, "404.html"));
   });
 }
 

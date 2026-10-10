@@ -290,7 +290,8 @@
     membership_fees: { member_id: "member_id", fee_period: "fee_period" },
     player_passes: { member_id: "member_id" },
     sponsor_communications: { sponsor_id: "sponsor_id" },
-    tryout_settings: { key: "key" }
+    tryout_settings: { key: "key" },
+    diagnostics_logs: { scope: "scope" }
   };
 
   function serverQueriesForFilters(tableName, filters) {

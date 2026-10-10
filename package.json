@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "start": "node server.mjs",
-    "test:workflows": "node --test tests/club-workflows.test.cjs tests/tryout-tasks.test.cjs tests/workspace-integration.test.cjs",
+    "test:workflows": "node --test tests/club-workflows.test.cjs tests/tryout-tasks.test.cjs tests/workspace-integration.test.cjs tests/public-analytics.test.cjs",
     "setup:workflows": "node scripts/setup-club-workflows.mjs",
     "setup:appwrite": "node scripts/setup-appwrite-collections.mjs",
     "auth:create-user": "node scripts/create-appwrite-auth-user.mjs",
@@ -19,7 +19,8 @@
     "functions:check-shared": "node scripts/sync-function-shared.mjs --check",
     "free-plan:setup-functions": "node scripts/setup-free-plan-functions.mjs",
     "free-plan:migrate-storage": "node scripts/migrate-storage-to-single-bucket.mjs",
-    "free-plan:cleanup-deployments": "node scripts/cleanup-function-deployments.mjs"
+    "free-plan:cleanup-deployments": "node scripts/cleanup-function-deployments.mjs",
+    "build:public": "node scripts/build-public-pages.mjs"
   },
   "dependencies": {
     "csv-parse": "^6.2.1",

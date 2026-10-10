@@ -90,10 +90,10 @@
       href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20261006a" />
+    <link rel="stylesheet" href="./styles.css?v=20261010a" />
     <script src="https://cdn.jsdelivr.net/npm/appwrite@26.2.0"></script>
     <script src="./src/appwrite-config.js?v=20261003a"></script>
-    <script src="./src/appwrite-backend-compat.js?v=20261006e"></script>
+    <script src="./src/appwrite-backend-compat.js?v=20261010a"></script>
     <script src="./src/modules/cache-utils.js?v=20260508a"></script>
     <script src="./src/modules/iban-utils.js?v=20260508a"></script>
     <script src="./src/modules/profile-finance.js?v=20260823a"></script>
@@ -462,7 +462,7 @@
 
     <dialog id="hof-lightbox" class="hof-lightbox-dialog">
       <figure class="hof-lightbox-figure">
-        <img id="hof-lightbox-img" src="" alt="" class="hof-lightbox-img" />
+        <img id="hof-lightbox-img" src="" alt="Hall of Fame player portrait" class="hof-lightbox-img" />
         <figcaption id="hof-lightbox-caption" class="hof-lightbox-caption"></figcaption>
       </figure>
     </dialog>
@@ -512,7 +512,7 @@
           <span class="meta">Photo (optional — placeholder avatar is used if none is added)</span>
           <div style="display:flex; align-items:center; gap:12px;">
             <div style="width:88px; height:88px; border-radius:14px; overflow:hidden; border:1px solid var(--line); background:rgba(15,23,42,0.03); display:flex; align-items:center; justify-content:center;">
-              <img id="hof-photo-preview-image" src="" alt="" style="width:100%; height:100%; object-fit:cover; display:none;" />
+              <img id="hof-photo-preview-image" src="" alt="Hall of Fame photo preview" style="width:100%; height:100%; object-fit:cover; display:none;" />
               <span id="hof-photo-preview-placeholder" class="meta">No photo</span>
             </div>
             <div class="button-row" style="gap:8px;">
@@ -533,6 +533,14 @@
     </dialog>
 
     <script src="./src/vendor/qrcode.js?v=20260715a"></script>
-    <script defer src="./app.bundle.js?v=20261006h"></script>
+    <script src="./src/modules/public-analytics.js?v=20261010a"></script>
+    <script defer src="./app.bundle.js?v=20261010a"></script>
+    <section id="analytics-consent" class="analytics-consent" role="region" aria-label="Privacy choices" hidden>
+      <h2>Optional website statistics</h2>
+      <p>May we count your visits to public pages to improve the website? We do not add names, account IDs or search parameters to these statistics. Your choice is stored on this device.</p>
+      <div class="button-row"><button type="button" class="ghost-button" id="analytics-reject">No thanks</button><button type="button" class="ghost-button" id="analytics-accept">Allow statistics</button><a href="/datenschutz.html">Privacy policy</a></div>
+    </section>
+    <button type="button" class="privacy-choices" id="analytics-preferences" hidden>Privacy choices</button>
+    <a class="mobile-tryout-cta" href="/tryout">Join a tryout</a>
   </body>
 </html>

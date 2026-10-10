@@ -6950,6 +6950,8 @@ Uni Wien Emperors`;
     if (!status) return;
     status.textContent = message;
     status.className = `tryout-form-status ${tone}`;
+    status.setAttribute("role", tone === "error" ? "alert" : "status");
+    status.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
   }
 
   function loadTryoutSubmissionFilters() {
@@ -8260,6 +8262,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     const status = document.getElementById("contact-form-status");
     if (!status) return;
     status.textContent = String(message || "");
+    status.setAttribute("role", tone === "error" ? "alert" : "status");
+    status.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
     status.className = `contact-form-status ${tone === "success" ? "success" : tone === "error" ? "error" : ""}`.trim();
   }
 
@@ -10605,6 +10609,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     const diagnosticEntries = loadDiagnosticsLog();
     const remoteRows = remoteDiagnosticsEntries;
     return `
+      ${currentAccessRole === "admin" ? renderWebsiteAnalytics() : ""}
       <div class="grid two-up">
         ${currentAccessRole === "admin" ? `
         <article class="setup-card">
@@ -11565,8 +11570,68 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     }
   };
 
+  let websiteAnalyticsRows = [];
+  let websiteAnalyticsLoaded = false;
+  let websiteAnalyticsLoading = false;
+  let websiteAnalyticsError = "";
+  let lastTrackedPublicPath = "";
+  let statisticsChoice = null;
+  const statisticsKey = "emperors-public-statistics-v1";
+  try { statisticsChoice = localStorage.getItem(statisticsKey); } catch {}
+
+  function syncPublicStatistics(viewId, reopen = false) {
+    const module = moduleRegistry.publicAnalytics;
+    const path = ROUTE_SEO[viewId]?.path;
+    const allowedHost = ["emperors.page", "www.emperors.page"].includes(window.location.hostname);
+    const optedOut = navigator.doNotTrack === "1" || navigator.doNotTrack === "yes" || navigator.globalPrivacyControl === true;
+    const eligible = Boolean(module && path && allowedHost && !authState.loading && !authState.user && !hasRecoveryContext() && !optedOut);
+    const banner = document.getElementById("analytics-consent");
+    const preferences = document.getElementById("analytics-preferences");
+    if (!banner || !preferences) return;
+    banner.hidden = !eligible || (!reopen && statisticsChoice !== null);
+    preferences.hidden = !eligible;
+    document.body.dataset.consentOpen = String(!banner.hidden);
+    preferences.onclick = () => syncPublicStatistics(getRouteView(), true);
+    const choose = choice => {
+      statisticsChoice = choice;
+      try { localStorage.setItem(statisticsKey, choice); } catch {}
+      syncPublicStatistics(getRouteView());
+    };
+    document.getElementById("analytics-reject").onclick = () => choose("denied");
+    document.getElementById("analytics-accept").onclick = () => choose("allowed");
+    if (!eligible || !module.canTrack({ host: window.location.hostname, choice: statisticsChoice, loading: authState.loading, signedIn: Boolean(authState.user), path, doNotTrack: navigator.doNotTrack, globalPrivacyControl: navigator.globalPrivacyControl, recovery: hasRecoveryContext() }) || lastTrackedPublicPath === path) return;
+    lastTrackedPublicPath = path;
+    const event = module.eventFor(path);
+    if (event && diagnosticsFunctionId()) void executeAppwriteFunction(diagnosticsFunctionId(), { task: "log", event }, { maxPolls: 2, pollDelayMs: 250 }).catch(() => {});
+  }
+
+  async function loadWebsiteAnalytics() {
+    if (currentAccessRole !== "admin" || !backendClient || websiteAnalyticsLoading) return;
+    websiteAnalyticsLoading = true;
+    websiteAnalyticsError = "";
+    try {
+      const result = await backendClient.from("diagnostics_logs").select("*").eq("scope", "web-analytics").order("$createdAt", { ascending: false }).limit(1000);
+      if (result.error) throw result.error;
+      websiteAnalyticsRows = result.data || [];
+      websiteAnalyticsLoaded = true;
+    } catch (error) { websiteAnalyticsError = summarizeDiagnosticError(error); }
+    finally { websiteAnalyticsLoading = false; if (getRouteView() === "settings") mount(); }
+  }
+
+  function renderWebsiteAnalytics() {
+    const stats = moduleRegistry.publicAnalytics?.summarize(websiteAnalyticsRows) || { last7: 0, last30: 0, pages: [] };
+    return `<article class="setup-card"><p class="eyebrow">Website statistics</p><h3>Public page views</h3>
+      <p class="meta">Consenting visitors only; no unique visitor counts. Based on up to the latest 1,000 recorded page views. Reloads count as new page views; signed-in users and private pages are excluded.</p>
+      ${websiteAnalyticsError ? `<p role="alert">Could not load statistics: ${escapeHtml(websiteAnalyticsError)}</p>` : !websiteAnalyticsLoaded ? `<p role="status">${websiteAnalyticsLoading ? "Loading statistics…" : "Statistics have not been loaded yet."}</p>` : `<p><strong>${stats.last7}</strong> in the last 7 days · <strong>${stats.last30}</strong> in the last 30 days</p><div class="table-wrap"><table><thead><tr><th>Public page</th><th>Views (30 days)</th></tr></thead><tbody>${stats.pages.map(([path, count]) => `<tr><td>${escapeHtml(path)}</td><td>${count}</td></tr>`).join("") || '<tr><td colspan="2">No recorded page views in this period.</td></tr>'}</tbody></table></div>`}
+      <button type="button" class="ghost-button" id="refresh-website-analytics" ${websiteAnalyticsLoading ? "disabled" : ""}>Refresh statistics</button></article>`;
+  }
+
   function updateSeoMeta(viewId) {
-    const info = ROUTE_SEO[viewId] || ROUTE_SEO.dashboard;
+    const isPublic = Object.hasOwn(ROUTE_SEO, viewId);
+    const info = ROUTE_SEO[viewId] || { path: `/${viewId}`, title: "Member area – Uni Wien Emperors", description: "Sign in to access the Emperors member area." };
+    const robots = document.querySelector('meta[name="robots"]');
+    if (robots) robots.setAttribute("content", isPublic ? "index, follow" : "noindex, nofollow");
+    document.body.dataset.publicView = isPublic ? viewId : "";
     const fullUrl = `https://emperors.page${info.path}`;
     document.title = info.title;
     const setMetaContent = (selector, value) => {
@@ -11597,6 +11662,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     }
     if (finalView === "dashboard" && currentAccessRole === "admin" && !dashboardLoadAttempted) void loadAdminDashboard();
     updateSeoMeta(finalView);
+    syncPublicStatistics(finalView);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
     }
@@ -13166,6 +13232,9 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindDiagnosticsActions() {
+    const analyticsRefresh = document.getElementById("refresh-website-analytics");
+    if (analyticsRefresh) analyticsRefresh.onclick = () => loadWebsiteAnalytics();
+    if (getRouteView() === "settings" && currentAccessRole === "admin" && !websiteAnalyticsLoaded && !websiteAnalyticsLoading && !websiteAnalyticsError) void loadWebsiteAnalytics();
     const exportButton = document.getElementById("export-diagnostics-log");
     if (exportButton) {
       exportButton.onclick = function () {
@@ -14141,6 +14210,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         form.reset();
         const message = "Thanks. Your message was sent to the Emperors team.";
         contactFormStatusMessage(message, "success");
+        const contactStatus = document.getElementById("contact-form-status");
+        if (contactStatus) { const link = document.createElement("a"); link.href = "/thank-you.html"; link.textContent = " Next steps →"; contactStatus.append(link); }
         showToast(message, "success");
       } catch (error) {
         const message = error?.message || "Could not send the message.";
@@ -14361,6 +14432,10 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
             ? "Registration saved in this local preview. Live Appwrite storage is not configured here."
             : "Registration received. We will contact you when the next tryout details are confirmed.";
           tryoutRegistrationStatusMessage(message, "success");
+          if (!result.localOnly) {
+            const status = document.getElementById("tryout-form-status");
+            if (status) { const link = document.createElement("a"); link.href = "/thank-you.html"; link.textContent = " Next steps →"; status.append(link); }
+          }
           showToast(message, "success");
           if (tryoutSubmissionsLoadedAt) {
             mount();

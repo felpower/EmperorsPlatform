@@ -167,3 +167,18 @@ Roster picture import expects:
 - Never put Appwrite admin API keys in frontend files
 - Keep Appwrite function secrets only in Appwrite environment variables
 - If any admin key was exposed in chat/history, rotate it in Appwrite Console
+
+
+## Public website and statistics (October 2026)
+
+`npm run build:public` produces `dist/site`. The GitHub Pages workflow deploys that directory, including per-route HTML metadata, private-route `noindex` shells and the custom 404. Only frontend files are included; backend code, environment files and CSV/Excel imports are excluded. Continue using `npm start` for local API development.
+
+Public visitors can opt into basic page-view statistics. The existing `emperors-public` function's `log` task writes sanitized events with scope `web-analytics` into the existing admin-readable `diagnostics_logs` table. No extra Appwrite Function, database, SDK subscription or paid analytics plan is needed. Function executions and database operations count toward the existing plan limits. No public read permission was added.
+
+Admins see **Setup → Website statistics**: page views for 7/30 days, using up to the newest 1,000 analytics records. These are consenting page views, not unique visitors or exact audience counts. Private routes, signed-in users, preview hosts, Do Not Track and Global Privacy Control are excluded. Query strings, hashes, names and account IDs are not stored in these events. **Privacy choices** allows visitors to withdraw consent; the preference is stored only on their device. Analytics records use the existing diagnostics retention process; this change does not automatically delete historical logs.
+
+The API-created native Analytics property `emperors-public` is not connected to this implementation. The current Console/Explorer did not expose a documented native installation flow; usage charts remain available independently of these website counters.
+
+Checklist: custom 404; existing first-screen tryout CTA plus mobile home CTA; route titles/descriptions, OG image and favicons; robots/sitemap for public pages; image alternatives; existing responsive layouts; loading and form errors; post-submission next-steps page; updated technical privacy information; optional statistics consent. Existing imprint/contact details remain authoritative. No invented club contract terms were added. Before publication, the owner should confirm the existing legal contact/controller details.
+
+Validation: workflow and statistics privacy tests (`npm run test:workflows`); frontend build; HTTP/HTML checks; successful live storage smoke test with its temporary row removed. Visual browser verification was blocked by the in-app browser's localhost restriction. Changes are local until committed and deployed through the existing workflow.
