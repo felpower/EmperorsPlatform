@@ -6417,6 +6417,7 @@ Uni Wien Emperors`;
   function rosterMemberMatchesSelectedPosition(member, selected) {
     const normalized = String(selected || "ALL").trim().toUpperCase();
     if (normalized === "ALL") return true;
+    if (normalized === "ROOKIES") return Boolean(member.rookie) && isRosterAthlete(member);
     if (normalized === "COACH") return isRosterCoach(member);
     if (normalized === "STAFF") return isRosterStaff(member);
     return rosterMemberPositions(member).includes(normalized);
@@ -6533,7 +6534,7 @@ Uni Wien Emperors`;
   function renderRoster() {
     const positions = rosterPositionOptions();
     let selected = String(selectedRosterPosition || "all").trim().toUpperCase();
-    if (selected !== "ALL" && !positions.includes(selected)) {
+    if (selected !== "ALL" && selected !== "ROOKIES" && !positions.includes(selected)) {
       selectedRosterPosition = "all";
       selected = "ALL";
       saveStoredValue(ROSTER_FILTER_KEY, selectedRosterPosition);
@@ -6561,12 +6562,13 @@ Uni Wien Emperors`;
             <p class="roster-page-copy">Active Emperors athletes, coaches and staff</p>
           </div>
           <div class="roster-count">
-            <strong>${totalRosterMembers}</strong>
-            <span>Roster</span>
+            <strong>${selected === "ALL" ? totalRosterMembers : rows.length}</strong>
+            <span>${selected === "ROOKIES" ? "Rookies" : selected === "ALL" ? "Roster" : "Matching members"}</span>
           </div>
         </div>
-        <div class="roster-filter-bar" aria-label="Roster position filter">
+        <div class="roster-filter-bar" aria-label="Roster filter">
           <button type="button" class="roster-filter-chip ${selectedRosterPosition === "all" ? "is-active" : ""}" data-roster-position="all" data-no-toast="true">All</button>
+          <button type="button" class="roster-filter-chip ${selected === "ROOKIES" ? "is-active" : ""}" data-roster-position="ROOKIES" data-no-toast="true">Rookies</button>
           ${positions.map((position) => `
             <button type="button" class="roster-filter-chip ${selectedRosterPosition.toUpperCase() === position ? "is-active" : ""}" data-roster-position="${escapeAttribute(position)}" data-no-toast="true">${escapeHtml(rosterPositionFilterLabel(position))}</button>
           `).join("")}
