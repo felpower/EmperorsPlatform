@@ -10727,6 +10727,41 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       </div>`;
   }
 
+  // Compact "next Emperors game" banner for the Games page.
+  function renderNextEmperorsGame(games) {
+    const now = Date.now() - 3 * 3600 * 1000;
+    const next = games.filter((game) => !game.hasScore && (game.homeTeamName === EMPERORS_TEAM_NAME || game.awayTeamName === EMPERORS_TEAM_NAME) && new Date(game.startsAt).getTime() >= now)
+      .sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)))[0];
+    if (!next) return "";
+    const raw = String(next.startsAt || "");
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw);
+    const start = new Date(dateOnly ? `${raw}T12:00:00` : raw);
+    const tz = "Europe/Vienna";
+    const day = new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short" }).format(start);
+    const date = new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "2-digit" }).format(start);
+    const month = new Intl.DateTimeFormat("en-GB", { timeZone: tz, month: "short" }).format(start);
+    const time = dateOnly ? "Kickoff TBA" : `${new Intl.DateTimeFormat("de-AT", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(start)} Kickoff`;
+    const days = Math.max(0, Math.ceil((start.getTime() - Date.now()) / 86400000));
+    const countdown = days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
+    const team = (name, logo) => `<span class="ng-team">${logo ? renderLazyImage({ src: logo, alt: name, className: "ng-logo", wrapperClass: "ng-logo-wrap" }) : `<span class="ng-logo gd-logo-fallback">${escapeHtml(String(name || "?").slice(0, 1))}</span>`}<span>${escapeHtml(String(name || "").replace("UNI-Wien Emperors", "Emperors"))}</span></span>`;
+    const venue = next.venue && next.venue !== "TBA" ? next.venue : "";
+    return `
+      <article class="ng-card">
+        <div class="ng-date"><span>${escapeHtml(day)}</span><strong>${escapeHtml(date)}</strong><span>${escapeHtml(month)}</span></div>
+        <div class="ng-main">
+          <p class="ng-label">Next Emperors game · <b>${escapeHtml(countdown)}</b></p>
+          <div class="ng-matchup">${team(next.homeTeamName, next.homeTeamLogo)}<em>vs</em>${team(next.awayTeamName, next.awayTeamLogo)}</div>
+          <p class="ng-meta">${escapeHtml(time)}${venue ? ` · ${escapeHtml(venue)}` : ""}</p>
+        </div>
+        <div class="ng-actions">
+          ${next.ticketLink ? `<a class="ng-btn ng-btn-primary" href="${escapeAttribute(next.ticketLink)}" target="_blank" rel="noreferrer">Tickets</a>` : ""}
+          ${next.streamLink ? `<a class="ng-btn" href="${escapeAttribute(next.streamLink)}" target="_blank" rel="noreferrer">Live</a>` : ""}
+          <button type="button" class="ng-btn" data-calendar-game="${escapeAttribute(next.id)}">+ Calendar</button>
+          ${venue ? `<a class="ng-btn" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue)}" target="_blank" rel="noreferrer">Directions</a>` : ""}
+        </div>
+      </article>`;
+  }
+
   function renderGamesBoard() {
     selectGamesSeason(selectedGamesSeason);
     const games = buildLeagueGamesViewModel();
@@ -10747,41 +10782,34 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       }
       gamesByStage.get(game.stage).push(game);
     });
+    const seasonOptions = (leagueGamesStore?.seasons() || ["2026/27", "2025/26"]).map((season) => `<option value="${escapeAttribute(season)}" ${selectedGamesSeason === season ? "selected" : ""}>${escapeHtml(season)}</option>`).join("");
+    const hasRegularResults = selectedGamesSeason === "2025/26" || LEAGUE_GAMES_SNAPSHOT.some((game) => workflows.roundFor(game) === "regular" && Number.isFinite(game.homeScore));
     return `
-      <div class="section-head">
-      <div>
-        <p class="eyebrow">Austrian College Sports League</p>
-        <h3>Games & results · ${escapeHtml(selectedGamesSeason)}</h3><label>Season <select id="games-season-select">${(leagueGamesStore?.seasons() || ["2026/27", "2025/26"]).map((season) => `<option value="${escapeAttribute(season)}" ${selectedGamesSeason === season ? "selected" : ""}>${escapeHtml(season)}</option>`).join("")}</select></label>
-      </div>
-      <div class="pill-row" style="margin-top:0;">
-        ${plainPill(`${games.length} games shown`)}
-        ${plainPill(`${completedGames.length} finished`)}
-        ${plainPill(`${upcomingGames.length} upcoming`)}
-      </div>
-      </div>
+      <header class="gp-head">
+        <div>
+          <p class="eyebrow">Austrian College Sports League</p>
+          <h2>Games &amp; results</h2>
+          <p class="gp-stats">${games.length} games · ${completedGames.length} played · ${upcomingGames.length} upcoming</p>
+        </div>
+        <label class="gp-season"><span>Season</span><select id="games-season-select">${seasonOptions}</select></label>
+      </header>
       ${leagueGamesStore?.notice() || ""}
-      ${leagueGamesStore?.nextCard(EMPERORS_TEAM_NAME).replace(leagueGamesStore.notice(), "") || ""}
-      <div class="button-row" style="margin-bottom:14px"><button type="button" class="ghost-button" data-calendar-season>Add Emperors season to calendar</button></div>
+      ${renderNextEmperorsGame(games)}
       ${leagueGamesStore?.editor(selectedGamesSeason, gameFilterTeamOptions()) || ""}
-      ${selectedGamesSeason !== "2025/26" && LEAGUE_GAMES_SNAPSHOT.some(game => Number.isFinite(game.homeScore)) ? `<p class="meta">Standings calculated from entered regular-season results; ties are sorted by point difference.</p>` : ""}
-      ${selectedGamesSeason === "2025/26" || LEAGUE_GAMES_SNAPSHOT.some((game) => workflows.roundFor(game) === "regular" && Number.isFinite(game.homeScore)) ? renderGamesStandingsPanel(standings) : `<article class="setup-card"><p class="meta">No regular-season results yet. Standings appear after the first results.</p></article>`}
-      <article class="setup-card games-controls">
-        <div class="button-row equipment-sheet-tabs">
-          <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" data-games-view-mode="schedule" data-no-toast="true">Regular season</button>
-          <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "playoffs" ? "is-active" : ""}" data-games-view-mode="playoffs" data-no-toast="true">Playoff picture</button>
+      ${hasRegularResults ? renderGamesStandingsPanel(standings) : `<p class="meta gp-note">No regular-season results yet – the table appears after the first results.</p>`}
+      <div class="gp-toolbar">
+        <div class="gp-tabs" role="tablist">
+          <button type="button" role="tab" class="gp-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" aria-selected="${selectedGamesViewMode === "schedule"}" data-games-view-mode="schedule" data-no-toast="true">Schedule</button>
+          <button type="button" role="tab" class="gp-tab ${selectedGamesViewMode === "playoffs" ? "is-active" : ""}" aria-selected="${selectedGamesViewMode === "playoffs"}" data-games-view-mode="playoffs" data-no-toast="true">Playoff picture</button>
         </div>
-        ${selectedGamesViewMode === "schedule" ? `
-        <div class="game-filter-bar">
-          <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
-        ${filterOptions.map((teamName) => `
-        <button type="button" class="ghost-button game-filter-chip ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>
-        `).join("")}
-        </div>
-        ` : `
-        <p class="meta" style="margin:0;">${selectedGamesSeason === "2025/26" ? "Archived playoff results from 2025/26." : "Semifinals: 1st vs 4th seed and 2nd vs 3rd seed. Final: semifinal winners. Third place: semifinal losers."}</p>
-        `}
-        ${selectedGamesSeason === "2025/26" ? `<p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>` : `<p class="meta" style="margin:12px 0 0;">ACSL season schedule ${escapeHtml(selectedGamesSeason)}. All kickoff times are shown in Vienna local time.</p>`}
-      </article>
+        <button type="button" class="gd-chip gp-cal" data-calendar-season>+ Emperors season to calendar</button>
+      </div>
+      ${selectedGamesViewMode === "schedule" ? `
+      <div class="gp-filters" aria-label="Filter by team">
+        <button type="button" class="gp-filter ${selectedGameTeams.length ? "" : "is-active"}" data-game-team="__all__">All teams</button>
+        ${filterOptions.map((teamName) => `<button type="button" class="gp-filter ${selectedGameTeams.includes(teamName) ? "is-active" : ""}" data-game-team="${escapeHtml(teamName)}">${teamLogoUrl(teamName) ? renderLazyImage({ src: teamLogoUrl(teamName), alt: "", className: "gp-filter-logo", wrapperClass: "gp-filter-logo-wrap" }) : ""}${escapeHtml(teamName.replace("UNI-Wien ", "").replace("Med Uni Wien ", ""))}</button>`).join("")}
+      </div>` : ""}
+      <p class="meta gp-note">${selectedGamesSeason === "2025/26" ? `Archived season. Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a>` : `All kickoff times in Vienna local time.${hasRegularResults ? " Table from entered results; ties sorted by point difference." : ""}`}</p>
       ${selectedGamesViewMode === "playoffs" ? (selectedGamesSeason === "2025/26" ? renderPlayoffBracket(bracket) : renderCurrentSeasonPlayoffs()) : ""}
       ${selectedGamesViewMode === "schedule" ? `
       ${!games.length ? emptyState("No games match this filter", "Clear the team filter or add a game for this season.") : ""}

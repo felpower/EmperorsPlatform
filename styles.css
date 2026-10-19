@@ -3844,3 +3844,43 @@ body[data-consent-open="true"] .mobile-tryout-cta { display: none; }
 .po-score{font-weight:800;font-size:1rem;font-variant-numeric:tabular-nums}
 @media (max-width:760px){.po-bracket{grid-template-columns:1fr}.po-top4{min-width:0;width:100%}}
 @media (max-width:640px){.gd-venue{grid-column:1/-1}}
+.gp-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.gp-head h2{margin:2px 0 2px}.gp-stats{margin:0;color:#5b6466;font-size:.85rem}
+.gp-season{display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;color:#5b6466}
+.gp-season select{padding:8px 30px 8px 12px;border-radius:999px;border:1px solid #d5dbdc;background:#fff;font-weight:700}
+.ng-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;padding:12px 16px;margin-bottom:14px;border-radius:18px;background:linear-gradient(120deg,#151b1c 0%,#1f2a2c 60%,#26383b 100%);color:#fff;box-shadow:0 10px 30px rgba(21,27,28,.18)}
+.ng-date{display:grid;justify-items:center;line-height:1.05;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.08);text-transform:uppercase}
+.ng-date span{font-size:.68rem;letter-spacing:.08em;opacity:.8}.ng-date strong{font-size:1.6rem;color:#f6c316}
+.ng-main{display:grid;gap:4px;min-width:0}
+.ng-label{margin:0;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#b7c0c2}.ng-label b{color:#f6c316}
+.ng-matchup{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-weight:800;font-size:1.05rem}
+.ng-matchup em{font-style:normal;font-weight:600;color:#8fa0a3;font-size:.85rem}
+.ng-team{display:inline-flex;align-items:center;gap:8px}
+.ng-logo,.ng-logo-wrap,.ng-logo-wrap img{width:28px;height:28px;object-fit:contain;border-radius:6px;flex:none}
+.ng-meta{margin:0;font-size:.8rem;color:#b7c0c2}
+.ng-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.ng-btn{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:999px;padding:7px 12px;font-size:.78rem;font-weight:700;text-decoration:none;cursor:pointer;white-space:nowrap}
+.ng-btn:hover{background:rgba(255,255,255,.1)}
+.ng-btn-primary{background:#f6c316;border-color:#f6c316;color:#151b1c}.ng-btn-primary:hover{background:#ffd63d}
+.gp-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 8px}
+.gp-tabs{display:inline-flex;padding:4px;border-radius:999px;background:#e9eef0;gap:2px}
+.gp-tab{border:0;background:transparent;padding:7px 16px;border-radius:999px;font-weight:700;font-size:.85rem;color:#5b6466;cursor:pointer}
+.gp-tab.is-active{background:#151b1c;color:#f6c316;box-shadow:0 2px 8px rgba(21,27,28,.2)}
+.gp-filters{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:thin}
+.gp-filter{display:inline-flex;align-items:center;gap:6px;flex:none;border:1px solid #d5dbdc;background:#fff;border-radius:999px;padding:5px 12px;font-size:.8rem;font-weight:700;color:#151b1c;cursor:pointer}
+.gp-filter.is-active{background:#151b1c;border-color:#151b1c;color:#fff}
+.gp-filter-logo,.gp-filter-logo-wrap,.gp-filter-logo-wrap img{width:18px;height:18px;object-fit:contain;flex:none}
+.gp-note{margin:0 0 10px;font-size:.78rem}
+@media (max-width:700px){.ng-card{grid-template-columns:auto 1fr;gap:12px}.ng-actions{grid-column:1/-1;justify-content:flex-start}.ng-matchup{font-size:.95rem}}
+#events .standings-shell{padding:12px 16px;border-radius:16px}
+#events .games-standings-summary{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}
+#events .games-standings-summary h3{margin:0;font-size:1rem}#events .games-standings-summary .eyebrow{margin:0 0 2px}
+#events .standings-table-wrap{margin-top:10px;box-shadow:none;border:1px solid #eef1f2;border-radius:12px}
+#events .standings-table th{padding:6px 8px;font-size:.68rem}
+#events .standings-table td{padding:5px 8px;font-size:.88rem}
+#events .standings-team-cell{gap:8px}
+#events .standings-team-logo,#events .standings-team-cell .game-logo-lazy-media,#events .standings-team-cell img{width:22px;height:22px;min-width:22px;border-radius:6px;object-fit:contain}
+#events .standings-team-cell strong{font-weight:700}
+@media (max-width:640px){#events .standings-table th:nth-child(6),#events .standings-table td:nth-child(6),#events .standings-table th:nth-child(7),#events .standings-table td:nth-child(7),#events .standings-table th:nth-child(8),#events .standings-table td:nth-child(8){display:none}}
+@media (max-width:640px){#events .games-standings-summary{flex-direction:row;text-align:left;align-items:center}#events .games-standings-summary-meta{flex-direction:row}#events .standings-table{width:100%;min-width:0}#events .standings-table td,#events .standings-table th{padding:5px 6px}#events .standings-team-cell strong{font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw;display:block}}
+@media (max-width:640px){#events .standings-table th:nth-child(5),#events .standings-table td:nth-child(5){display:none}}
