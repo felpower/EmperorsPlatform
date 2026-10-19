@@ -3887,3 +3887,6 @@ body[data-consent-open="true"] .mobile-tryout-cta { display: none; }
 .tryout-form.is-hidden-registered{display:none}
 .tryout-registered-card{border-left:4px solid #f6c316;display:grid;gap:8px;align-content:start}
 .tryout-registered-card h3{margin:0}.tryout-registered-card p{margin:0;line-height:1.6}
+.tryout-merge-panel{margin:0 0 12px;padding:10px 14px;border:1px solid #f6c316;border-radius:12px;background:rgba(246,195,22,.08)}
+.tryout-merge-panel summary{cursor:pointer}.tryout-merge-panel .meta{margin:8px 0}
+.tryout-merge-list{margin:6px 0 10px;padding-left:18px;max-height:240px;overflow:auto;display:grid;gap:4px}

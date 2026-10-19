@@ -7788,6 +7788,107 @@ Uni Wien Emperors`;
     };
   }
 
+  // Merging: only rows sharing an e-mail or phone number in the same tryout cycle.
+  // Name-only matches stay flagged but are never merged automatically.
+  const TRYOUT_MERGE_FIELDS = [
+    ["firstName", "first_name"], ["lastName", "last_name"], ["email", "email"], ["phone", "phone"], ["age", "age"],
+    ["uniWienStudent", "uni_wien_student"], ["studyProgram", "study_program"], ["footballExperience", "previous_football_experience"],
+    ["footballExperienceDetails", "football_experience_details"], ["otherSports", "other_sports"], ["preferredPosition", "preferred_position"],
+    ["heightCm", "height_cm"], ["weightKg", "weight_kg"], ["availabilityNotes", "availability_notes"], ["referredBy", "referred_by"]
+  ];
+  const TRYOUT_STATUS_RANK = { archived: -1, new: 0, contacted: 1, invited: 2, no_show: 3, attended: 4, joined: 5 };
+
+  function tryoutMergeGroups(rows = tryoutSubmissions) {
+    const parents = rows.map((_, index) => index);
+    const findRoot = (index) => (parents[index] === index ? index : (parents[index] = findRoot(parents[index])));
+    const owners = new Map();
+    rows.forEach((row, index) => {
+      if (!row.id) return;
+      const cycle = String(row.tryoutCycle || "next");
+      const email = String(row.email || "").trim().toLowerCase();
+      const phone = normalizeTryoutDuplicatePhone(row.phone);
+      [email && `${cycle}|email:${email}`, phone && `${cycle}|phone:${phone}`].filter(Boolean).forEach((key) => {
+        if (owners.has(key)) { const a = findRoot(owners.get(key)); const b = findRoot(index); if (a !== b) parents[b] = a; }
+        else owners.set(key, index);
+      });
+    });
+    const groups = new Map();
+    rows.forEach((row, index) => { const root = findRoot(index); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(row); });
+    return Array.from(groups.values()).filter((group) => {
+      if (group.length < 2) return false;
+      const linked = new Set(group.map((row) => row.linkedMemberId).filter(Boolean));
+      return linked.size <= 1; // two different linked members: leave for a human
+    });
+  }
+
+  function planTryoutMerge(group) {
+    const filled = (value) => value !== null && value !== undefined && String(value).trim() !== "";
+    const oldestFirst = [...group].sort((a, b) => String(a.submittedAt || "").localeCompare(String(b.submittedAt || "")));
+    const newestFirst = [...oldestFirst].reverse();
+    const keep = group.find((row) => row.linkedMemberId) || oldestFirst[0];
+    const patch = {};
+    TRYOUT_MERGE_FIELDS.forEach(([key, column]) => {
+      // Latest answers win; the referral stays with whoever was named first.
+      const source = key === "referredBy" ? oldestFirst : newestFirst;
+      const value = source.map((row) => row[key]).find(filled);
+      if (filled(value) && String(value) !== String(keep[key] ?? "")) patch[column] = value;
+    });
+    const status = group.map((row) => row.status || "new").reduce((best, next) => ((TRYOUT_STATUS_RANK[next] ?? 0) > (TRYOUT_STATUS_RANK[best] ?? 0) ? next : best), keep.status || "new");
+    if (status !== keep.status) patch.status = status;
+    if (!keep.contactConsent && group.some((row) => row.contactConsent)) patch.contact_consent = true;
+    const firstSubmitted = oldestFirst[0].submittedAt;
+    if (firstSubmitted && firstSubmitted !== keep.submittedAt) patch.submitted_at = firstSubmitted;
+    if ("age" in patch) patch.age = Number(patch.age) || null;
+    ["height_cm", "weight_kg"].forEach((column) => { if (column in patch) patch[column] = Number(patch[column]) || null; });
+    return { keep, remove: group.filter((row) => row !== keep), patch };
+  }
+
+  let tryoutMergeRunning = false;
+  async function mergeTryoutDuplicates() {
+    const plans = tryoutMergeGroups().map(planTryoutMerge);
+    if (!plans.length || tryoutMergeRunning) return;
+    const extra = plans.reduce((total, plan) => total + plan.remove.length, 0);
+    if (!window.confirm(`Merge ${plans.length} ${plans.length === 1 ? "person who" : "people who"} registered more than once? ${extra} extra entr${extra === 1 ? "y" : "ies"} will be deleted; each person keeps one entry with their latest details and highest status. This cannot be undone.`)) return;
+    tryoutMergeRunning = true;
+    let merged = 0;
+    const errors = [];
+    for (const plan of plans) {
+      try {
+        if (Object.keys(plan.patch).length) {
+          const updated = await backendClient.from("tryout_registrations").update(plan.patch).eq("id", plan.keep.id);
+          if (updated.error) throw updated.error;
+        }
+        for (const row of plan.remove) {
+          const removed = await backendClient.from("tryout_registrations").delete().eq("id", row.id);
+          if (removed.error) throw removed.error;
+        }
+        merged += 1;
+      } catch (error) {
+        errors.push(`${plan.keep.firstName} ${plan.keep.lastName}: ${error?.message || error}`);
+      }
+    }
+    tryoutMergeRunning = false;
+    selectedTryoutSubmissionIds = [];
+    showToast(errors.length ? `Merged ${merged} of ${plans.length}. Failed: ${errors.join("; ")}` : `Merged ${merged} duplicate registration${merged === 1 ? "" : "s"}.`, errors.length ? "error" : "success");
+    await loadTryoutSubmissions(true);
+  }
+
+  function renderTryoutMergePanel() {
+    const plans = tryoutMergeGroups().map(planTryoutMerge);
+    if (!plans.length) return "";
+    const extra = plans.reduce((total, plan) => total + plan.remove.length, 0);
+    return `
+      <details class="tryout-merge-panel">
+        <summary><strong>${plans.length} ${plans.length === 1 ? "person" : "people"} registered more than once</strong> · ${extra} extra entr${extra === 1 ? "y" : "ies"} (same e-mail or phone)</summary>
+        <p class="meta">Merging keeps one entry per person (the first one, or the one linked to a member), fills it with their latest answers and keeps the highest status. Entries that only share a name are not merged.</p>
+        <ul class="tryout-merge-list">
+          ${plans.map((plan) => `<li><strong>${escapeHtml(`${plan.keep.firstName} ${plan.keep.lastName}`.trim() || plan.keep.email)}</strong> <span class="meta">${escapeHtml(plan.keep.email)} · ${plan.remove.length + 1}&times;${Object.keys(plan.patch).length ? ` · updates ${escapeHtml(Object.keys(plan.patch).join(", "))}` : ""}</span></li>`).join("")}
+        </ul>
+        <button type="button" class="primary-button small-button" id="tryout-merge-duplicates" data-no-toast="true" ${tryoutMergeRunning ? "disabled" : ""}>Merge ${plans.length} duplicate${plans.length === 1 ? "" : "s"}</button>
+      </details>
+    `;
+  }
+
   function tryoutRegistrationSummaryStats(rows, duplicateInfo) {
     const groupKeys = new Set(rows.map((row) => duplicateInfo.groupKeysByRow.get(row) ?? row));
     return {
@@ -8064,6 +8165,7 @@ Uni Wien Emperors`;
           <span>${selectedTryoutSubmissionIds.length} selected</span>
         </div>
         ${loaded ? renderTryoutReferralOverview(duplicateInfo) : ""}
+        ${loaded && backendClient && authState.user ? renderTryoutMergePanel() : ""}
         ${loaded ? `
           <div class="button-row" style="margin-bottom: 10px;">
             <button type="button" class="ghost-button small-button" id="tryout-select-visible" data-no-toast="true">Select visible (${filteredRows.length})</button>
@@ -14888,6 +14990,9 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         switchView("tryout");
       };
     }
+
+    const mergeButton = document.getElementById("tryout-merge-duplicates");
+    if (mergeButton) mergeButton.onclick = () => { mergeTryoutDuplicates(); };
 
     const clearSelectionButton = document.getElementById("tryout-clear-selection");
     if (clearSelectionButton) {
