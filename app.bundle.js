@@ -355,7 +355,7 @@
       ]
     }
   ];
-  const viewIds = ["dashboard", "roster", "hall-of-fame", "tryout", "contact", "sponsors", "members", "fees", "user", "passes", "organization", "sponsor-outreach", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
+  const viewIds = ["dashboard", "roster", "hall-of-fame", "socials", "tryout", "contact", "sponsors", "members", "fees", "user", "passes", "organization", "sponsor-outreach", "equipment", "pass-sync", "events", "invites", "settings", "recovery"];
   const accessRoleOptions = ["admin", "finance_admin", "coach", "tech_admin", "player"];
   const memberRoleOptions = workflows.MEMBER_ROLES;
   const memberPositionOptions = [
@@ -6915,6 +6915,100 @@ Uni Wien Emperors`;
     `;
   }
 
+  // ---- Socials (Instagram feed via emperors-public "instagramFeed", TikTok on click) ----
+  const SOCIAL_LINKS = {
+    instagram: { handle: "uniwienemperors", url: "https://www.instagram.com/uniwienemperors/" },
+    tiktok: { handle: "uniwienemperors", url: "https://www.tiktok.com/@uniwienemperors" }
+  };
+  const SOCIALS_CACHE_KEY = "emperors-socials-cache-v1";
+  let socialsFeed = null;
+  let socialsLoading = false;
+  let socialsError = "";
+  let tiktokEmbedLoaded = false;
+
+  function ensureSocialsLoaded() {
+    if (socialsFeed || socialsLoading) return;
+    const cached = getCacheWithTTL(SOCIALS_CACHE_KEY, 30 * 60 * 1000);
+    if (cached && Array.isArray(cached.posts)) { socialsFeed = cached; return; }
+    const functionId = String(APPWRITE_CONFIG?.publicFunctionId || "").trim();
+    if (!functionId) { socialsFeed = { posts: [], configured: false }; return; }
+    socialsLoading = true;
+    executeAppwriteFunction(functionId, { task: "instagramFeed" }, { maxPolls: 20, pollDelayMs: 400 })
+      .then((result) => {
+        socialsFeed = { posts: Array.isArray(result?.body?.posts) ? result.body.posts : [], configured: result?.body?.configured !== false };
+        if (socialsFeed.posts.length) setCacheWithTTL(SOCIALS_CACHE_KEY, socialsFeed);
+      })
+      .catch((error) => { socialsError = error?.message || "Instagram feed could not be loaded."; socialsFeed = { posts: [], configured: true }; })
+      .finally(() => { socialsLoading = false; if (getRouteView() === "socials") mount(); });
+  }
+
+  function renderSocials() {
+    const posts = socialsFeed?.posts || [];
+    const formatPostDate = (value) => { const d = new Date(value); return Number.isNaN(d.getTime()) ? "" : new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d); };
+    const grid = socialsLoading || !socialsFeed
+      ? `<p class="muted">Loading Instagram posts…</p>`
+      : posts.length
+        ? `<div class="socials-grid">${posts.map((post) => `
+            <a class="socials-post" href="${escapeAttribute(post.url)}" target="_blank" rel="noopener noreferrer" title="${escapeAttribute(post.caption || "Instagram post")}">
+              <img src="${escapeAttribute(post.image)}" alt="${escapeAttribute((post.caption || "Instagram post").slice(0, 120))}" loading="lazy" referrerpolicy="no-referrer" />
+              ${post.type === "VIDEO" ? `<span class="socials-badge">Reel</span>` : post.type === "CAROUSEL_ALBUM" ? `<span class="socials-badge">Album</span>` : ""}
+              <span class="socials-post-date">${escapeHtml(formatPostDate(post.at))}</span>
+            </a>`).join("")}</div>`
+        : `<p class="muted">${socialsError ? escapeHtml(socialsError) : "Our latest Instagram posts will appear here soon."} <a href="${SOCIAL_LINKS.instagram.url}" target="_blank" rel="noopener noreferrer">See them on Instagram →</a></p>`;
+    return `
+      <section class="socials-page">
+        <div class="roster-page-head">
+          <div>
+            <p class="eyebrow">Socials</p>
+            <h2>Follow the Emperors</h2>
+            <p class="roster-page-copy">Game days, practice, behind the scenes – the latest from our Instagram.</p>
+          </div>
+        </div>
+        <article class="card socials-card">
+          <div class="socials-card-head">
+            <div><p class="eyebrow">Instagram</p><h3>@${SOCIAL_LINKS.instagram.handle}</h3></div>
+            <a class="primary-button" href="${SOCIAL_LINKS.instagram.url}" target="_blank" rel="noopener noreferrer">Follow on Instagram</a>
+          </div>
+          ${grid}
+        </article>
+        <article class="card socials-card">
+          <div class="socials-card-head">
+            <div><p class="eyebrow">TikTok</p><h3>@${SOCIAL_LINKS.tiktok.handle}</h3></div>
+            <a class="ghost-button" href="${SOCIAL_LINKS.tiktok.url}" target="_blank" rel="noopener noreferrer">Open TikTok</a>
+          </div>
+          <div id="socials-tiktok-slot">${tiktokEmbedLoaded ? tiktokEmbedHtml() : `<p class="muted">The TikTok feed is loaded from TikTok only when you click – TikTok then receives data such as your IP address.</p><button type="button" class="ghost-button" id="socials-load-tiktok">Load TikTok videos</button>`}</div>
+        </article>
+      </section>
+    `;
+  }
+
+  function tiktokEmbedHtml() {
+    return `<blockquote class="tiktok-embed" cite="${SOCIAL_LINKS.tiktok.url}" data-unique-id="${SOCIAL_LINKS.tiktok.handle}" data-embed-type="creator" style="max-width:780px;min-width:288px;"><section><a target="_blank" rel="noopener noreferrer" href="${SOCIAL_LINKS.tiktok.url}">@${SOCIAL_LINKS.tiktok.handle}</a></section></blockquote>`;
+  }
+
+  function injectTiktokScript(slot) {
+    // embed.js only processes blockquotes present when it runs, so re-run it after each render.
+    slot.querySelectorAll("script[data-tiktok-embed]").forEach((node) => node.remove());
+    const script = document.createElement("script");
+    script.src = "https://www.tiktok.com/embed.js";
+    script.async = true;
+    script.dataset.tiktokEmbed = "1";
+    slot.appendChild(script);
+  }
+
+  function bindSocialsActions() {
+    const slot = document.getElementById("socials-tiktok-slot");
+    if (!slot) return;
+    if (tiktokEmbedLoaded && !slot.querySelector("iframe")) injectTiktokScript(slot);
+    const button = document.getElementById("socials-load-tiktok");
+    if (!button) return;
+    button.onclick = function () {
+      tiktokEmbedLoaded = true;
+      slot.innerHTML = tiktokEmbedHtml();
+      injectTiktokScript(slot);
+    };
+  }
+
   function renderHallOfFame() {
     const canManage = canManageHallOfFame();
     const rows = sortHallOfFameRows(state.hallOfFame || []);
@@ -11371,7 +11465,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
 
   function isPublicView(viewId) {
     const normalizedViewId = String(viewId || "").trim();
-    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "tryout" || normalizedViewId === "contact" || normalizedViewId === "sponsors" || normalizedViewId === "events";
+    return normalizedViewId === "roster" || normalizedViewId === "hall-of-fame" || normalizedViewId === "socials" || normalizedViewId === "tryout" || normalizedViewId === "contact" || normalizedViewId === "sponsors" || normalizedViewId === "events";
   }
 
   function canAccessView(viewId) {
@@ -11553,6 +11647,11 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       title: "Roster – Uni Wien Emperors American Football",
       description: "Meet the current roster of the Uni Wien Emperors, the University of Vienna's American football team."
     },
+    socials: {
+      path: "/socials",
+      title: "Socials – Uni Wien Emperors American Football",
+      description: "Latest posts of the Uni Wien Emperors on Instagram and TikTok."
+    },
     "hall-of-fame": {
       path: "/hall-of-fame",
       title: "Hall of Fame – Uni Wien Emperors American Football",
@@ -11670,6 +11769,9 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     syncPublicStatistics(finalView);
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
+    }
+    if (finalView === "socials") {
+      ensureSocialsLoaded();
     }
     if (finalView === "hall-of-fame") {
       ensureHallOfFameLoaded();
@@ -14819,6 +14921,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       bindDashboardActions();
       setViewHtml("roster", renderRoster());
       setViewHtml("hall-of-fame", renderHallOfFame());
+      setViewHtml("socials", renderSocials());
       setViewHtml("tryout", renderTryout());
       setViewHtml("contact", renderContact());
       setViewHtml("sponsors", renderSponsors());
@@ -14845,6 +14948,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       bindGamesActions();
       bindRosterActions();
       bindHallOfFameActions();
+      bindSocialsActions();
       bindEquipmentPhotoDialog();
       bindMemberFilters();
       bindFeeFilters();

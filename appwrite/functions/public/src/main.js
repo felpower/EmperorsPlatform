@@ -3,13 +3,15 @@
 //   task "log"            client diagnostics          (was LogClientEvent)
 //   task "passwordReset"  Mailgun password reset link (new, replaces Appwrite recovery email)
 //   task "roster"         public roster (only public member fields; members table is not public)
+//   task "instagramFeed"  latest Instagram posts for the Socials page (cached 1 h)
 const { parseBody, applyEnvDefaults } = require("./shared/runtime");
 
 const TASKS = {
   contact: () => require("./tasks/contact"),
   log: () => require("./tasks/log"),
   passwordReset: () => require("./tasks/passwordReset"),
-  roster: () => require("./tasks/roster")
+  roster: () => require("./tasks/roster"),
+  instagramFeed: () => require("./tasks/instagramFeed")
 };
 
 // Older frontends send no "task" field - infer it from the payload shape.

@@ -36,6 +36,11 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://emperors.page/socials</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://emperors.page/impressum.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.2</priority>
