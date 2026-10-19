@@ -205,6 +205,7 @@
       equipment_inventory: String(config.equipmentTableId || "equipment_inventory"),
       diagnostics_logs: String(config.diagnosticsTableId || "diagnostics_logs"),
       member_private: String(config.memberPrivateTableId || "member_private"),
+      social_posts: String(config.socialPostsTableId || "social_posts"),
       hall_of_fame: String(config.hallOfFameTableId || "hall_of_fame")
     };
   }

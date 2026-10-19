@@ -6925,8 +6925,32 @@ Uni Wien Emperors`;
   let socialsLoading = false;
   let socialsError = "";
   let tiktokEmbedLoaded = false;
+  // Curated posts (admins paste post links) – used while no Instagram API token is configured.
+  let socialPosts = null;
+  let socialPostsStatus = "";
+  const SOCIAL_CONSENT_KEY = "emperors-socials-consent";
+  let instagramEmbedLoaded = (() => { try { return localStorage.getItem(SOCIAL_CONSENT_KEY) === "1"; } catch { return false; } })();
+  const INSTAGRAM_POST_PATTERN = /^https:\/\/(?:www\.)?instagram\.com\/(?:[A-Za-z0-9_.]+\/)?(p|reel|tv)\/([A-Za-z0-9_-]+)\/?/;
+
+  function normalizeInstagramUrl(value) {
+    const match = String(value || "").trim().match(INSTAGRAM_POST_PATTERN);
+    return match ? `https://www.instagram.com/${match[1]}/${match[2]}/` : "";
+  }
+
+  function loadSocialPosts(force = false) {
+    if (!backendClient || (socialPosts && !force)) return Promise.resolve();
+    return backendClient.from("social_posts").select("*").then((response) => {
+      if (response.error) throw response.error;
+      socialPosts = (response.data || [])
+        .map((row) => ({ id: String(row.id || row.$id), url: normalizeInstagramUrl(row.url), createdAt: String(row.$createdAt || "") }))
+        .filter((row) => row.url)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }).catch((error) => { socialPosts = socialPosts || []; socialPostsStatus = error?.message || "Posts could not be loaded."; })
+      .finally(() => { if (getRouteView() === "socials") mount(); });
+  }
 
   function ensureSocialsLoaded() {
+    void loadSocialPosts();
     if (socialsFeed || socialsLoading) return;
     const cached = getCacheWithTTL(SOCIALS_CACHE_KEY, 30 * 60 * 1000);
     if (cached && Array.isArray(cached.posts)) { socialsFeed = cached; return; }
@@ -6945,9 +6969,19 @@ Uni Wien Emperors`;
   function renderSocials() {
     const posts = socialsFeed?.posts || [];
     const formatPostDate = (value) => { const d = new Date(value); return Number.isNaN(d.getTime()) ? "" : new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d); };
-    const grid = socialsLoading || !socialsFeed
+    const canManagePosts = String(currentAccessRole || "").toLowerCase() === "admin" && Boolean(authState.user);
+    const curated = socialPosts || [];
+    const curatedHtml = curated.length
+      ? (instagramEmbedLoaded
+        ? `<div class="socials-embeds">${curated.map((post) => `<div class="socials-embed">${canManagePosts ? `<button type="button" class="socials-remove" data-social-remove="${escapeAttribute(post.id)}" aria-label="Remove post">×</button>` : ""}<blockquote class="instagram-media" data-instgrm-permalink="${escapeAttribute(post.url)}?utm_source=ig_embed" data-instgrm-version="14"><a href="${escapeAttribute(post.url)}" target="_blank" rel="noopener noreferrer">View this post on Instagram</a></blockquote></div>`).join("")}</div>`
+        : `<div class="socials-consent"><p class="muted">${curated.length} post${curated.length === 1 ? "" : "s"} from our Instagram. They are loaded from Instagram only after you click – Instagram (Meta) then receives data such as your IP address.</p><label class="socials-remember"><input type="checkbox" id="socials-remember" checked> Remember my choice on this device</label><button type="button" class="primary-button" id="socials-load-instagram">Load Instagram posts</button>${canManagePosts ? `<ul class="socials-admin-list">${curated.map((post) => `<li><a href="${escapeAttribute(post.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(post.url.replace("https://www.instagram.com", ""))}</a><button type="button" class="socials-remove" data-social-remove="${escapeAttribute(post.id)}" aria-label="Remove post">×</button></li>`).join("")}</ul>` : ""}</div>`)
+      : `<p class="muted">Our latest Instagram posts will appear here soon. <a href="${SOCIAL_LINKS.instagram.url}" target="_blank" rel="noopener noreferrer">See them on Instagram →</a></p>`;
+    const adminForm = canManagePosts ? `<form class="socials-add" id="socials-add-form"><input type="url" id="socials-add-url" placeholder="https://www.instagram.com/p/…" required /><button type="submit" class="ghost-button">Add post</button><span class="meta" id="socials-add-status">${escapeHtml(socialPostsStatus)}</span></form>` : "";
+    const grid = (socialsLoading || !socialsFeed) && !curated.length
       ? `<p class="muted">Loading Instagram posts…</p>`
-      : posts.length
+      : curated.length || !posts.length
+        ? curatedHtml + adminForm
+        : posts.length
         ? `<div class="socials-grid">${posts.map((post) => `
             <a class="socials-post" href="${escapeAttribute(post.url)}" target="_blank" rel="noopener noreferrer" title="${escapeAttribute(post.caption || "Instagram post")}">
               <img src="${escapeAttribute(post.image)}" alt="${escapeAttribute((post.caption || "Instagram post").slice(0, 120))}" loading="lazy" referrerpolicy="no-referrer" />
@@ -6996,7 +7030,44 @@ Uni Wien Emperors`;
     slot.appendChild(script);
   }
 
+  function processInstagramEmbeds() {
+    if (!document.querySelector("#socials .instagram-media")) return;
+    if (window.instgrm?.Embeds?.process) { window.instgrm.Embeds.process(); return; }
+    if (document.getElementById("instagram-embed-script")) return;
+    const script = document.createElement("script");
+    script.id = "instagram-embed-script";
+    script.src = "https://www.instagram.com/embed.js";
+    script.async = true;
+    document.body.appendChild(script);
+  }
+
   function bindSocialsActions() {
+    if (instagramEmbedLoaded) processInstagramEmbeds();
+    const loadInstagram = document.getElementById("socials-load-instagram");
+    if (loadInstagram) loadInstagram.onclick = function () {
+      instagramEmbedLoaded = true;
+      if (document.getElementById("socials-remember")?.checked) { try { localStorage.setItem(SOCIAL_CONSENT_KEY, "1"); } catch { /* storage unavailable */ } }
+      mount();
+    };
+    const addForm = document.getElementById("socials-add-form");
+    if (addForm) addForm.onsubmit = async function (event) {
+      event.preventDefault();
+      const input = document.getElementById("socials-add-url");
+      const url = normalizeInstagramUrl(input?.value);
+      if (!url) { socialPostsStatus = "Please paste a link to an Instagram post or reel (instagram.com/p/… or /reel/…)."; mount(); return; }
+      if ((socialPosts || []).some((post) => post.url === url)) { socialPostsStatus = "This post is already on the page."; mount(); return; }
+      const response = await backendClient.from("social_posts").insert([{ url, platform: "instagram", added_by: String(authState.user?.email || "") }]);
+      socialPostsStatus = response.error ? (response.error.message || "Could not add the post.") : "Post added.";
+      await loadSocialPosts(true);
+    };
+    document.querySelectorAll("[data-social-remove]").forEach((button) => {
+      button.onclick = async function () {
+        if (!window.confirm("Remove this post from the Socials page?")) return;
+        const response = await backendClient.from("social_posts").delete().eq("id", button.dataset.socialRemove);
+        socialPostsStatus = response.error ? (response.error.message || "Could not remove the post.") : "Post removed.";
+        await loadSocialPosts(true);
+      };
+    });
     const slot = document.getElementById("socials-tiktok-slot");
     if (!slot) return;
     if (tiktokEmbedLoaded && !slot.querySelector("iframe")) injectTiktokScript(slot);
