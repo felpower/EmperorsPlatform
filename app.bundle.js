@@ -244,7 +244,8 @@
     {"id": "g-2627-15", "stage": "ACSL Football Season Ending Gameday", "subtitle": "ACSL Football Season Ending Gameday", "startsAt": "2027-05-22T18:30:00+02:00", "dateOnly": false, "venueName": "Footballzentrum Ravelin, Bleriotgasse 3, 1110 Wien", "venueCity": "", "homeTeam": {"name": "TU Robots"}, "awayTeam": {"name": "UNI-Wien Emperors"}},
     {"id": "g-2627-16", "stage": "Semifinals", "subtitle": "ACSL Football Semifinals", "startsAt": "2027-06-05T15:30:00+02:00", "dateOnly": false, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "1st Seed"}, "awayTeam": {"name": "4th Seed"}},
     {"id": "g-2627-17", "stage": "Semifinals", "subtitle": "ACSL Football Semifinals", "startsAt": "2027-06-05T18:30:00+02:00", "dateOnly": false, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "2nd Seed"}, "awayTeam": {"name": "3rd Seed"}},
-    {"id": "g-2627-18", "stage": "Final", "subtitle": "ACSL Summer Bowl 2027", "startsAt": "2027-06-26", "dateOnly": true, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "Winner Semifinal 1"}, "awayTeam": {"name": "Winner Semifinal 2"}}
+    {"id":"g-2627-19","stage":"3rd place","round":"third_place","subtitle":"ACSL Summer Bowl 2027 · Third place","startsAt":"2027-06-26T15:30:00+02:00","dateOnly":false,"venueName":"TBA","venueCity":"","homeTeam":{"name":"Loser Semifinal 1"},"awayTeam":{"name":"Loser Semifinal 2"}},
+    {"id": "g-2627-18", "stage": "Final", "subtitle": "ACSL Summer Bowl 2027", "startsAt": "2027-06-26T18:30:00+02:00", "dateOnly": false, "venueName": "TBA", "venueCity": "", "homeTeam": {"name": "Winner Semifinal 1"}, "awayTeam": {"name": "Winner Semifinal 2"}}
   ];
   const CURRENT_LEAGUE_STANDINGS = { label: "Regular season 2026/27 – season starts 18 October", updatedAt: "", rows: [] };
   let selectedGamesSeason = "2026/27";
@@ -257,6 +258,7 @@
     selectedGamesSeason = available.includes(season) ? season : (available[0] || "2026/27");
     LEAGUE_GAMES_SNAPSHOT = leagueGamesStore ? leagueGamesStore.rows().filter((game) => game.season === selectedGamesSeason) : (selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_GAMES : CURRENT_LEAGUE_GAMES);
     LEAGUE_STANDINGS_SNAPSHOT = selectedGamesSeason === "2025/26" ? LEGACY_LEAGUE_STANDINGS : { label: "Regular season " + selectedGamesSeason, rows: workflows.standings(LEAGUE_GAMES_SNAPSHOT), updatedAt: workflows.localDate() };
+    if (selectedGamesSeason !== "2025/26") LEAGUE_GAMES_SNAPSHOT = workflows.playoffPicture(LEAGUE_GAMES_SNAPSHOT, LEAGUE_STANDINGS_SNAPSHOT.rows);
   }
 
   function formatGameDate(game) {
@@ -265,7 +267,7 @@
   }
 
   function renderCurrentSeasonPlayoffs() {
-    return `<section class="setup-card"><h3>Playoffs ${escapeHtml(selectedGamesSeason)}</h3><p class="meta">The top four teams qualify. Seeds will be determined by the regular season.</p><div class="games-stage-list">${LEAGUE_GAMES_SNAPSHOT.filter((game) => workflows.roundFor(game) !== "regular").map((game) => `<article class="playoff-match-card"><h3>${escapeHtml(game.subtitle)}</h3><p>${escapeHtml(formatGameDate(game))} · ${escapeHtml([game.venueName, game.venueCity].filter(Boolean).join(" · ") || "Venue TBA")}</p><div class="playoff-team-stack">${renderBracketTeamSlot({teamName: game.homeTeam.name, score: game.homeScore})}${renderBracketTeamSlot({teamName: game.awayTeam.name, score: game.awayScore})}</div></article>`).join("")}</div></section>`;
+    return `<section class="setup-card"><h3>Playoffs ${escapeHtml(selectedGamesSeason)}</h3><p class="meta">The top four teams qualify. Current projection based on the full regular-season table: 1st vs 4th and 2nd vs 3rd. Pairings may change until the regular season ends.</p><div class="games-stage-list">${LEAGUE_GAMES_SNAPSHOT.filter((game) => workflows.roundFor(game) !== "regular").map((game) => `<article class="playoff-match-card"><h3>${escapeHtml(game.subtitle)}</h3><p>${escapeHtml(formatGameDate(game))} · ${escapeHtml([game.venueName, game.venueCity].filter(Boolean).join(" · ") || "Venue TBA")}</p><div class="playoff-team-stack">${renderBracketTeamSlot({teamName: game.homeTeam.name, score: game.homeScore})}${renderBracketTeamSlot({teamName: game.awayTeam.name, score: game.awayScore})}</div></article>`).join("")}</div></section>`;
   }
 
   const STORAGE_KEY = "emperors-local-state-v3";
@@ -10464,7 +10466,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
         `).join("")}
         </div>
         ` : `
-        <p class="meta" style="margin:0;">${selectedGamesSeason === "2025/26" ? "Archived playoff results from 2025/26." : "Semifinals: 1st vs 4th seed and 2nd vs 3rd seed. Final: winners of both semifinals."}</p>
+        <p class="meta" style="margin:0;">${selectedGamesSeason === "2025/26" ? "Archived playoff results from 2025/26." : "Semifinals: 1st vs 4th seed and 2nd vs 3rd seed. Final: semifinal winners. Third place: semifinal losers."}</p>
         `}
         ${selectedGamesSeason === "2025/26" ? `<p class="meta" style="margin:12px 0 0;">Source: <a href="${CLUBEE_GAMES_SOURCE_URL}" target="_blank" rel="noreferrer">Clubee ACSL season games</a></p>` : `<p class="meta" style="margin:12px 0 0;">ACSL season schedule ${escapeHtml(selectedGamesSeason)}. All kickoff times are shown in Vienna local time.</p>`}
       </article>

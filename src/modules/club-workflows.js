@@ -103,6 +103,26 @@
     return [...rows.values()].map((row) => ({ ...row, diff: row.pointsFor - row.pointsAgainst, pct: (row.wins + row.draws / 2) / (row.wins + row.losses + row.draws || 1) }))
       .sort((a, b) => b.pct - a.pct || b.diff - a.diff || a.teamName.localeCompare(b.teamName)).map((row, i) => ({ ...row, rank: i + 1 }));
   }
+  // Project placeholder participants without changing saved fixtures or confirmed teams.
+  function playoffPicture(games, ranked = standings(games)) {
+    const hasResults = ranked.some(row => row.wins + row.losses + row.draws > 0);
+    const seedNames = hasResults ? ranked.slice().sort((a,b) => a.rank-b.rank).map(row => row.teamName) : [];
+    const resolveSeed = name => {
+      const match = /^(\d+)(?:st|nd|rd|th) Seed$/i.exec(name || "");
+      return match && seedNames[Number(match[1])-1] || name;
+    };
+    const seeded = games.map(game => ({...game, homeTeam:{...game.homeTeam,name:resolveSeed(game.homeTeam.name)},awayTeam:{...game.awayTeam,name:resolveSeed(game.awayTeam.name)}}));
+    const semis = seeded.filter(game => roundFor(game) === "semifinal").sort((a,b) => new Date(a.startsAt)-new Date(b.startsAt) || a.id.localeCompare(b.id));
+    const resolve = name => {
+      const match = /^(Winner|Loser) Semifinal ([12])$/i.exec(name || "");
+      if (!match) return name;
+      const game = semis[Number(match[2])-1];
+      if (!game || ["cancelled","postponed"].includes(game.status) || ![game.homeScore,game.awayScore].every(Number.isFinite) || game.homeScore === game.awayScore) return name;
+      const homeWins = game.homeScore > game.awayScore;
+      return (match[1].toLowerCase() === "winner" ? homeWins : !homeWins) ? game.homeTeam.name : game.awayTeam.name;
+    };
+    return seeded.map(game => ({...game,homeTeam:{...game.homeTeam,name:resolve(game.homeTeam.name)},awayTeam:{...game.awayTeam,name:resolve(game.awayTeam.name)}}));
+  }
   function calendar(games, now = new Date()) {
     const escape = (value) => String(value || "").replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
     const timestamp = (value) => new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
@@ -140,7 +160,7 @@
     }
     return { succeeded, failed };
   }
-  const api = { DEFAULT_FEE_RATES, feeRatesForPeriod, standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, calendar, batch };
+  const api = { DEFAULT_FEE_RATES, feeRatesForPeriod, standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, playoffPicture, calendar, batch };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else { root.ClubHubModules = root.ClubHubModules || {}; root.ClubHubModules.workflows = api; }
 })(typeof window !== "undefined" ? window : globalThis);
