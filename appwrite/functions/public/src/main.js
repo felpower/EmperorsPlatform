@@ -4,6 +4,7 @@
 //   task "passwordReset"  Mailgun password reset link (new, replaces Appwrite recovery email)
 //   task "roster"         public roster (only public member fields; members table is not public)
 //   task "instagramFeed"  latest Instagram posts for the Socials page (cached 1 h)
+//   task "tryoutRegister" tryout sign-up: duplicate check + confirmation e-mail
 const { parseBody, applyEnvDefaults } = require("./shared/runtime");
 
 const TASKS = {
@@ -11,7 +12,8 @@ const TASKS = {
   log: () => require("./tasks/log"),
   passwordReset: () => require("./tasks/passwordReset"),
   roster: () => require("./tasks/roster"),
-  instagramFeed: () => require("./tasks/instagramFeed")
+  instagramFeed: () => require("./tasks/instagramFeed"),
+  tryoutRegister: () => require("./tasks/tryoutRegister")
 };
 
 // Older frontends send no "task" field - infer it from the payload shape.

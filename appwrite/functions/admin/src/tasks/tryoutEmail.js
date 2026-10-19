@@ -87,11 +87,19 @@ module.exports = async ({ req, res, log }) => {
     const statusFailures = [];
     const statusUpdatedIds = [];
 
+    // People who registered several times get one mail; all their rows are marked invited.
+    const deliveredTo = new Map();
     for (const recipient of recipients) {
       const email = String(recipient?.email || "").trim();
       const id = String(recipient?.id || "").trim();
       if (!isEmailAddress(email)) {
         failed.push({ id, email, reason: "Invalid or missing email address." });
+        continue;
+      }
+      const emailKey = email.toLowerCase();
+      if (deliveredTo.has(emailKey)) {
+        if (deliveredTo.get(emailKey)) sent.push({ id, email, duplicate: true });
+        else failed.push({ id, email, reason: "Same address as a registration that failed above." });
         continue;
       }
       try {
@@ -101,8 +109,10 @@ module.exports = async ({ req, res, log }) => {
           fillTemplate(bodyTemplate, recipient)
         );
         sent.push({ id, email });
+        deliveredTo.set(emailKey, true);
       } catch (error) {
         failed.push({ id, email, reason: error instanceof Error ? error.message : "Unknown send error." });
+        deliveredTo.set(emailKey, false);
       }
     }
 
@@ -127,10 +137,11 @@ module.exports = async ({ req, res, log }) => {
       }
     }
 
-    log(`Tryout email batch: ${sent.length} sent, ${failed.length} failed.`);
+    log(`Tryout email batch: ${sent.filter((entry) => !entry.duplicate).length} sent, ${failed.length} failed.`);
     return res.json({
       ok: true,
-      sentCount: sent.length,
+      sentCount: sent.filter((entry) => !entry.duplicate).length,
+      duplicateCount: sent.filter((entry) => entry.duplicate).length,
       failedCount: failed.length,
       sent,
       failed,

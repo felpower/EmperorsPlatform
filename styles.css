@@ -3884,3 +3884,6 @@ body[data-consent-open="true"] .mobile-tryout-cta { display: none; }
 @media (max-width:640px){#events .standings-table th:nth-child(6),#events .standings-table td:nth-child(6),#events .standings-table th:nth-child(7),#events .standings-table td:nth-child(7),#events .standings-table th:nth-child(8),#events .standings-table td:nth-child(8){display:none}}
 @media (max-width:640px){#events .games-standings-summary{flex-direction:row;text-align:left;align-items:center}#events .games-standings-summary-meta{flex-direction:row}#events .standings-table{width:100%;min-width:0}#events .standings-table td,#events .standings-table th{padding:5px 6px}#events .standings-team-cell strong{font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw;display:block}}
 @media (max-width:640px){#events .standings-table th:nth-child(5),#events .standings-table td:nth-child(5){display:none}}
+.tryout-form.is-hidden-registered{display:none}
+.tryout-registered-card{border-left:4px solid #f6c316;display:grid;gap:8px;align-content:start}
+.tryout-registered-card h3{margin:0}.tryout-registered-card p{margin:0;line-height:1.6}

@@ -7909,9 +7909,31 @@ Uni Wien Emperors`;
     return record;
   }
 
+  // Remembered on this device so returning visitors see "you're already registered".
+  const TRYOUT_REGISTERED_KEY = "emperors-tryout-registered-v1";
+  function rememberedTryoutRegistration() {
+    try { const data = JSON.parse(localStorage.getItem(TRYOUT_REGISTERED_KEY) || "null"); return data && data.email ? data : null; } catch { return null; }
+  }
+  function rememberTryoutRegistration(payload) {
+    try { localStorage.setItem(TRYOUT_REGISTERED_KEY, JSON.stringify({ email: payload.email, firstName: payload.first_name, at: new Date().toISOString() })); } catch { /* storage unavailable */ }
+  }
+  let tryoutShowFormAnyway = false;
+
   async function saveTryoutRegistration(payload) {
     if (!backendClient || isLocalPreviewMode()) {
       return { localOnly: true, data: saveTryoutRegistrationLocally(payload) };
+    }
+    // Server-side: duplicate check (same e-mail/phone) + confirmation e-mail.
+    const functionId = String(APPWRITE_CONFIG?.publicFunctionId || "").trim();
+    if (functionId) {
+      try {
+        const result = await executeAppwriteFunction(functionId, { task: "tryoutRegister", registration: payload }, { maxPolls: 25, pollDelayMs: 400 });
+        if (result?.body?.ok) return { localOnly: false, duplicate: Boolean(result.body.duplicate), emailed: Boolean(result.body.emailed), data: null };
+        if (result?.body?.error) throw new Error(result.body.error);
+      } catch (error) {
+        if (/enter|confirm|valid/i.test(String(error?.message || ""))) throw error; // validation message from the server
+        console.warn("tryoutRegister function failed, saving directly.", error);
+      }
     }
     const response = await backendClient.from("tryout_registrations").insert([payload]);
     if (response.error) throw response.error;
@@ -8226,7 +8248,8 @@ Uni Wien Emperors`;
         </div>
 
         <div class="tryout-layout">
-          <form id="tryout-form" class="tryout-form setup-card" novalidate>
+          ${(() => { const done = rememberedTryoutRegistration(); return done && !tryoutShowFormAnyway && !canManageTryoutSubmissions() ? `<article class="setup-card tryout-registered-card"><p class="eyebrow">You're registered</p><h3>See you at the tryout${done.firstName ? `, ${escapeHtml(done.firstName)}` : ""}!</h3><p>You signed up with <strong>${escapeHtml(done.email)}</strong>. You don't need to register again – we'll email you the time, location and what to bring about one week before the tryout. Check your spam folder if nothing arrives.</p><button type="button" class="ghost-button" id="tryout-register-another">Register someone else / change details</button></article>` : ""; })()}
+          <form id="tryout-form" class="tryout-form setup-card ${rememberedTryoutRegistration() && !tryoutShowFormAnyway && !canManageTryoutSubmissions() ? "is-hidden-registered" : ""}" novalidate>
             <div>
               <p class="eyebrow">Signup</p>
               <h3>Tryout registration</h3>
@@ -14698,6 +14721,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       };
     }
 
+    const registerAnother = document.getElementById("tryout-register-another");
+    if (registerAnother) registerAnother.onclick = () => { tryoutShowFormAnyway = true; mount(); switchView("tryout"); };
     const form = document.getElementById("tryout-form");
     const submitButton = document.getElementById("tryout-submit-button");
     const referralInput = form?.querySelector('input[name="referredBy"]');
@@ -14728,16 +14753,19 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
             tryoutSubmissions = [normalizeTryoutSubmissionRow(result.data), ...tryoutSubmissions];
           }
           form.reset();
+          if (!result.localOnly) { rememberTryoutRegistration(payload); tryoutShowFormAnyway = false; }
           const message = result.localOnly
             ? "Registration saved in this local preview. Live Appwrite storage is not configured here."
-            : "Registration received. We will contact you when the next tryout details are confirmed.";
+            : result.duplicate
+              ? "You were already registered – we updated your details. No need to register again; we'll email you the details about a week before the tryout."
+              : `You're registered!${result.emailed ? ` A confirmation is on its way to ${payload.email}.` : ""} We'll email you all details about a week before the tryout.`;
           tryoutRegistrationStatusMessage(message, "success");
           if (!result.localOnly) {
             const status = document.getElementById("tryout-form-status");
             if (status) { const link = document.createElement("a"); link.href = "/thank-you.html"; link.textContent = " Next steps →"; status.append(link); }
           }
           showToast(message, "success");
-          if (tryoutSubmissionsLoadedAt) {
+          if (tryoutSubmissionsLoadedAt || !result.localOnly) {
             mount();
             switchView("tryout");
           }
