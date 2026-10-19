@@ -266,8 +266,91 @@
     return new Date(`${game.startsAt}T12:00:00`).toLocaleDateString("de-AT") + " · Kickoff TBA";
   }
 
+  // Current-season playoff picture: bracket (semifinals → final, third place) with seeds
+  // projected from the live standings until the playoff teams are entered.
   function renderCurrentSeasonPlayoffs() {
-    return `<section class="setup-card"><h3>Playoffs ${escapeHtml(selectedGamesSeason)}</h3><p class="meta">The top four teams qualify. Current projection based on the full regular-season table: 1st vs 4th and 2nd vs 3rd. Pairings may change until the regular season ends.</p><div class="games-stage-list">${LEAGUE_GAMES_SNAPSHOT.filter((game) => workflows.roundFor(game) !== "regular").map((game) => `<article class="playoff-match-card"><h3>${escapeHtml(game.subtitle)}</h3><p>${escapeHtml(formatGameDate(game))} · ${escapeHtml([game.venueName, game.venueCity].filter(Boolean).join(" · ") || "Venue TBA")}</p><div class="playoff-team-stack">${renderBracketTeamSlot({teamName: game.homeTeam.name, score: game.homeScore})}${renderBracketTeamSlot({teamName: game.awayTeam.name, score: game.awayScore})}</div></article>`).join("")}</div></section>`;
+    const standings = buildRankedStandingsViewModel();
+    const hasResults = LEAGUE_GAMES_SNAPSHOT.some((game) => workflows.roundFor(game) === "regular" && Number.isFinite(game.homeScore));
+    const games = LEAGUE_GAMES_SNAPSHOT.filter((game) => workflows.roundFor(game) !== "regular")
+      .slice().sort((a, b) => String(a.startsAt || "").localeCompare(String(b.startsAt || "")));
+    const semis = games.filter((game) => /semi/i.test(`${game.stage} ${game.subtitle}`));
+    const third = games.find((game) => /3rd|third|bronze/i.test(`${game.stage} ${game.subtitle}`)) || null;
+    const final = games.find((game) => game !== third && !semis.includes(game) && /final|bowl/i.test(`${game.stage} ${game.subtitle}`)) || null;
+    const scored = (game) => game && Number.isFinite(game.homeScore) && Number.isFinite(game.awayScore);
+    const ordinal = (n) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th"}`;
+    function resolve(name, forGame = null) {
+      const raw = String(name || "").trim();
+      const seed = raw.match(/^(\d)(?:st|nd|rd|th)\s+seed$/i);
+      if (seed) {
+        const rank = Number(seed[1]);
+        const team = hasResults ? standings.find((row) => row.rank === rank) : null;
+        return { name: team ? team.teamName : "", seed: rank, projected: Boolean(team), placeholder: `${ordinal(rank)} seed` };
+      }
+      const from = raw.match(/^(winner|loser)\s+semifinal\s+(\d)$/i);
+      if (from) {
+        const game = semis[Number(from[2]) - 1];
+        const label = `${from[1][0].toUpperCase()}${from[1].slice(1).toLowerCase()} SF ${from[2]}`;
+        if (scored(game) && game.homeScore !== game.awayScore) {
+          const homeWon = game.homeScore > game.awayScore;
+          const wantWinner = from[1].toLowerCase() === "winner";
+          const side = homeWon === wantWinner ? game.homeTeam : game.awayTeam;
+          return { name: resolve(side?.name).name || side?.name || "", seed: null, projected: false, placeholder: label };
+        }
+        return { name: "", seed: null, projected: false, placeholder: label };
+      }
+      // Seeds already filled in from the table (workflows.playoffPicture): show the seed badge.
+      const row = forGame && semis.includes(forGame) ? standings.find((r) => r.teamName === raw) : null;
+      return { name: raw, seed: row && row.rank <= 4 ? row.rank : null, projected: Boolean(row) && !scored(forGame), placeholder: "TBD" };
+    }
+    const slot = (team, score, won) => {
+      const logo = team.name ? teamLogoUrl(team.name) : "";
+      return `
+        <div class="po-team ${won ? "is-winner" : ""} ${team.name ? "" : "is-open"} ${team.name === EMPERORS_TEAM_NAME ? "is-emperors" : ""}">
+          ${team.seed ? `<span class="po-seed">${team.seed}</span>` : `<span class="po-seed po-seed-empty"></span>`}
+          ${logo ? renderLazyImage({ src: logo, alt: team.name, className: "gd-logo", wrapperClass: "gd-logo-wrap" }) : `<span class="gd-logo gd-logo-fallback">${escapeHtml((team.name || "?").slice(0, 1))}</span>`}
+          <span class="po-name">${escapeHtml(team.name ? team.name.replace("UNI-Wien Emperors", "Uni Wien Emperors") : team.placeholder)}${team.projected ? `<small>projected</small>` : ""}</span>
+          <span class="po-score">${Number.isFinite(score) ? escapeHtml(String(score)) : ""}</span>
+        </div>`;
+    };
+    const card = (game, title, extraClass = "") => {
+      if (!game) return "";
+      const home = resolve(game.homeTeam?.name, game);
+      const away = resolve(game.awayTeam?.name, game);
+      const done = scored(game);
+      const venue = [game.venueName, game.venueCity].filter((v) => v && v !== "TBA").join(" · ");
+      const upcoming = new Date(game.startsAt).getTime() > Date.now();
+      return `
+        <article class="po-card ${extraClass}">
+          <header><strong>${escapeHtml(title)}</strong><span>${escapeHtml(formatGameDate(game))}${venue ? ` · ${escapeHtml(venue)}` : ""}</span></header>
+          ${slot(home, game.homeScore, done && game.homeScore > game.awayScore)}
+          ${slot(away, game.awayScore, done && game.awayScore > game.homeScore)}
+          <footer>
+            ${game.streamLink ? `<a class="gd-chip" href="${escapeAttribute(game.streamLink)}" target="_blank" rel="noreferrer">${upcoming ? "Live" : "Replay"}</a>` : ""}
+            ${game.ticketLink && upcoming ? `<a class="gd-chip" href="${escapeAttribute(game.ticketLink)}" target="_blank" rel="noreferrer">Tickets</a>` : ""}
+            ${upcoming && game.id ? `<button type="button" class="gd-chip" data-calendar-game="${escapeAttribute(game.id)}">+ Cal</button>` : ""}
+          </footer>
+        </article>`;
+    };
+    const top4 = standings.slice(0, 4);
+    return `
+      <section class="po-shell">
+        <div class="po-intro">
+          <div><p class="eyebrow">Playoffs ${escapeHtml(selectedGamesSeason)}</p><h3>Road to the final</h3>
+          <p class="meta">${hasResults ? "Projected from the current table – pairings can change until the regular season ends." : "The top four teams of the regular season qualify: 1st vs 4th, 2nd vs 3rd."}</p></div>
+          ${hasResults && top4.length ? `<ol class="po-top4">${top4.map((row) => `<li class="${row.teamName === EMPERORS_TEAM_NAME ? "is-emperors" : ""}"><span>${row.rank}</span>${escapeHtml(row.teamName.replace("UNI-Wien Emperors", "Uni Wien Emperors"))}<small>${row.wins}-${row.losses}${row.draws ? `-${row.draws}` : ""}</small></li>`).join("")}</ol>` : ""}
+        </div>
+        <div class="po-bracket">
+          <div class="po-col">
+            <p class="po-round">Semifinals</p>
+            ${semis.map((game, index) => card(game, `Semifinal ${index + 1}`)).join("")}
+          </div>
+          <div class="po-col po-col-final">
+            <p class="po-round">Final</p>
+            ${card(final, final?.subtitle && !/^ACSL Football Final$/i.test(final.subtitle) ? final.subtitle : "Final", "po-final")}
+            ${third ? `<p class="po-round">3rd place</p>${card(third, "3rd place game")}` : ""}
+          </div>
+        </div>
+      </section>`;
   }
 
   const STORAGE_KEY = "emperors-local-state-v3";
@@ -10594,7 +10677,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       ? renderLazyImage({ src, alt: name, className: "gd-logo", wrapperClass: "gd-logo-wrap" })
       : `<span class="gd-logo gd-logo-fallback">${escapeHtml(String(name || "?").slice(0, 1))}</span>`;
     const short = (name) => String(name || "").replace("UNI-Wien Emperors", "Emperors").replace("UNI-Wien ", "Uni Wien ").replace("Med Uni Wien ", "MedUni ");
-    const row = (game) => {
+    const row = (game, blockVenue = "") => {
       const start = new Date(game.startsAt);
       const isEmperors = game.homeTeamName === EMPERORS_TEAM_NAME || game.awayTeamName === EMPERORS_TEAM_NAME;
       const homeWon = game.hasScore && Number(game.homeScore) > Number(game.awayScore);
@@ -10606,6 +10689,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
           <span class="gd-team gd-home ${homeWon ? "is-winner" : ""}"><span class="gd-name">${escapeHtml(short(game.homeTeamName))}</span>${logo(game.homeTeamLogo, game.homeTeamName)}</span>
           <span class="gd-score">${game.hasScore ? `${escapeHtml(String(game.homeScore))}<i>:</i>${escapeHtml(String(game.awayScore))}` : `<em>vs</em>`}</span>
           <span class="gd-team gd-away ${awayWon ? "is-winner" : ""}">${logo(game.awayTeamLogo, game.awayTeamName)}<span class="gd-name">${escapeHtml(short(game.awayTeamName))}</span></span>
+          ${game.venue && game.venue !== blockVenue ? `<span class="gd-venue meta">${escapeHtml(game.venue)}</span>` : ""}
           <span class="gd-actions">
             ${game.isReplay ? `<span class="gd-tag">Replay</span>` : ""}
             ${game.streamLink ? `<a class="gd-chip" href="${escapeAttribute(game.streamLink)}" target="_blank" rel="noreferrer">${upcoming ? "Live" : "Replay"}</a>` : ""}
@@ -10626,7 +10710,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
           <div class="gd-date">${valid ? `<span>${escapeHtml(dayFmt.format(first))}</span><strong>${escapeHtml(dateFmt.format(first))}</strong><span>${escapeHtml(monthFmt.format(first))}</span>` : "<strong>TBA</strong>"}</div>
           <div class="gd-main">
             <div class="gd-head"><strong>${escapeHtml(name)}</strong><span class="meta">${escapeHtml(venue)}</span></div>
-            ${list.map(row).join("")}
+            ${list.map((game) => row(game, venue)).join("")}
           </div>
         </section>`;
     };

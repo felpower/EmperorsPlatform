@@ -3819,3 +3819,28 @@ body[data-consent-open="true"] .mobile-tryout-cta { display: none; }
 .gd-tag{font-size:.68rem;font-weight:800;text-transform:uppercase;color:#5b6466;align-self:center}
 .gd-earlier{display:grid;gap:10px}.gd-earlier>summary{cursor:pointer;font-weight:700;color:#5b6466;padding:4px 2px}.gd-earlier[open]>summary{margin-bottom:10px}
 @media (max-width:640px){.gd-block{grid-template-columns:1fr;padding:10px}.gd-date{grid-auto-flow:column;justify-content:start;gap:6px;padding:4px 10px;align-items:baseline}.gd-date strong{font-size:1.1rem}.gd-game{grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);grid-template-areas:"time time actions" "home score away";row-gap:2px;column-gap:6px;padding:6px}.gd-time{grid-area:time}.gd-home{grid-area:home}.gd-score{grid-area:score}.gd-away{grid-area:away}.gd-actions{grid-area:actions}.gd-team{font-size:.85rem;gap:6px}.gd-logo,.gd-logo-wrap,.gd-logo-wrap img{width:20px;height:20px}}
+.gd-venue{grid-column:2/5;font-size:.75rem;text-align:center;margin-top:-2px}
+.po-shell{display:grid;gap:14px}
+.po-intro{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:16px;background:#fff;border:1px solid #e3e7e8}
+.po-intro h3{margin:2px 0 4px}.po-intro .meta{margin:0;max-width:52ch}
+.po-top4{list-style:none;margin:0;padding:0;display:grid;gap:4px;min-width:220px}
+.po-top4 li{display:flex;align-items:center;gap:8px;font-size:.88rem;padding:4px 8px;border-radius:8px;background:#f6f8f8}
+.po-top4 li span{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#151b1c;color:#f6c316;font-size:.72rem;font-weight:800}
+.po-top4 li small{margin-left:auto;color:#5b6466}.po-top4 li.is-emperors{background:rgba(246,195,22,.16)}
+.po-bracket{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:center}
+.po-col{display:grid;gap:10px;position:relative}
+.po-round{margin:4px 0 0;font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#5b6466}
+.po-card{border-radius:14px;background:#fff;border:1px solid #e3e7e8;box-shadow:0 4px 14px rgba(21,27,28,.06);overflow:hidden}
+.po-card header{display:grid;gap:2px;padding:8px 12px;background:#f6f8f8;border-bottom:1px solid #e3e7e8}
+.po-card header strong{font-size:.9rem}.po-card header span{font-size:.75rem;color:#5b6466}
+.po-card footer{display:flex;gap:4px;justify-content:flex-end;padding:6px 10px}.po-card footer:empty{display:none}
+.po-final{border:2px solid #f6c316;box-shadow:0 10px 28px rgba(246,195,22,.22)}.po-final header{background:#151b1c;color:#fff}.po-final header span{color:#f6c316}
+.po-team{display:grid;grid-template-columns:22px 24px 1fr auto;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f0f2f2}
+.po-team:last-of-type{border-bottom:0}
+.po-team.is-winner .po-name{font-weight:800}.po-team.is-emperors{background:rgba(246,195,22,.12)}
+.po-team.is-open .po-name{color:#8a9395;font-style:italic}
+.po-seed{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;background:#e9eef2;font-size:.72rem;font-weight:800}.po-seed-empty{background:transparent}
+.po-name{display:grid;font-size:.9rem;min-width:0}.po-name small{font-size:.68rem;color:#8a9395;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.po-score{font-weight:800;font-size:1rem;font-variant-numeric:tabular-nums}
+@media (max-width:760px){.po-bracket{grid-template-columns:1fr}.po-top4{min-width:0;width:100%}}
+@media (max-width:640px){.gd-venue{grid-column:1/-1}}
