@@ -10089,6 +10089,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   function renderBracketTeamSlot({ teamName = "", teamLogo = "", seedLabel = "", note = "", score = null, isWinner = false, isWinnerSlot = false } = {}) {
     const normalizedName = String(teamName || "").trim();
     const normalizedSeed = String(seedLabel || "").trim();
+    teamLogo = teamLogo || teamLogoUrl(normalizedName);
     const label = normalizedName || "TBD";
     const scoreLabel = Number.isFinite(score) ? String(score) : "";
     return `
