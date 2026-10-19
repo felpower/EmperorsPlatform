@@ -10582,6 +10582,67 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     `;
   }
 
+  // Compact schedule: one block per gameday (date badge + one line per game). Finished
+  // gamedays except the latest are folded into "Earlier gamedays" to keep the page short.
+  function renderCompactGamedays(stageOrder, gamesByStage) {
+    const tz = "Europe/Vienna";
+    const dayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "short" });
+    const dateFmt = new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "2-digit" });
+    const monthFmt = new Intl.DateTimeFormat("en-GB", { timeZone: tz, month: "short" });
+    const timeFmt = new Intl.DateTimeFormat("de-AT", { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+    const logo = (src, name) => src
+      ? renderLazyImage({ src, alt: name, className: "gd-logo", wrapperClass: "gd-logo-wrap" })
+      : `<span class="gd-logo gd-logo-fallback">${escapeHtml(String(name || "?").slice(0, 1))}</span>`;
+    const short = (name) => String(name || "").replace("UNI-Wien Emperors", "Emperors").replace("UNI-Wien ", "Uni Wien ").replace("Med Uni Wien ", "MedUni ");
+    const row = (game) => {
+      const start = new Date(game.startsAt);
+      const isEmperors = game.homeTeamName === EMPERORS_TEAM_NAME || game.awayTeamName === EMPERORS_TEAM_NAME;
+      const homeWon = game.hasScore && Number(game.homeScore) > Number(game.awayScore);
+      const awayWon = game.hasScore && Number(game.awayScore) > Number(game.homeScore);
+      const upcoming = start.getTime() > Date.now();
+      return `
+        <div class="gd-game ${isEmperors ? "is-emperors" : ""}">
+          <span class="gd-time">${Number.isNaN(start.getTime()) || game.dateOnly || /^\d{4}-\d{2}-\d{2}$/.test(String(game.startsAt || "")) ? "TBA" : escapeHtml(timeFmt.format(start))}</span>
+          <span class="gd-team gd-home ${homeWon ? "is-winner" : ""}"><span class="gd-name">${escapeHtml(short(game.homeTeamName))}</span>${logo(game.homeTeamLogo, game.homeTeamName)}</span>
+          <span class="gd-score">${game.hasScore ? `${escapeHtml(String(game.homeScore))}<i>:</i>${escapeHtml(String(game.awayScore))}` : `<em>vs</em>`}</span>
+          <span class="gd-team gd-away ${awayWon ? "is-winner" : ""}">${logo(game.awayTeamLogo, game.awayTeamName)}<span class="gd-name">${escapeHtml(short(game.awayTeamName))}</span></span>
+          <span class="gd-actions">
+            ${game.isReplay ? `<span class="gd-tag">Replay</span>` : ""}
+            ${game.streamLink ? `<a class="gd-chip" href="${escapeAttribute(game.streamLink)}" target="_blank" rel="noreferrer">${upcoming ? "Live" : "Replay"}</a>` : ""}
+            ${game.ticketLink && upcoming ? `<a class="gd-chip" href="${escapeAttribute(game.ticketLink)}" target="_blank" rel="noreferrer">Tickets</a>` : ""}
+            ${upcoming ? `<button type="button" class="gd-chip" data-calendar-game="${escapeAttribute(game.id)}" title="Add to calendar">+ Cal</button>` : ""}
+          </span>
+        </div>`;
+    };
+    const block = (stage) => {
+      const list = gamesByStage.get(stage) || [];
+      const rawStart = String(list[0]?.startsAt || "");
+      const first = new Date(/^\d{4}-\d{2}-\d{2}$/.test(rawStart) ? `${rawStart}T12:00:00` : rawStart);
+      const valid = !Number.isNaN(first.getTime());
+      const venue = list.find((game) => game.venue)?.venue || "Venue TBA";
+      const name = list[0]?.stageName || stage.split(" · ")[0];
+      return `
+        <section class="gd-block">
+          <div class="gd-date">${valid ? `<span>${escapeHtml(dayFmt.format(first))}</span><strong>${escapeHtml(dateFmt.format(first))}</strong><span>${escapeHtml(monthFmt.format(first))}</span>` : "<strong>TBA</strong>"}</div>
+          <div class="gd-main">
+            <div class="gd-head"><strong>${escapeHtml(name)}</strong><span class="meta">${escapeHtml(venue)}</span></div>
+            ${list.map(row).join("")}
+          </div>
+        </section>`;
+    };
+    const finished = (stage) => (gamesByStage.get(stage) || []).every((game) => game.hasScore || new Date(game.startsAt).getTime() < Date.now() - 6 * 3600 * 1000);
+    const past = stageOrder.filter(finished);
+    const coming = stageOrder.filter((stage) => !finished(stage));
+    const latestPast = past.slice(-1);
+    const olderPast = past.slice(0, -1);
+    return `
+      <div class="gd-stack">
+        ${olderPast.length ? `<details class="gd-earlier"><summary>Earlier gamedays (${olderPast.length})</summary>${olderPast.map(block).join("")}</details>` : ""}
+        ${latestPast.map(block).join("")}
+        ${coming.length ? `<p class="eyebrow gd-section-label">Upcoming</p>${coming.map(block).join("")}` : ""}
+      </div>`;
+  }
+
   function renderGamesBoard() {
     selectGamesSeason(selectedGamesSeason);
     const games = buildLeagueGamesViewModel();
@@ -10594,6 +10655,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     const stageOrder = [];
     const gamesByStage = new Map();
     games.forEach((game) => {
+      game.stageName = game.stage;
       game.stage = `${game.stage} · ${game.startsAt.slice(0, 10)}`;
       if (!gamesByStage.has(game.stage)) {
         stageOrder.push(game.stage);
@@ -10619,8 +10681,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       ${leagueGamesStore?.editor(selectedGamesSeason, gameFilterTeamOptions()) || ""}
       ${selectedGamesSeason !== "2025/26" && LEAGUE_GAMES_SNAPSHOT.some(game => Number.isFinite(game.homeScore)) ? `<p class="meta">Standings calculated from entered regular-season results; ties are sorted by point difference.</p>` : ""}
       ${selectedGamesSeason === "2025/26" || LEAGUE_GAMES_SNAPSHOT.some((game) => workflows.roundFor(game) === "regular" && Number.isFinite(game.homeScore)) ? renderGamesStandingsPanel(standings) : `<article class="setup-card"><p class="meta">No regular-season results yet. Standings appear after the first results.</p></article>`}
-      <article class="setup-card" style="margin-bottom: 14px;">
-        <div class="button-row equipment-sheet-tabs" style="margin-bottom: 12px;">
+      <article class="setup-card games-controls">
+        <div class="button-row equipment-sheet-tabs">
           <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "schedule" ? "is-active" : ""}" data-games-view-mode="schedule" data-no-toast="true">Regular season</button>
           <button type="button" class="ghost-button equipment-sheet-tab ${selectedGamesViewMode === "playoffs" ? "is-active" : ""}" data-games-view-mode="playoffs" data-no-toast="true">Playoff picture</button>
         </div>
@@ -10639,59 +10701,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       ${selectedGamesViewMode === "playoffs" ? (selectedGamesSeason === "2025/26" ? renderPlayoffBracket(bracket) : renderCurrentSeasonPlayoffs()) : ""}
       ${selectedGamesViewMode === "schedule" ? `
       ${!games.length ? emptyState("No games match this filter", "Clear the team filter or add a game for this season.") : ""}
-      <div class="games-stage-stack">
-      ${stageOrder.map((stage) => `
-        <section class="setup-card games-stage">
-        <div class="games-stage-head">
-          <div>
-          <p class="eyebrow">${escapeHtml(stage)}</p>
-          <h3>${escapeHtml(stage)}</h3>
-          </div>
-          <div>${plainPill(`${gamesByStage.get(stage).length} fixtures`)}</div>
-        </div>
-        <div class="games-stage-list">
-          ${gamesByStage.get(stage).map((game) => `
-          <article class="game-match">
-            <div class="game-match-meta">
-            <div>
-              <strong>${escapeHtml(game.subtitle || game.displayDateTime)}</strong>
-              <p class="meta">${escapeHtml(game.subtitle ? game.displayDateTime : (game.venue || "Venue TBA"))}</p>
-            </div>
-            <div class="game-match-status-row">
-              ${statusPill(game.statusTone, game.statusLabel)}
-              ${game.isReplay ? plainPill("Replay") : ""}
-            </div>
-            </div>
-            <div class="game-match-body">
-            <div class="game-match-team game-match-team-home">
-              ${game.homeTeamLogo ? renderLazyImage({ src: game.homeTeamLogo, alt: game.homeTeamName, className: "game-match-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.homeTeamName.slice(0, 1) || "?")}</div>`}
-              <div>
-              <strong>${escapeHtml(game.homeTeamName)}</strong>
-              <p class="meta">${game.homeTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
-              </div>
-            </div>
-            <div class="game-match-center">
-              ${game.hasScore
-              ? `<div class="game-match-score"><span>${game.homeScore}</span><span class="game-match-score-separator">:</span><span>${game.awayScore}</span></div>`
-              : `<div class="game-match-kickoff">${escapeHtml(game.displayDateTime)}</div>`}
-              <p class="meta">${escapeHtml(game.venue || "Venue TBA")}</p>
-              <div class="button-row"><button type="button" class="ghost-button small-button" data-calendar-game="${escapeAttribute(game.id)}">Add to calendar</button>${game.ticketLink ? `<a class="ghost-button small-button" href="${escapeAttribute(game.ticketLink)}" target="_blank" rel="noreferrer">Tickets</a>` : ""}</div>
-              ${game.streamLink ? `<a href="${escapeAttribute(game.streamLink)}" target="_blank" rel="noreferrer" class="ghost-button">${new Date(game.startsAt).getTime() > Date.now() ? "Watch live" : "Watch replay"}</a>` : ""}
-            </div>
-            <div class="game-match-team game-match-team-away">
-              <div>
-              <strong>${escapeHtml(game.awayTeamName)}</strong>
-              <p class="meta">${game.awayTeamName === EMPERORS_TEAM_NAME ? "Uni Wien" : "ACSL"}</p>
-              </div>
-              ${game.awayTeamLogo ? renderLazyImage({ src: game.awayTeamLogo, alt: game.awayTeamName, className: "game-match-logo", wrapperClass: "game-logo-lazy-media" }) : `<div class="game-match-logo game-match-logo-fallback">${escapeHtml(game.awayTeamName.slice(0, 1) || "?")}</div>`}
-            </div>
-            </div>
-          </article>
-          `).join("")}
-        </div>
-        </section>
-      `).join("")}
-      </div>
+      ${renderCompactGamedays(stageOrder, gamesByStage)}
       ` : ""}
     `;
   }

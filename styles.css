@@ -3794,3 +3794,28 @@ body[data-consent-open="true"] .mobile-tryout-cta { display: none; }
 .socials-admin-list li{display:flex;gap:8px;align-items:center}
 .socials-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
 .socials-add input{flex:1 1 260px;min-width:0;padding:10px 12px;border:1px solid #d5dbdc;border-radius:10px}
+.games-controls{margin-bottom:14px;display:grid;gap:10px}.games-controls .equipment-sheet-tabs{margin:0}.games-controls .game-filter-bar{margin:0}
+.gd-stack{display:grid;gap:10px}
+.gd-section-label{margin:6px 0 0}
+.gd-block{display:grid;grid-template-columns:64px 1fr;gap:12px;padding:12px;border-radius:16px;background:#fff;border:1px solid #e3e7e8;box-shadow:0 4px 14px rgba(21,27,28,.05)}
+.gd-date{display:grid;align-content:start;justify-items:center;padding:8px 4px;border-radius:12px;background:#151b1c;color:#fff;line-height:1.1;text-transform:uppercase}
+.gd-date span{font-size:.7rem;letter-spacing:.06em;opacity:.8}.gd-date strong{font-size:1.5rem;color:#f6c316}
+.gd-main{display:grid;gap:4px;min-width:0}
+.gd-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:2px}.gd-head strong{font-size:.95rem}.gd-head .meta{font-size:.8rem}
+.gd-game{display:grid;grid-template-columns:44px minmax(0,1fr) 54px minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 8px;border-radius:10px}
+.gd-game:nth-child(even){background:#f6f8f8}
+.gd-game.is-emperors{background:rgba(246,195,22,.14);box-shadow:inset 3px 0 0 #f6c316}
+.gd-time{font-size:.8rem;font-weight:700;color:#5b6466}
+.gd-team{display:flex;align-items:center;gap:8px;min-width:0;font-size:.9rem}
+.gd-home{justify-content:flex-end;text-align:right}
+.gd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gd-team.is-winner .gd-name{font-weight:800}
+.gd-logo,.gd-logo-wrap,.gd-logo-wrap img{width:24px;height:24px;flex:none;object-fit:contain;border-radius:6px}
+.gd-logo-fallback{display:grid;place-items:center;background:#e3e7e8;font-size:.75rem;font-weight:800}
+.gd-score{text-align:center;font-weight:800;font-variant-numeric:tabular-nums}.gd-score i{font-style:normal;opacity:.5;padding:0 2px}.gd-score em{font-style:normal;font-weight:600;color:#8a9395;font-size:.8rem}
+.gd-actions{display:flex;gap:4px;justify-content:flex-end}
+.gd-chip{border:1px solid #d5dbdc;background:#fff;border-radius:999px;padding:3px 9px;font-size:.72rem;font-weight:700;color:#151b1c;text-decoration:none;cursor:pointer;white-space:nowrap}
+.gd-chip:hover{border-color:#151b1c}
+.gd-tag{font-size:.68rem;font-weight:800;text-transform:uppercase;color:#5b6466;align-self:center}
+.gd-earlier{display:grid;gap:10px}.gd-earlier>summary{cursor:pointer;font-weight:700;color:#5b6466;padding:4px 2px}.gd-earlier[open]>summary{margin-bottom:10px}
+@media (max-width:640px){.gd-block{grid-template-columns:1fr;padding:10px}.gd-date{grid-auto-flow:column;justify-content:start;gap:6px;padding:4px 10px;align-items:baseline}.gd-date strong{font-size:1.1rem}.gd-game{grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);grid-template-areas:"time time actions" "home score away";row-gap:2px;column-gap:6px;padding:6px}.gd-time{grid-area:time}.gd-home{grid-area:home}.gd-score{grid-area:score}.gd-away{grid-area:away}.gd-actions{grid-area:actions}.gd-team{font-size:.85rem;gap:6px}.gd-logo,.gd-logo-wrap,.gd-logo-wrap img{width:20px;height:20px}}
