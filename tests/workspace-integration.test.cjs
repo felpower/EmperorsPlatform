@@ -4,13 +4,15 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const w = require("../src/modules/club-workflows.js");
 
-async function app() {
+async function app({ now } = {}) {
   const storage = () => { const values = new Map(); return { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, String(value)), removeItem: (key) => values.delete(key) }; };
   const localStorage = storage(), sessionStorage = storage();
   const window = { ClubHubModules: { workflows: w }, location: { hostname: "localhost", origin: "http://localhost", pathname: "/", search: "", hash: "" }, localStorage, sessionStorage, addEventListener() {} };
   const document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {} };
   const sandbox = { window, document, localStorage, sessionStorage, URL, URLSearchParams, Blob, TextEncoder, console, setTimeout, clearTimeout, navigator: {}, crypto: require("node:crypto").webcrypto };
   const context = vm.createContext(sandbox);
+  // Optional frozen clock so date-dependent views (upcoming games) don't break as real time passes.
+  if (now) vm.runInContext(`(() => { const Real = Date, fixed = new Real(${JSON.stringify(now)}).getTime(); class FrozenDate extends Real { constructor(...args) { super(...(args.length ? args : [fixed])); } static now() { return fixed; } } globalThis.Date = FrozenDate; })();`, context);
   vm.runInContext(fs.readFileSync("src/modules/games-workspace.js", "utf8"), context);
   const source = fs.readFileSync("app.bundle.js", "utf8").replace("const backendClient =", "let backendClient =");
   const cut = source.indexOf("  leagueGamesStore = moduleRegistry.gamesWorkspace.create({");
@@ -62,7 +64,7 @@ test("admin overview excludes waived fees and inactive/deleted pass alerts", asy
   assert.match(a.dashboard(), /Club dashboard/);
 });
 test("new and archived seasons stay switchable; next game and individual calendar controls render", async () => {
-  const a = await app(); a.selectSeason("2025/26");
+  const a = await app({ now: "2026-10-01T10:00:00+02:00" }); a.selectSeason("2025/26");
   assert.match(a.renderGames(), /Games &amp; results|Games & results/); assert.match(a.renderGames(), /2025\/26/);
   a.selectSeason("2026/27"); const html = a.renderGames();
   assert.match(html, /data-calendar-game="g-2627-2"/); assert.match(html, /data-calendar-season/); assert.match(html, /Manage games/);
