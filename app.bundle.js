@@ -7748,7 +7748,7 @@ Uni Wien Emperors`;
           <div>
             <p class="eyebrow">Referral progress</p>
             <h4>3 new players × 2 fully paid quarters = 1 contribution-free quarter</h4>
-            <p class="muted">Each referred new player must have fully paid at least two different quarters. A later exit does not remove an earned referral. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
+            <p class="muted">Each referred new player must have fully paid at least two different quarters with status Paid or Paid with Fee. Paid Rookie Fee does not count. A later exit does not remove an earned referral. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
           </div>
           ${referralStandings.rows.length ? `
             <div class="table-wrap tryout-referral-table-wrap">

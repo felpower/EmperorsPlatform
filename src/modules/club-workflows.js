@@ -29,7 +29,7 @@
     return [...new Set(fees.filter(fee => {
       const amount = Math.round(Number(fee.amount) * 100), paid = Math.round(Number(fee.paidAmount) * 100);
       return String(fee.memberId) === String(memberId) && Number.isFinite(order(fee.feePeriod)) && order(fee.feePeriod) >= firstQuarter
-        && ["paid", "paid_rookie_fee", "paid_with_fee"].includes(fee.status)
+        && ["paid", "paid_with_fee"].includes(fee.status)
         && Number.isFinite(amount) && Number.isFinite(paid) && amount > 0 && paid >= amount;
     }).map(fee => fee.feePeriod))].sort((a,b) => order(a) - order(b));
   }

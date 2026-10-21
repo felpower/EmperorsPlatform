@@ -14,7 +14,7 @@ test('referral rewards count joined people once and retain unsuccessful and pend
   ];
   const groups=new Map(rows.map((row,index)=>[row,index===1?0:index]));
   const member={id:'captain',name:'Captain'};
-  const fees=['Q3_2026','Q4_2026'].map(feePeriod=>({memberId:'joined',feePeriod,amount:50,paidAmount:50,status:'paid_rookie_fee'}));
+  const fees=['Q3_2026','Q4_2026'].map(feePeriod=>({memberId:'joined',feePeriod,amount:90,paidAmount:90,status:'paid'}));
   const ctx={workflows,currentAccessRole:'admin',state:{fees,members:[{id:'joined',membershipStatus:'active'}]},normalizeLookupToken:s=>s.toLowerCase(),findTryoutReferralMember:s=>s==='Captain'?{member}:{},tryoutReferralMemberName:m=>m.name};
   vm.createContext(ctx);vm.runInContext(code,ctx);
   const result=ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups});
@@ -45,12 +45,13 @@ test('referral rewards count joined people once and retain unsuccessful and pend
 });
 
 
-test('two different fully paid positive quarters qualify, including rookie fees, independent of later exit',()=>{
-  const fee=(patch={})=>({memberId:'player',feePeriod:'Q3_2026',amount:50,paidAmount:50,status:'paid_rookie_fee',...patch});
-  const rows=[fee(),fee(),fee({feePeriod:'Q4_2026',amount:90,paidAmount:90,status:'paid'}),
+test('two different fully paid positive quarters qualify, excluding rookie fees, independent of later exit',()=>{
+  const fee=(patch={})=>({memberId:'player',feePeriod:'Q3_2026',amount:90,paidAmount:90,status:'paid',...patch});
+  const rows=[fee(),fee(),fee({feePeriod:'Q4_2026',amount:100,paidAmount:100,status:'paid_with_fee'}),
     fee({feePeriod:'Q1_2026'}),fee({feePeriod:'Q2_2027',status:'partial',paidAmount:25}),
     fee({feePeriod:'Q3_2027',amount:0,paidAmount:0,status:'exempt'}),fee({memberId:'other',feePeriod:'Q1_2027'}),
-    fee({feePeriod:'invalid'})];
+    fee({feePeriod:'invalid'}),fee({feePeriod:'Q1_2027',status:'paid_rookie_fee',amount:50,paidAmount:50}),
+    fee({feePeriod:'Q4_2027',status:'paid_with_fee',amount:100,paidAmount:90})];
   assert.deepEqual(workflows.referralPaidQuarters('player',rows,'2026-09-01T19:30:00+02:00'),['Q3_2026','Q4_2026']);
   assert.deepEqual(workflows.referralPaidQuarters('player',rows,'2026-11-01T19:30:00+01:00'),['Q4_2026']);
   assert.deepEqual(workflows.referralPaidQuarters('player',[fee({feePeriod:'Q4_2025'})],'2026-01-10'),['Q4_2025']);
