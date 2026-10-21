@@ -603,6 +603,7 @@ Uni Wien Emperors`;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
   let sepaExportPreview = null;
+  let authEmailDraft = "";
   let authState = {
     mode: "local",
     status: "Local development mode active.",
@@ -2049,7 +2050,7 @@ Uni Wien Emperors`;
         : "Sign in is available for Appwrite users, but local demo mode is still active on localhost.";
 
     return `
-      <article class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
+      <form id="auth-sign-in-form" class="card auth-card" style="display:grid; gap: 12px; max-width: 720px;">
         <div>
           <p class="eyebrow">Authentication</p>
           <h3 style="margin-top: 4px;">Sign in</h3>
@@ -2058,16 +2059,16 @@ Uni Wien Emperors`;
         <div class="auth-status" role="status" aria-live="polite">${authState.status || "Enter your email and password to continue."}</div>
         ${signInBusy || resetBusy || signOutBusy ? `<div class="auth-progress"><span class="auth-spinner" aria-hidden="true"></span><span>${authState.status || "Working..."}</span></div>` : ""}
         <div class="form-grid">
-          <label>Email<input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" ${signInBusy || resetBusy ? "disabled" : ""} /></label>
+          <label>Email<input id="auth-email" value="${escapeAttribute(authEmailDraft)}" type="email" autocomplete="email" placeholder="you@example.com" ${signInBusy || resetBusy ? "disabled" : ""} /></label>
           <label>Password<input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
         </div>
         <div class="button-row">
-          <button id="auth-sign-in" type="button" class="primary-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signInBusy ? "Signing in..." : "Sign in"}</button>
+          <button id="auth-sign-in" type="submit" class="primary-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signInBusy ? "Signing in..." : "Sign in"}</button>
           <button id="auth-reset-password" type="button" class="ghost-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""} aria-label="Send password reset email">${resetBusy ? "Sending reset email..." : "Forgot password?"}</button>
           <button id="auth-sign-out" type="button" class="ghost-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signOutBusy ? "Signing out..." : "Sign out"}</button>
         </div>
         <p class="meta">Invited users must set their password first before normal sign-in. Use Forgot password? to send a reset email and return to the password setup screen.</p>
-      </article>
+      </form>
     `;
   }
 
@@ -13462,14 +13463,23 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindAuthActions() {
+    const authEmailInput = document.getElementById("auth-email");
+    if (authEmailInput) authEmailInput.oninput = () => { authEmailDraft = authEmailInput.value; };
+    const signInForm = document.getElementById("auth-sign-in-form");
+    if (signInForm) signInForm.onsubmit = (event) => {
+      event.preventDefault();
+      return document.getElementById("auth-sign-in")?.onclick?.();
+    };
     const signInButton = document.getElementById("auth-sign-in");
     if (signInButton) {
-      signInButton.onclick = async function () {
+      signInButton.onclick = async function (event) {
+        event?.preventDefault();
         if (authState.pendingAction) return;
         const emailInput = document.getElementById("auth-email");
         const passwordInput = document.getElementById("auth-password");
         const email = String(emailInput?.value || "").trim();
-        const password = String(passwordInput?.value || "").trim();
+        const password = String(passwordInput?.value || "");
+        authEmailDraft = email;
         if (!email) {
           authState.status = "Enter your email address first.";
           showToast(authState.status, "error");
