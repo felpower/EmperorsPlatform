@@ -7635,6 +7635,7 @@ Uni Wien Emperors`;
 
   function tryoutReferralStandings(rows = tryoutSubmissions, duplicateInfo = tryoutDuplicateRegistrationInfo(rows)) {
     const standingsByMember = new Map();
+    const linkedMembers = new Map(state.members.map((member) => [String(member.id || member.$id), member]));
     const generalSources = new Map();
 
     rows.forEach((row) => {
@@ -7667,7 +7668,13 @@ Uni Wien Emperors`;
         status: row.status
       };
       currentReferral.registrationCount += 1;
-      currentReferral.joined ||= row.status === "joined";
+      if (row.status === "joined") {
+        const linked = linkedMembers.get(String(row.linkedMemberId || ""));
+        const eligible = linked && !linked.deletedAt && ["active", "coach"].includes(linked.membershipStatus);
+        currentReferral.joined ||= Boolean(eligible);
+        if (!eligible) currentReferral.exclusionReason = linked?.deletedAt ? "Deleted member — not counted" : linked ? `${linked.membershipStatus || "Inactive"} — not counted` : "Member link missing — not counted";
+      }
+      if (currentReferral.joined) currentReferral.exclusionReason = "";
       if (currentReferral.joined) currentReferral.status = "joined";
       current.referralsByGroup.set(duplicateGroup, currentReferral);
       standingsByMember.set(memberKey, current);
@@ -7709,7 +7716,7 @@ Uni Wien Emperors`;
         <div class="tryout-referral-people-list">
           <strong>Referred players</strong>
           <ul>
-            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)} · ${escapeHtml(tryoutLabel("status", referral.status))}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
+            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)} · ${escapeHtml(tryoutLabel("status", referral.status))}${referral.exclusionReason ? ` · ${escapeHtml(referral.exclusionReason)}` : ""}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
           </ul>
         </div>
       </details>
@@ -7735,7 +7742,7 @@ Uni Wien Emperors`;
           <div>
             <p class="eyebrow">Referral progress</p>
             <h4>3 referred new members = 1 contribution-free quarter</h4>
-            <p class="muted">Only people marked Became a member count toward the reward. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
+            <p class="muted">Only people marked Became a member with a linked, active membership count toward the reward. Exited, inactive, pending or deleted members do not count. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
           </div>
           ${referralStandings.rows.length ? `
             <div class="table-wrap tryout-referral-table-wrap">
