@@ -7662,9 +7662,13 @@ Uni Wien Emperors`;
       };
       const currentReferral = current.referralsByGroup.get(duplicateGroup) || {
         name: `${row.firstName || ""} ${row.lastName || ""}`.trim() || row.email || "Unknown registration",
-        registrationCount: 0
+        registrationCount: 0,
+        joined: false,
+        status: row.status
       };
       currentReferral.registrationCount += 1;
+      currentReferral.joined ||= row.status === "joined";
+      if (currentReferral.joined) currentReferral.status = "joined";
       current.referralsByGroup.set(duplicateGroup, currentReferral);
       standingsByMember.set(memberKey, current);
     });
@@ -7678,7 +7682,8 @@ Uni Wien Emperors`;
             memberId: row.memberId,
             memberName: row.memberName,
             referrals,
-            referralCount: referrals.length,
+            referralCount: referrals.filter((referral) => referral.joined).length,
+            registeredCount: referrals.length,
             duplicateCount: referrals.reduce((total, referral) => total + Math.max(0, referral.registrationCount - 1), 0)
           };
         })
@@ -7697,13 +7702,14 @@ Uni Wien Emperors`;
 
   function renderTryoutReferralPeople(row) {
     const referralCount = Number(row?.referralCount || 0);
+    const registeredCount = Number(row?.registeredCount || 0);
     return `
       <details class="tryout-referral-people">
-        <summary aria-label="Show ${referralCount} referrals for ${escapeAttribute(row.memberName)}" title="${escapeAttribute(row.referrals.map((referral) => referral.name).join(", "))}"><strong>${referralCount}</strong></summary>
+        <summary aria-label="Show ${registeredCount} registrations for ${escapeAttribute(row.memberName)}" title="${escapeAttribute(row.referrals.map((referral) => referral.name).join(", "))}"><strong>${referralCount}</strong> new members / ${registeredCount} registered</summary>
         <div class="tryout-referral-people-list">
           <strong>Referred players</strong>
           <ul>
-            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
+            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)} · ${escapeHtml(tryoutLabel("status", referral.status))}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
           </ul>
         </div>
       </details>
@@ -7714,7 +7720,7 @@ Uni Wien Emperors`;
   function renderTryoutReferralOverview(duplicateInfo = tryoutDuplicateRegistrationInfo()) {
     const referralStandings = tryoutReferralStandings(tryoutSubmissions, duplicateInfo);
     const trackedReferralCount = referralStandings.rows.reduce((total, row) => total + row.referralCount, 0);
-    const summaryMeta = `${trackedReferralCount} assigned referral${trackedReferralCount === 1 ? "" : "s"}`;
+    const summaryMeta = `${trackedReferralCount} referred new member${trackedReferralCount === 1 ? "" : "s"}`;
 
     return `
       <details class="tryout-referral-overview">
@@ -7728,8 +7734,8 @@ Uni Wien Emperors`;
         <div class="tryout-referral-overview-body">
           <div>
             <p class="eyebrow">Referral progress</p>
-            <h4>3 referrals = 1 contribution-free quarter</h4>
-            <p class="muted">Counts are based on tryout registrations that can be uniquely assigned to an active member.</p>
+            <h4>3 referred new members = 1 contribution-free quarter</h4>
+            <p class="muted">Only people marked Became a member count toward the reward. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
           </div>
           ${referralStandings.rows.length ? `
             <div class="table-wrap tryout-referral-table-wrap">

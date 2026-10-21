@@ -29,6 +29,7 @@
     { value: "new", label: "New" }, { value: "contacted", label: "Contacted" },
     { value: "invited", label: "Invited" }, { value: "attended", label: "Attended" },
     { value: "no_show", label: "Did not attend" }, { value: "joined", label: "Became a member" },
+    { value: "not_joined", label: "Did not become a member" },
     { value: "archived", label: "Archived" }
   ]);
   const TRYOUT_STUDENT_OPTIONS = Object.freeze([{value:"yes",label:"Uni Wien student"},{value:"accepted_or_starting",label:"Accepted / starting soon"},{value:"no",label:"No"},{value:"prefer_to_discuss",label:"Not sure"}]);
