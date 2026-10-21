@@ -6131,7 +6131,20 @@ Uni Wien Emperors`;
         result.notAttempted = batches.slice(index + 1).flat();
         saveTryoutEmailOutcome();
         try {
-          const batch = await sendTryoutEmailsViaFunction({ ...message, recipients: batches[index] });
+          let batch = await sendTryoutEmailsViaFunction({ ...message, recipients: batches[index] });
+          // Retry only an explicit recipient-limit rejection, after its stated reset.
+          // Never repeat an accepted or uncertain send.
+          for (let retry = 0; retry < 2 && !batch.sent?.length && !batch.uncertain?.length && batch.failed?.length === batches[index].length; retry++) {
+            const reasons = batch.failed.map((item) => String(item.reason || ""));
+            if (!reasons.every((reason) => /recipient limit.*try again after/i.test(reason))) break;
+            const resetAt = Math.max(...reasons.map((reason) => Date.parse(reason.match(/try again after (.+)$/i)?.[1] || ""))) + 2000;
+            if (!Number.isFinite(resetAt) || resetAt - Date.now() > 120000) break;
+            while (Date.now() < resetAt) {
+              document.getElementById("blocking-progress-counter").textContent = `Mailgun limit: continuing in ${Math.ceil((resetAt - Date.now()) / 1000)}s; ${result.sentCount} accepted. Keep this page open.`;
+              await new Promise((resolve) => window.setTimeout(resolve, Math.min(1000, resetAt - Date.now())));
+            }
+            batch = await sendTryoutEmailsViaFunction({ ...message, recipients: batches[index] });
+          }
           result.uncertain = [];
           result.notAttempted = [];
           result.sentCount += batch.sentCount || 0;

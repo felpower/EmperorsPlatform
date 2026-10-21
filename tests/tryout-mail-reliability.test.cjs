@@ -48,3 +48,22 @@ test('provider connection failures are uncertain, explicit rejections are retrya
     for(const key of Object.keys(process.env))if(!(key in oldEnv))delete process.env[key];Object.assign(process.env,oldEnv);delete require.cache[filename];
   }
 });
+
+test('explicit Mailgun recipient limit waits for reset and sends the rejected address once', async () => {
+  const source=fs.readFileSync('app.bundle.js','utf8');
+  const code=source.slice(source.indexOf('  async function performTryoutEmailSend('),source.indexOf('  async function convertTryoutToMember('));
+  let now=Date.now(),calls=0,waited=0;
+  const reset=new Date(now+3000).toUTCString();
+  const recipient={id:'one',email:'one@example.invalid'};
+  const ctx={tryoutEmailSending:false,tryoutEmailResult:null,tryoutEmailRetryMessage:null,tryoutEmailRetryRecipients:[],tryoutStatusRetryIds:[],tryoutSubmissions:[],selectedTryoutSubmissionIds:[],
+    Date:{now:()=>now,parse:Date.parse},window:{setTimeout(resolve,ms){now+=ms;waited+=ms;resolve();}},
+    document:{getElementById:()=>({textContent:''})},showBlockingProgress(){},hideBlockingProgress(){},showToast(){},mount(){},saveTryoutEmailOutcome(){},
+    async sendTryoutEmailsViaFunction(){calls++;return calls===1
+      ? {sent:[],uncertain:[],failed:[{...recipient,reason:`recipient limit (26) exceeded, try again after ${reset}`}],sentCount:0,failedCount:1}
+      : {sent:[recipient],failed:[],sentCount:1,failedCount:0,statusFailures:[],statusUpdatedIds:[]};}
+  };
+  vm.createContext(ctx);vm.runInContext(code,ctx);
+  await ctx.performTryoutEmailSend([recipient],{subject:'test',bodyTemplate:'test'});
+  assert.equal(calls,2);assert.ok(waited>=3000);
+  assert.equal(ctx.tryoutEmailResult.sentCount,1);assert.equal(ctx.tryoutEmailResult.failedCount,0);
+});
