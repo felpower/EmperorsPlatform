@@ -56,6 +56,7 @@ test("mail success and database failure are reported separately, joined particip
     assert.equal(response.ok, true); assert.equal(response.sentCount, 2); assert.equal(response.failedCount, 0);
     assert.equal(response.statusFailures.length, 1); assert.match(response.statusFailures[0].reason, /schema/);
     assert.equal(mailCalls, 2); assert.equal(patchCalls, 1);
+    assert.equal(response.sent[0].messageId, "test-message"); assert.equal(response.sent[0].deliveryStatus, "accepted");
   } finally { Object.assign(runtime, original); global.fetch = oldFetch; for (const key of Object.keys(process.env)) if (!(key in oldEnv)) delete process.env[key]; Object.assign(process.env, oldEnv); delete require.cache[filename]; }
 });
 test("member conversion is restricted to admins server-side", () => {

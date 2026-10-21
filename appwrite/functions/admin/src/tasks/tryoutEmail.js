@@ -49,6 +49,8 @@ module.exports = async ({ req, res, log }) => {
     form.set("to", recipientEmail);
     if (replyToEmail) form.set("h:Reply-To", replyToEmail);
     if (replyToEmail) form.set("h:List-Unsubscribe", `<mailto:${replyToEmail}?subject=Abmelden>`);
+    const campaignId = String(parseBody().campaignId || "").trim();
+    if (/^[a-zA-Z0-9_-]{1,80}$/.test(campaignId)) form.set("o:tag", campaignId);
     form.set("subject", subject);
     form.set("text", `${text}${plainTextFooter()}`);
     form.set("html", renderTryoutEmail({ subject, text }));
@@ -62,7 +64,9 @@ module.exports = async ({ req, res, log }) => {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(String(payload?.message || `Mailgun failed (${response.status}).`));
+      const error = new Error(String(payload?.message || `Mailgun failed (${response.status}).`));
+      error.definitiveRejection = response.status >= 400 && response.status < 500;
+      throw error;
     }
     return String(payload?.id || "");
   };
@@ -84,6 +88,7 @@ module.exports = async ({ req, res, log }) => {
 
     const sent = [];
     const failed = [];
+    const uncertain = [];
     const statusFailures = [];
     const statusUpdatedIds = [];
 
@@ -98,21 +103,24 @@ module.exports = async ({ req, res, log }) => {
       }
       const emailKey = email.toLowerCase();
       if (deliveredTo.has(emailKey)) {
-        if (deliveredTo.get(emailKey)) sent.push({ id, email, duplicate: true });
+        if (deliveredTo.get(emailKey) === "uncertain") uncertain.push({ id, email, reason: "Same address as an uncertain request; check Mailgun before retrying." });
+        else if (deliveredTo.get(emailKey)) sent.push({ id, email, duplicate: true });
         else failed.push({ id, email, reason: "Same address as a registration that failed above." });
         continue;
       }
       try {
-        await sendViaMailgun(
+        const messageId = await sendViaMailgun(
           email,
           fillTemplate(subjectTemplate, recipient),
           fillTemplate(bodyTemplate, recipient)
         );
-        sent.push({ id, email });
+        sent.push({ id, email, messageId, deliveryStatus: "accepted" });
         deliveredTo.set(emailKey, true);
       } catch (error) {
-        failed.push({ id, email, reason: error instanceof Error ? error.message : "Unknown send error." });
-        deliveredTo.set(emailKey, false);
+        const outcome = { id, email, reason: error instanceof Error ? error.message : "Unknown send error." };
+        if (error.definitiveRejection) failed.push(outcome);
+        else uncertain.push(outcome);
+        deliveredTo.set(emailKey, error.definitiveRejection ? false : "uncertain");
       }
     }
 
@@ -145,6 +153,7 @@ module.exports = async ({ req, res, log }) => {
       failedCount: failed.length,
       sent,
       failed,
+      uncertain,
       statusUpdatedIds,
       statusFailures
     });

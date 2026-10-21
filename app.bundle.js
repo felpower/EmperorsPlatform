@@ -543,7 +543,7 @@
 wir freuen uns, dich zum Tryout der Uni Wien Emperors einzuladen!
 
 Datum: {{tryoutDate}}
-Treffpunkt: 20:00 Uhr
+Treffpunkt: 19:30 Uhr
 Ort: Trainingsplatz FC Stadlau, Erzherzog-Karl-Straße 108, 1220 Wien
 
 Bitte bring mit:
@@ -563,7 +563,7 @@ Hi {{firstName}},
 We're excited to invite you to the Uni Wien Emperors tryout!
 
 Date: {{tryoutDateEn}}
-Meeting point: 8:00 PM
+Meeting point: 7:30 PM
 Location: Trainingsplatz FC Stadlau, Erzherzog-Karl-Straße 108, 1220 Vienna
 
 Please bring:
@@ -5842,7 +5842,7 @@ Uni Wien Emperors`;
     return parsedBody;
   }
 
-  async function sendTryoutEmailsViaFunction({ subject, bodyTemplate, recipients }) {
+  async function sendTryoutEmailsViaFunction({ subject, bodyTemplate, recipients, campaignId }) {
     const functionId = String(APPWRITE_CONFIG?.tryoutEmailFunctionId || "").trim();
     if (!functionId) {
       throw new Error("Tryout email function is not configured.");
@@ -5860,7 +5860,7 @@ Uni Wien Emperors`;
 
     const execution = await functionsApi.createExecution(
       functionId,
-      JSON.stringify({ task: "tryoutEmail", subject, bodyTemplate, recipients }),
+      JSON.stringify({ task: "tryoutEmail", subject, bodyTemplate, recipients, campaignId }),
       false
     );
 
@@ -6064,7 +6064,7 @@ Uni Wien Emperors`;
 
   function renderTryoutActionResult() {
     if (!tryoutEmailResult && !tryoutStatusRetryIds.length) return "";
-    return `<article class="setup-card" role="status"><h3>Last email action</h3><p>${Number(tryoutEmailResult?.sentCount || 0)} email(s) sent · ${tryoutEmailRetryRecipients.length} send failure(s) · ${tryoutStatusRetryIds.length} status update(s) need retrying.</p>
+    return `<article class="setup-card" role="status"><h3>Last email action</h3><p>${Number(tryoutEmailResult?.sentCount || 0)} accepted by Mailgun · ${tryoutEmailRetryRecipients.length} send failure(s) · ${tryoutStatusRetryIds.length} status update(s) need retrying.</p>
       <p class="meta">Retry status updates only saves the invitation status; it does not send another email.</p>
       ${(tryoutEmailResult?.failed || []).map((item) => `<p class="work-error">${escapeHtml(item.email)}: ${escapeHtml(item.reason)}</p>`).join("")}
       ${(tryoutEmailResult?.statusFailures || []).map((item) => `<p class="work-error">Status ${escapeHtml(item.email || item.id)}: ${escapeHtml(item.reason)}</p>`).join("")}
@@ -6107,10 +6107,49 @@ Uni Wien Emperors`;
   async function performTryoutEmailSend(recipients, message) {
     if (tryoutEmailSending) return;
     tryoutEmailSending = true;
+    message = { campaignId: `tryout-${Date.now()}`, ...message };
     showBlockingProgress(`Sending ${recipients.length} tryout email(s)…`);
-    document.getElementById("blocking-progress-counter").textContent = "Waiting for delivery results…";
+    document.getElementById("blocking-progress-counter").textContent = "Waiting for Mailgun acceptance…";
     try {
-      const result = await sendTryoutEmailsViaFunction({ ...message, recipients });
+      const result = { ok: true, sentCount: 0, failedCount: 0, sent: [], failed: [], statusFailures: [], statusUpdatedIds: [], uncertain: [], notAttempted: [] };
+      // Keep each confirmed outcome before starting the next request. Never retry
+      // an interrupted request automatically: the provider may already have it.
+      const groups = new Map();
+      for (const recipient of recipients) {
+        const key = recipient.email.trim().toLowerCase();
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(recipient);
+      }
+      const batches = [...groups.values()];
+      tryoutEmailRetryMessage = { ...message };
+      tryoutEmailRetryRecipients = [];
+      tryoutStatusRetryIds = [];
+      tryoutEmailResult = result;
+      for (let index = 0; index < batches.length; index++) {
+        document.getElementById("blocking-progress-counter").textContent = `${index} / ${batches.length} addresses processed; ${result.sentCount} accepted by Mailgun`;
+        result.uncertain = batches[index].map((item) => ({ ...item, reason: "Request in progress; verify Mailgun before resending after an interruption." }));
+        result.notAttempted = batches.slice(index + 1).flat();
+        saveTryoutEmailOutcome();
+        try {
+          const batch = await sendTryoutEmailsViaFunction({ ...message, recipients: batches[index] });
+          result.uncertain = [];
+          result.notAttempted = [];
+          result.sentCount += batch.sentCount || 0;
+          result.failedCount += batch.failedCount || 0;
+          for (const key of ["sent", "failed", "statusFailures", "statusUpdatedIds"]) result[key].push(...(batch[key] || []));
+          if (batch.uncertain?.length) {
+            result.uncertain.push(...batch.uncertain);
+            result.notAttempted = batches.slice(index + 1).flat();
+            break;
+          }
+        } catch (error) {
+          result.uncertain = batches[index].map((item) => ({ ...item, reason: error.message }));
+          result.notAttempted = batches.slice(index + 1).flat();
+          break;
+        }
+        tryoutEmailResult = result;
+        saveTryoutEmailOutcome();
+      }
       tryoutEmailResult = result;
       tryoutEmailRetryMessage = { ...message };
       const failedEmails = new Set((result.failed || []).map((item) => String(item.email).toLowerCase()));
@@ -6125,8 +6164,8 @@ Uni Wien Emperors`;
         await saveInvitedStatuses((result.sent || []).map((item) => String(item.id)).filter(Boolean));
       }
       selectedTryoutSubmissionIds = [];
-      tryoutSubmissionsStatus = `${result.sentCount} email(s) sent; ${result.failedCount} send failure(s); ${tryoutStatusRetryIds.length} status update(s) failed.`;
-      showToast(tryoutSubmissionsStatus, result.failedCount || tryoutStatusRetryIds.length ? "error" : "success");
+      tryoutSubmissionsStatus = `${result.sentCount} accepted by Mailgun; ${result.failedCount} rejected; ${result.uncertain.length} uncertain; ${result.notAttempted.length} not attempted; ${tryoutStatusRetryIds.length} status update(s) failed. Acceptance does not confirm inbox delivery.`;
+      showToast(tryoutSubmissionsStatus, result.failedCount || result.uncertain.length || result.notAttempted.length || tryoutStatusRetryIds.length ? "error" : "success");
     } catch (error) {
       tryoutSubmissionsStatus = `${error.message || "Email action failed."} If the connection was interrupted, check the mail provider before sending again.`;
       showToast(tryoutSubmissionsStatus, "error");
@@ -8298,11 +8337,15 @@ Uni Wien Emperors`;
               <textarea id="tryout-email-body" rows="10">${escapeHtml(tryoutEmailBody)}</textarea>
             </label>
             <div class="button-row">
+              <button type="button" class="secondary-button" id="tryout-prepare-invitation">Invitation template</button>
+              <button type="button" class="secondary-button" id="tryout-prepare-reminder">Prepare reminder for selected participants</button>
               <button type="button" class="primary-button" id="tryout-send-email" ${selectedRows.length ? "" : "disabled"}>Send email to ${selectedRows.length} selected</button>
             </div>
             ${tryoutEmailResult ? `
               <div class="meta">
-                <p><strong>${tryoutEmailResult.sentCount}</strong> sent${tryoutEmailResult.failedCount ? `, <strong>${tryoutEmailResult.failedCount}</strong> failed` : ""}.</p>
+                <p><strong>${tryoutEmailResult.sentCount}</strong> accepted by Mailgun (check delivery in Mailgun Logs)${tryoutEmailResult.failedCount ? `, <strong>${tryoutEmailResult.failedCount}</strong> failed` : ""}.</p>
+                ${(tryoutEmailResult.uncertain || []).map((item) => `<div>${escapeHtml(item.email)}: uncertain — check Mailgun Logs before resending.</div>`).join("")}
+                ${(tryoutEmailResult.notAttempted || []).map((item) => `<div>${escapeHtml(item.email)}: not attempted — select this participant for a new send.</div>`).join("")}
                 ${tryoutEmailResult.failed && tryoutEmailResult.failed.length ? tryoutEmailResult.failed.map((item) => `<div>${escapeHtml(item.email || item.id || "Unknown")}: ${escapeHtml(item.reason || "Unknown error")}</div>`).join("") : ""}
               </div>
             ` : ""}
@@ -15039,6 +15082,22 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       };
     }
 
+    const invitationButton = document.getElementById("tryout-prepare-invitation");
+    if (invitationButton) invitationButton.onclick = () => {
+      tryoutEmailSubject = DEFAULT_TRYOUT_EMAIL_SUBJECT;
+      tryoutEmailBody = DEFAULT_TRYOUT_EMAIL_BODY;
+      tryoutEmailComposerExpanded = true;
+      mount();
+    };
+    const reminderButton = document.getElementById("tryout-prepare-reminder");
+    if (reminderButton) reminderButton.onclick = () => {
+      tryoutEmailSubject = "Uni Wien Emperors Tryout – Erinnerung / Reminder";
+      tryoutEmailBody = DEFAULT_TRYOUT_EMAIL_BODY
+        .replace("wir freuen uns, dich zum Tryout der Uni Wien Emperors einzuladen!", "kurze Erinnerung an dein Tryout bei den Uni Wien Emperors – wir freuen uns auf dich!")
+        .replace("We're excited to invite you to the Uni Wien Emperors tryout!", "A quick reminder about your Uni Wien Emperors tryout – we're looking forward to seeing you!");
+      tryoutEmailComposerExpanded = true;
+      mount();
+    };
     const sendEmailButton = document.getElementById("tryout-send-email");
     if (sendEmailButton) {
       sendEmailButton.onclick = async function () {
