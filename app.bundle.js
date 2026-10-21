@@ -6064,7 +6064,7 @@ Uni Wien Emperors`;
 
   function renderTryoutActionResult() {
     if (!tryoutEmailResult && !tryoutStatusRetryIds.length) return "";
-    return `<article class="setup-card" role="status"><h3>Last email action</h3><p>${Number(tryoutEmailResult?.sentCount || 0)} accepted by Mailgun · ${tryoutEmailRetryRecipients.length} send failure(s) · ${tryoutStatusRetryIds.length} status update(s) need retrying.</p>
+    return `<article class="setup-card" role="status"><h3>Last email action</h3><p>${Number(tryoutEmailResult?.sentCount || 0)} accepted by Mailgun · ${tryoutEmailRetryRecipients.length} send failure(s) · ${(tryoutEmailResult?.uncertain || []).length} uncertain · ${(tryoutEmailResult?.notAttempted || []).length} not attempted · ${tryoutStatusRetryIds.length} status update(s) need retrying.</p>
       <p class="meta">Retry status updates only saves the invitation status; it does not send another email.</p>
       ${(tryoutEmailResult?.failed || []).map((item) => `<p class="work-error">${escapeHtml(item.email)}: ${escapeHtml(item.reason)}</p>`).join("")}
       ${(tryoutEmailResult?.statusFailures || []).map((item) => `<p class="work-error">Status ${escapeHtml(item.email || item.id)}: ${escapeHtml(item.reason)}</p>`).join("")}
@@ -8343,6 +8343,7 @@ Uni Wien Emperors`;
             <p class="muted">${dateParts
               ? `{{tryoutDate}} and {{tryoutDateEn}} are filled in automatically from <strong>Next tryout</strong> above: <strong>${escapeHtml(dateParts.de)}</strong> / <strong>${escapeHtml(dateParts.en)}</strong>.${dateParts.isPast ? ` <strong>This date is in the past - update Next tryout before sending.</strong>` : ""}`
               : `No Next tryout date is set, so {{tryoutDate}} and {{tryoutDateEn}} cannot be filled in.`}${usesDatePlaceholder ? "" : ` <strong>The message does not use {{tryoutDate}}, so any date in it is not updated automatically.</strong>`}</p>
+            <p class="muted">For reminders, switch the status filter to Invited and select the intended participants. Prepare reminder fills the message; Send email starts delivery.</p>
             <label>Subject
               <input id="tryout-email-subject" value="${escapeAttribute(tryoutEmailSubject)}" />
             </label>
