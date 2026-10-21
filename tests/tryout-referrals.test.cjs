@@ -14,7 +14,8 @@ test('referral rewards count joined people once and retain unsuccessful and pend
   ];
   const groups=new Map(rows.map((row,index)=>[row,index===1?0:index]));
   const member={id:'captain',name:'Captain'};
-  const ctx={state:{members:[{id:'joined',membershipStatus:'active'}]},normalizeLookupToken:s=>s.toLowerCase(),findTryoutReferralMember:s=>s==='Captain'?{member}:{},tryoutReferralMemberName:m=>m.name};
+  const fees=['Q3_2026','Q4_2026'].map(feePeriod=>({memberId:'joined',feePeriod,amount:50,paidAmount:50,status:'paid_rookie_fee'}));
+  const ctx={workflows,currentAccessRole:'admin',state:{fees,members:[{id:'joined',membershipStatus:'active'}]},normalizeLookupToken:s=>s.toLowerCase(),findTryoutReferralMember:s=>s==='Captain'?{member}:{},tryoutReferralMemberName:m=>m.name};
   vm.createContext(ctx);vm.runInContext(code,ctx);
   const result=ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups});
   assert.equal(result.rows.length,1);
@@ -24,16 +25,34 @@ test('referral rewards count joined people once and retain unsuccessful and pend
   assert.equal(result.generalSources[0].count,1);
   ctx.state.members[0].membershipStatus='exited';
   const exited=ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups});
-  assert.equal(exited.rows[0].referralCount,0);
-  assert.match(exited.rows[0].referrals.find(x=>x.name==='Joined').exclusionReason,/exited/);
+  assert.equal(exited.rows[0].referralCount,1);
+  assert.equal(exited.rows[0].referrals.find(x=>x.name==='Joined').exclusionReason,'');
   assert.equal(rows[0].status,'joined');
   ctx.state.members[0].membershipStatus='active';
   assert.equal(ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups}).rows[0].referralCount,1);
   for(const status of ['inactive','pending']) {
     ctx.state.members[0].membershipStatus=status;
-    assert.equal(ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups}).rows[0].referralCount,0);
+    assert.equal(ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups}).rows[0].referralCount,1);
   }
   ctx.state.members[0].membershipStatus='active';ctx.state.members[0].deletedAt='2026-10-21';
+  assert.equal(ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups}).rows[0].referralCount,1);
+  ctx.state.fees=fees.slice(0,1);
   assert.equal(ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups}).rows[0].referralCount,0);
+  ctx.state.fees=fees;ctx.currentAccessRole='coach';
+  const unavailable=ctx.tryoutReferralStandings(rows,{groupKeysByRow:groups});
+  assert.equal(unavailable.paymentsAvailable,false);assert.equal(unavailable.rows[0].referralCount,0);
   assert.equal(workflows.TRYOUT_STATUSES.find(x=>x.value==='not_joined').label,'Did not become a member');
+});
+
+
+test('two different fully paid positive quarters qualify, including rookie fees, independent of later exit',()=>{
+  const fee=(patch={})=>({memberId:'player',feePeriod:'Q3_2026',amount:50,paidAmount:50,status:'paid_rookie_fee',...patch});
+  const rows=[fee(),fee(),fee({feePeriod:'Q4_2026',amount:90,paidAmount:90,status:'paid'}),
+    fee({feePeriod:'Q1_2026'}),fee({feePeriod:'Q2_2027',status:'partial',paidAmount:25}),
+    fee({feePeriod:'Q3_2027',amount:0,paidAmount:0,status:'exempt'}),fee({memberId:'other',feePeriod:'Q1_2027'}),
+    fee({feePeriod:'invalid'})];
+  assert.deepEqual(workflows.referralPaidQuarters('player',rows,'2026-09-01T19:30:00+02:00'),['Q3_2026','Q4_2026']);
+  assert.deepEqual(workflows.referralPaidQuarters('player',rows,'2026-11-01T19:30:00+01:00'),['Q4_2026']);
+  assert.deepEqual(workflows.referralPaidQuarters('player',[fee({feePeriod:'Q4_2025'})],'2026-01-10'),['Q4_2025']);
+  assert.deepEqual(workflows.referralPaidQuarters('player',rows,'invalid-date'),[]);
 });

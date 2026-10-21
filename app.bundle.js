@@ -7635,6 +7635,7 @@ Uni Wien Emperors`;
 
   function tryoutReferralStandings(rows = tryoutSubmissions, duplicateInfo = tryoutDuplicateRegistrationInfo(rows)) {
     const standingsByMember = new Map();
+    const canVerifyPayments = ["admin", "finance_admin"].includes(currentAccessRole);
     const linkedMembers = new Map(state.members.map((member) => [String(member.id || member.$id), member]));
     const generalSources = new Map();
 
@@ -7668,11 +7669,14 @@ Uni Wien Emperors`;
         status: row.status
       };
       currentReferral.registrationCount += 1;
-      if (row.status === "joined") {
+      if (row.status === "joined" || (row.status === "archived" && row.linkedMemberId)) {
+        if (!currentReferral.joined) currentReferral.status = row.status;
         const linked = linkedMembers.get(String(row.linkedMemberId || ""));
-        const eligible = linked && !linked.deletedAt && ["active", "coach"].includes(linked.membershipStatus);
-        currentReferral.joined ||= Boolean(eligible);
-        if (!eligible) currentReferral.exclusionReason = linked?.deletedAt ? "Deleted member — not counted" : linked ? `${linked.membershipStatus || "Inactive"} — not counted` : "Member link missing — not counted";
+        const paidQuarters = linked && canVerifyPayments ? workflows.referralPaidQuarters(row.linkedMemberId, state.fees, row.submittedAt) : [];
+        const eligible = Boolean(linked) && paidQuarters.length >= 2;
+        currentReferral.joined ||= eligible;
+        currentReferral.paidQuarterCount = Math.max(currentReferral.paidQuarterCount || 0, paidQuarters.length);
+        if (!eligible) currentReferral.exclusionReason = !canVerifyPayments ? "Payment verification requires finance access" : linked ? `${paidQuarters.length} / 2 fully paid quarters — not yet qualified` : "Member link missing — payment verification needed";
       }
       if (currentReferral.joined) currentReferral.exclusionReason = "";
       if (currentReferral.joined) currentReferral.status = "joined";
@@ -7681,6 +7685,7 @@ Uni Wien Emperors`;
     });
 
     return {
+      paymentsAvailable: canVerifyPayments,
       rows: Array.from(standingsByMember.values())
         .map((row) => {
           const referrals = Array.from(row.referralsByGroup.values())
@@ -7691,6 +7696,7 @@ Uni Wien Emperors`;
             referrals,
             referralCount: referrals.filter((referral) => referral.joined).length,
             registeredCount: referrals.length,
+            paymentsAvailable: canVerifyPayments,
             duplicateCount: referrals.reduce((total, referral) => total + Math.max(0, referral.registrationCount - 1), 0)
           };
         })
@@ -7712,11 +7718,11 @@ Uni Wien Emperors`;
     const registeredCount = Number(row?.registeredCount || 0);
     return `
       <details class="tryout-referral-people">
-        <summary aria-label="Show ${registeredCount} registrations for ${escapeAttribute(row.memberName)}" title="${escapeAttribute(row.referrals.map((referral) => referral.name).join(", "))}"><strong>${referralCount}</strong> new members / ${registeredCount} registered</summary>
+        <summary aria-label="Show ${registeredCount} registrations for ${escapeAttribute(row.memberName)}" title="${escapeAttribute(row.referrals.map((referral) => referral.name).join(", "))}"><strong>${row.paymentsAvailable ? referralCount : "?"}</strong> qualified referrals / ${registeredCount} registered</summary>
         <div class="tryout-referral-people-list">
           <strong>Referred players</strong>
           <ul>
-            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)} · ${escapeHtml(tryoutLabel("status", referral.status))}${referral.exclusionReason ? ` · ${escapeHtml(referral.exclusionReason)}` : ""}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
+            ${row.referrals.map((referral) => `<li><span>${escapeHtml(referral.name)} · ${escapeHtml(tryoutLabel("status", referral.status))}${referral.exclusionReason ? ` · ${escapeHtml(referral.exclusionReason)}` : referral.joined ? ` · ${referral.paidQuarterCount} fully paid quarters — qualified` : ""}</span>${referral.registrationCount > 1 ? `<span class="tryout-duplicate-badge compact">${referral.registrationCount}&times; registered</span>` : ""}</li>`).join("")}
           </ul>
         </div>
       </details>
@@ -7727,7 +7733,7 @@ Uni Wien Emperors`;
   function renderTryoutReferralOverview(duplicateInfo = tryoutDuplicateRegistrationInfo()) {
     const referralStandings = tryoutReferralStandings(tryoutSubmissions, duplicateInfo);
     const trackedReferralCount = referralStandings.rows.reduce((total, row) => total + row.referralCount, 0);
-    const summaryMeta = `${trackedReferralCount} referred new member${trackedReferralCount === 1 ? "" : "s"}`;
+    const summaryMeta = referralStandings.paymentsAvailable ? `${trackedReferralCount} qualified referral${trackedReferralCount === 1 ? "" : "s"}` : "Payment verification requires finance access";
 
     return `
       <details class="tryout-referral-overview">
@@ -7741,8 +7747,8 @@ Uni Wien Emperors`;
         <div class="tryout-referral-overview-body">
           <div>
             <p class="eyebrow">Referral progress</p>
-            <h4>3 referred new members = 1 contribution-free quarter</h4>
-            <p class="muted">Only people marked Became a member with a linked, active membership count toward the reward. Exited, inactive, pending or deleted members do not count. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
+            <h4>3 new players × 2 fully paid quarters = 1 contribution-free quarter</h4>
+            <p class="muted">Each referred new player must have fully paid at least two different quarters. A later exit does not remove an earned referral. Other registrations remain visible but do not earn a contribution-free quarter. Duplicate registrations count once.</p>
           </div>
           ${referralStandings.rows.length ? `
             <div class="table-wrap tryout-referral-table-wrap">
@@ -7761,10 +7767,10 @@ Uni Wien Emperors`;
                     const earnedQuarters = Math.floor(row.referralCount / 3);
                     const progressInQuarter = row.referralCount % 3;
                     const progressValue = earnedQuarters && progressInQuarter === 0 ? 3 : progressInQuarter;
-                    const progressLabel = earnedQuarters
+                    const progressLabel = !row.paymentsAvailable ? "Payment data unavailable" : earnedQuarters
                       ? (progressInQuarter ? `${progressInQuarter} / 3 toward next quarter` : "3 / 3 target reached")
                       : `${progressInQuarter} / 3 referrals`;
-                    const rewardLabel = earnedQuarters
+                    const rewardLabel = !row.paymentsAvailable ? "Admin verification required" : earnedQuarters
                       ? `${earnedQuarters} free quarter${earnedQuarters === 1 ? "" : "s"}`
                       : `${3 - progressInQuarter} to go`;
                     return `
@@ -7809,6 +7815,7 @@ Uni Wien Emperors`;
     const email = String(row?.email || "").trim().toLowerCase();
     const phone = normalizeTryoutDuplicatePhone(row?.phone);
     const name = normalizeLookupToken(`${row?.firstName || ""} ${row?.lastName || ""}`);
+    if (row?.linkedMemberId) identifiers.push(`member:${row.linkedMemberId}`);
     if (email) identifiers.push(`email:${email}`);
     if (phone) identifiers.push(`phone:${phone}`);
     if (name) identifiers.push(`name:${name}`);

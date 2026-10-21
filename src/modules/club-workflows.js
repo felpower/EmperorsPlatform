@@ -15,6 +15,24 @@
     if (status === "paid") return standardFeeCents(period,rates);
     return currentCents;
   }
+  // Count actual, positive payments once per quarter, from the registration quarter onward.
+  function referralPaidQuarters(memberId, fees, registeredAt = "") {
+    const order = (period) => { const m = /^Q([1-4])_(\d{4})$/.exec(String(period || "")); return m ? Number(m[2]) * 4 + Number(m[1]) : NaN; };
+    let firstQuarter = -Infinity;
+    if (registeredAt) {
+      const date = new Date(registeredAt);
+      if (!Number.isFinite(date.getTime())) return [];
+      const parts = new Intl.DateTimeFormat("en", { timeZone: "Europe/Vienna", year: "numeric", month: "numeric" }).formatToParts(date);
+      const year = Number(parts.find(x => x.type === "year").value), month = Number(parts.find(x => x.type === "month").value);
+      firstQuarter = (month === 1 ? year - 1 : year) * 4 + (month === 1 ? 4 : Math.floor((month - 2) / 3) + 1);
+    }
+    return [...new Set(fees.filter(fee => {
+      const amount = Math.round(Number(fee.amount) * 100), paid = Math.round(Number(fee.paidAmount) * 100);
+      return String(fee.memberId) === String(memberId) && Number.isFinite(order(fee.feePeriod)) && order(fee.feePeriod) >= firstQuarter
+        && ["paid", "paid_rookie_fee", "paid_with_fee"].includes(fee.status)
+        && Number.isFinite(amount) && Number.isFinite(paid) && amount > 0 && paid >= amount;
+    }).map(fee => fee.feePeriod))].sort((a,b) => order(a) - order(b));
+  }
   const MEMBERSHIP_STATUSES = Object.freeze(["active", "pending", "inactive", "exited", "coach"]);
   const FEE_STATUSES = Object.freeze(["paid", "paid_rookie_fee", "paid_with_fee", "partial", "pending", "not_collected", "deferred", "exempt", "exit", "not_applicable"]);
   const PASS_STATUSES = Object.freeze(["valid", "missing", "expired"]);
@@ -161,7 +179,7 @@
     }
     return { succeeded, failed };
   }
-  const api = { DEFAULT_FEE_RATES, feeRatesForPeriod, standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, playoffPicture, calendar, batch };
+  const api = { referralPaidQuarters, DEFAULT_FEE_RATES, feeRatesForPeriod, standardFeeCents, feeCentsForStatus, MEMBERSHIP_STATUSES, FEE_STATUSES, PASS_STATUSES, MEMBER_ROLES, SIDE_OF_BALL, SPONSOR_STATUSES, TRYOUT_STATUSES, TRYOUT_STUDENT_OPTIONS, TRYOUT_EXPERIENCE_OPTIONS, TRYOUT_POSITION_OPTIONS, GAME_ROUNDS, GAME_STATUSES, localDate, safeUrl, viennaDateTime, validateGame, roundFor, nextGame, standings, playoffPicture, calendar, batch };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else { root.ClubHubModules = root.ClubHubModules || {}; root.ClubHubModules.workflows = api; }
 })(typeof window !== "undefined" ? window : globalThis);
