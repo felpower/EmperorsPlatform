@@ -284,7 +284,7 @@
   // eq()/in() filters on these columns are therefore sent to Appwrite as queries, so
   // e.g. updating one member reads 1 row instead of the whole table. The client-side
   // applyFilters() still runs afterwards, so results stay exactly the same; if Appwrite
-  // rejects a query (unknown column/type) the old full-table read is used as fallback.
+  // rejects ordering, retry without ordering while preserving filters and the limit.
   const SERVER_FILTER_COLUMNS = {
     "*": { id: "$id" },
     member_roles: { profile_id: "profile_id" },
@@ -474,14 +474,20 @@
 
   async function mergeMemberPrivate(rows) {
     if (memberPrivateDenied || !rows.length) return;
-    let response;
+    const privateRows = [];
+    const ids = [...new Set(rows.map(function (row) { return String(row.$id || row.id); }))];
     try {
-      response = await dbApi.listRows(String(config.databaseId), tableIdFor("member_private"), [], 5000);
+      // Bounded ID chunks keep query strings below Appwrite's query-size limit.
+      for (let offset = 0; offset < ids.length; offset += 50) {
+        const chunk = ids.slice(offset, offset + 50);
+        const response = await dbApi.listRows(String(config.databaseId), tableIdFor("member_private"), [Query.equal("$id", chunk)], chunk.length);
+        privateRows.push(...(response.rows || response.documents || []));
+      }
     } catch (error) {
       if (isPermissionError(error)) { memberPrivateDenied = true; return; }
       throw error;
     }
-    const byId = new Map((response.rows || response.documents || []).map(function (row) { return [String(row.$id), row]; }));
+    const byId = new Map(privateRows.map(function (row) { return [String(row.$id), row]; }));
     rows.forEach(function (row) {
       const extra = byId.get(String(row.$id || row.id));
       if (!extra) return;
@@ -654,7 +660,11 @@
         response = await dbApi.listRows(String(config.databaseId), tableId, serverQueries, this.limitCount);
       } catch (error) {
         if (!serverQueries.length && !this.limitCount) throw error;
-        response = await dbApi.listRows(String(config.databaseId), tableId);
+        // Retry unsupported ordering without dropping filters or the read limit.
+        // Network/permission failures must not trigger a 5,000-row full-table scan.
+        if (Number(error?.code) !== 400 || !orderColumn) throw error;
+        const boundedQueries = serverQueriesForFilters(this.tableName, this.filters);
+        response = await dbApi.listRows(String(config.databaseId), tableId, boundedQueries, this.limitCount);
       }
       let rows = response.rows || response.documents || [];
       if (orderColumn) {

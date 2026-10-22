@@ -1008,7 +1008,7 @@ Uni Wien Emperors`;
       remoteDiagnosticsStatus = "Remote diagnostics table is not configured.";
       return [];
     }
-    if (!force && remoteDiagnosticsLoading) {
+    if (remoteDiagnosticsLoading) {
       return remoteDiagnosticsEntries;
     }
     if (!force && remoteDiagnosticsLoadedAt && (Date.now() - remoteDiagnosticsLoadedAt) < 30000) {
@@ -4741,7 +4741,17 @@ Uni Wien Emperors`;
     setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
   }
 
+  let equipmentLoadPromise = null;
+  let equipmentViewLoadedScope = "";
   async function loadEquipmentDataWithCache() {
+    if (getRouteView() !== "equipment") return;
+    if (equipmentLoadPromise) return equipmentLoadPromise;
+    equipmentLoadPromise = loadEquipmentDataWithCacheNow();
+    try { return await equipmentLoadPromise; }
+    finally { equipmentLoadPromise = null; }
+  }
+
+  async function loadEquipmentDataWithCacheNow() {
     const cached = getCacheWithTTL(equipmentCacheKey(), CACHE_TTL);
     if (cached) {
       state.equipment = cached;
@@ -5282,6 +5292,43 @@ Uni Wien Emperors`;
     });
   }
 
+  function applyConfirmedFeeRows(rows) {
+    const byId = new Map(state.fees.map((fee) => [String(fee.id), fee]));
+    for (const row of rows) {
+      const id = String(row.id || row.$id || "");
+      const previous = byId.get(id);
+      if (!id || (!previous && !row.member_id)) continue;
+      byId.set(id, {
+        ...previous, id, memberId: previous?.memberId || String(row.member_id),
+        feePeriod: String(row.fee_period ?? previous?.feePeriod ?? ""),
+        season: String(row.season_label ?? previous?.season ?? ""),
+        amount: row.amount_cents === undefined ? previous?.amount : Number(row.amount_cents) / 100,
+        paidAmount: row.paid_cents === undefined ? previous?.paidAmount : Number(row.paid_cents) / 100,
+        status: row.status ?? previous?.status,
+        note: row.status_note === undefined ? previous?.note : String(row.status_note || ""),
+        iban: row.iban === undefined ? previous?.iban : String(row.iban || "")
+      });
+    }
+    state.fees = [...byId.values()];
+    refreshFeeDerivedState();
+  }
+
+  function refreshFeeDerivedState() {
+    const order = (fee) => { const m = /^Q([1-4])_(\d{4})$/.exec(fee.feePeriod); return m ? Number(m[2])*4+Number(m[1]) : -1; };
+    const latestByMember = new Map();
+    for (const fee of state.fees) {
+      const previous = latestByMember.get(String(fee.memberId));
+      if (!previous || order(fee) > order(previous)) latestByMember.set(String(fee.memberId), fee);
+    }
+    state.members = state.members.map((member) => {
+      const latest = latestByMember.get(String(member.id));
+      return { ...member, feeStatus: latest?.status || "pending", iban: member.memberIban || latest?.iban || "" };
+    });
+    // Do not extend the freshness of unrelated tables after a local fee patch.
+    invalidateCache(bootstrapCacheKey());
+    saveState();
+  }
+
   async function updateFeeStatusesBulkViaRemote({ feePeriod, status, memberIds }) {
     if (!backendClient) throw new Error("Appwrite client is not available.");
 
@@ -5292,7 +5339,7 @@ Uni Wien Emperors`;
 
       const query = await backendClient
         .from("membership_fees")
-        .select("id, amount_cents, paid_cents")
+        .select("id, member_id, fee_period, amount_cents, paid_cents")
         .eq("fee_period", String(feePeriod || ""))
         .in("member_id", ids);
       if (query.error) throw query.error;
@@ -5310,9 +5357,10 @@ Uni Wien Emperors`;
           .update({ status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents })
           .eq("id", row.id);
         if (update.error) throw update.error;
+        applyConfirmedFeeRows([{ ...row, status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents }]);
       }
 
-      await reloadBootstrapAfterWrite();
+
       recordActivity("fees", "Fee statuses updated in bulk.", {
         action: "fee_bulk_status_updated",
         feePeriod: String(feePeriod || "").trim(),
@@ -5353,7 +5401,7 @@ Uni Wien Emperors`;
         .eq("id", String(feeId || ""));
       if (response.error) throw response.error;
 
-      await reloadBootstrapAfterWrite();
+      applyConfirmedFeeRows([{ id: feeId, status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents, status_note: String(note || "").trim() || null, iban: String(iban || "").trim() || null }]);
       const currentRow = state.fees.find((fee) => String(fee.id) === String(feeId || ""));
       recordActivity("fees", "Fee row updated.", {
         action: "fee_updated",
@@ -5460,7 +5508,7 @@ Uni Wien Emperors`;
     const response = await backendClient.from("membership_fees").insert(rows).onProgress(onProgress);
     if (response.error) throw response.error;
 
-    await reloadBootstrapAfterWrite();
+    applyConfirmedFeeRows(Array.isArray(response.data) ? response.data : []);
     selectedFeePeriod = normalizedPeriod;
     saveStoredValue(FEE_FILTER_KEY, selectedFeePeriod);
     recordActivity("fees", `Generated ${rows.length} fee row(s) for ${formatFeePeriod(normalizedPeriod)}.`, {
@@ -5480,7 +5528,8 @@ Uni Wien Emperors`;
     const response = await backendClient.from("membership_fees").delete().eq("fee_period", normalizedPeriod).onProgress(onProgress);
     if (response.error) throw response.error;
 
-    await reloadBootstrapAfterWrite();
+    state.fees = state.fees.filter((fee) => fee.feePeriod !== normalizedPeriod);
+    refreshFeeDerivedState();
     recordActivity("fees", `Deleted all fee rows for ${formatFeePeriod(normalizedPeriod)}.`, {
       action: "fee_quarter_deleted",
       feePeriod: normalizedPeriod
@@ -10005,6 +10054,10 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       return renderAuthGate();
     }
 
+    if (backendClient && authState.user && !state.equipment.length && (equipmentLoadPromise || equipmentViewLoadedScope !== cacheScope())) {
+      return `<article class="setup-card"><div class="work-status" role="status"><span class="work-spinner"></span>Loading equipment…</div></article>`;
+    }
+
     const rows = sortEquipmentRows(state.equipment || []);
     let activeSheet = resolveEquipmentSheetKey(selectedEquipmentSheet);
     let activeKindFilter = normalizeEquipmentKindFilter(selectedEquipmentKindFilter);
@@ -11124,9 +11177,9 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
           <h3>Recent logs</h3>
           <p class="meta">Important auth events, load failures, and app errors are stored locally in this browser and can also be forwarded to Appwrite for cross-device troubleshooting.</p>
           <div class="stack" style="gap: 10px; margin-bottom: 14px;">
-            <div class="meta"><strong>Remote logs:</strong> ${escapeHtml(remoteDiagnosticsStatus || (diagnosticsFunctionId() ? "Not loaded yet." : "Diagnostics function not configured."))}${remoteDiagnosticsRetryAfter && remoteDiagnosticsRetryAfter > Date.now() ? ` (retrying after ${escapeHtml(new Date(remoteDiagnosticsRetryAfter).toLocaleTimeString())})` : ""}</div>
+            <div class="meta"><strong>Remote logs:</strong> ${escapeHtml(remoteDiagnosticsStatus || (diagnosticsFunctionId() ? "Click Load remote logs to fetch entries." : "Diagnostics function not configured."))}${remoteDiagnosticsRetryAfter && remoteDiagnosticsRetryAfter > Date.now() ? ` (retrying after ${escapeHtml(new Date(remoteDiagnosticsRetryAfter).toLocaleTimeString())})` : ""}</div>
             <div class="button-row">
-              <button type="button" class="ghost-button" id="refresh-remote-diagnostics-log">Refresh remote logs</button>
+              <button type="button" class="ghost-button" id="refresh-remote-diagnostics-log">${remoteDiagnosticsLoadedAt ? "Refresh remote logs" : "Load remote logs"}</button>
             </div>
           </div>
           <div class="table-wrap" style="margin-bottom: 14px;">
@@ -12123,7 +12176,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     return `<article class="setup-card"><p class="eyebrow">Website statistics</p><h3>Public page views</h3>
       <p class="meta">Consenting visitors only; no unique visitor counts. Based on up to the latest 1,000 recorded page views. Reloads count as new page views; signed-in users and private pages are excluded.</p>
       ${websiteAnalyticsError ? `<p role="alert">Could not load statistics: ${escapeHtml(websiteAnalyticsError)}</p>` : !websiteAnalyticsLoaded ? `<p role="status">${websiteAnalyticsLoading ? "Loading statistics…" : "Statistics have not been loaded yet."}</p>` : `<p><strong>${stats.last7}</strong> in the last 7 days · <strong>${stats.last30}</strong> in the last 30 days</p><div class="table-wrap"><table><thead><tr><th>Public page</th><th>Views (30 days)</th></tr></thead><tbody>${stats.pages.map(([path, count]) => `<tr><td>${escapeHtml(path)}</td><td>${count}</td></tr>`).join("") || '<tr><td colspan="2">No recorded page views in this period.</td></tr>'}</tbody></table></div>`}
-      <button type="button" class="ghost-button" id="refresh-website-analytics" ${websiteAnalyticsLoading ? "disabled" : ""}>Refresh statistics</button></article>`;
+      <button type="button" class="ghost-button" id="refresh-website-analytics" ${websiteAnalyticsLoading ? "disabled" : ""}>${websiteAnalyticsLoaded ? "Refresh statistics" : "Load statistics"}</button></article>`;
   }
 
   function updateSeoMeta(viewId) {
@@ -12166,6 +12219,13 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (finalView === "roster") {
       ensurePublicRosterLoaded();
     }
+    if (finalView === "equipment" && ((backendClient && authState.user) || isLocalPreviewMode()) && equipmentViewLoadedScope !== cacheScope()) {
+      equipmentViewLoadedScope = cacheScope();
+      void loadEquipmentDataWithCache().then(() => { if (getRouteView() === "equipment") mount(); }).catch((error) => {
+        equipmentStatus = error.message || "Equipment could not be loaded.";
+        if (getRouteView() === "equipment") mount();
+      });
+    }
     if (finalView === "socials") {
       ensureSocialsLoaded();
     }
@@ -12179,9 +12239,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (finalView === "sponsor-outreach") {
       ensureSponsorOutreachLoaded();
     }
-    if (finalView === "settings") {
-      ensureRemoteDiagnosticsLoaded();
-    }
+
     viewIds.forEach((viewId) => {
       const section = document.getElementById(viewId);
       if (section) section.classList.toggle("active", viewId === finalView);
@@ -13746,7 +13804,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   function bindDiagnosticsActions() {
     const analyticsRefresh = document.getElementById("refresh-website-analytics");
     if (analyticsRefresh) analyticsRefresh.onclick = () => loadWebsiteAnalytics();
-    if (getRouteView() === "settings" && currentAccessRole === "admin" && !websiteAnalyticsLoaded && !websiteAnalyticsLoading && !websiteAnalyticsError) void loadWebsiteAnalytics();
+
     const exportButton = document.getElementById("export-diagnostics-log");
     if (exportButton) {
       exportButton.onclick = function () {
@@ -13772,16 +13830,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       };
     }
 
-    if (getRouteView() === "settings") {
-      ensureRemoteDiagnosticsLoaded();
-    }
-  }
 
-  // Remote diagnostics are only fetched when the settings view is actually open.
-  function ensureRemoteDiagnosticsLoaded() {
-    if (currentAccessRole === "admin" && backendClient && diagnosticsTableId() && !remoteDiagnosticsLoading && !remoteDiagnosticsLoadedAt) {
-      void loadRemoteDiagnosticsLog(false);
-    }
   }
 
   function bindFeeEditModeActions() {

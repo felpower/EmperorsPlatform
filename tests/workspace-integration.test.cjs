@@ -30,6 +30,7 @@ async function app({ now } = {}) {
       memberAction:renderTryoutMemberAction, updateStatus:updateTryoutSubmissionStatus,
       setBackend: value => {backendClient=value;reloadBootstrapAfterWrite=async()=>{};},
       bulkFees:updateFeeStatusesBulkViaRemote, updateFee:updateFeeRowViaRemote,
+      setReloadHandler:value=>{reloadBootstrapAfterWrite=value;}, getData:()=>state, applyFeeRows:applyConfirmedFeeRows,
       setRates:value=>{feeRates=value;}, renderFees
     }; return;
   })();`;
@@ -101,4 +102,32 @@ test("single-row failures preserve the actual Appwrite error and failed id", asy
   vm.runInContext(fs.readFileSync("src/appwrite-backend-compat.js","utf8"),context);
   const result = await window.ClubHubDataClient.createClient().from("tryout_registrations").update({status:"invited"}).eq("id","submission").select("*").single();
   assert.match(result.error.message,/age is required/);assert.equal(result.partialFailures[0].id,"submission");
+});
+
+
+test("confirmed fee edits update local balances and member badges without reloading unrelated tables", async()=>{
+  const a=await app();
+  a.setData({members:[member({memberIban:'AT-MEMBER'})],fees:[
+    {id:'old',memberId:'member',feePeriod:'Q2_2026',amount:82.5,paidAmount:0,status:'pending',iban:''},
+    {id:'fee',memberId:'member',feePeriod:'Q3_2026',amount:82.5,paidAmount:0,status:'pending',iban:''}
+  ]});
+  let writes=0;
+  a.setBackend({from:table=>{assert.equal(table,'membership_fees');return {update(){writes++;return {eq:()=>Promise.resolve({error:null})};}};}});
+  a.setReloadHandler(()=>{throw Error('Unexpected full bootstrap reload');});
+  await a.updateFee({feeId:'fee',status:'paid',amount:82.5,paidAmount:0,note:'confirmed'});
+  assert.equal(writes,1);assert.equal(a.getData().fees.find(x=>x.id==='fee').paidAmount,82.5);
+  assert.equal(a.getData().fees.find(x=>x.id==='old').status,'pending');
+  assert.equal(a.getData().members[0].feeStatus,'paid');assert.equal(a.getData().members[0].iban,'AT-MEMBER');
+  a.applyFeeRows([{id:'new',member_id:'member',fee_period:'Q4_2026',amount_cents:9000,paid_cents:0,status:'not_collected'}]);
+  assert.equal(a.getData().fees.length,3);assert.equal(a.getData().members[0].feeStatus,'not_collected');
+});
+
+test("a partially failed bulk fee edit retains confirmed rows and leaves the rejected row unchanged",async()=>{
+  const a=await app();
+  a.setData({members:[member()],fees:['one','two'].map(id=>({id,memberId:'member',feePeriod:'Q4_2026',amount:90,paidAmount:0,status:'pending'}))});
+  a.setBackend({from:()=>({select(){return this;},eq(){return this;},in:async()=>({data:['one','two'].map(id=>({id,member_id:'member',fee_period:'Q4_2026',amount_cents:9000,paid_cents:0}))}),update:()=>({eq:async(field,id)=>({error:id==='two'?{message:'temporary failure'}:null})})})});
+  a.setReloadHandler(()=>{throw Error('Unexpected full bootstrap reload');});
+  await assert.rejects(a.bulkFees({feePeriod:'Q4_2026',status:'paid',memberIds:['member']}));
+  assert.equal(a.getData().fees.find(x=>x.id==='one').status,'paid');
+  assert.equal(a.getData().fees.find(x=>x.id==='two').status,'pending');
 });
