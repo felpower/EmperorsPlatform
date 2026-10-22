@@ -1,25 +1,5 @@
-// Free-plan cut-over switch (see FREE_PLAN_MIGRATION.md).
-//   false = old setup: 6 functions, 5 buckets, Appwrite recovery emails
-//   true  = new setup: emperors-public + emperors-admin, one "media" bucket, Mailgun invite/reset links
-// Flip it only after the storage migration ran and both new functions are deployed and tested;
-// flipping it back is the rollback (nothing old is deleted until you do that by hand).
-const CLUBHUB_USE_FREE_PLAN_SETUP = true;
-
-const CLUBHUB_LEGACY_APPWRITE_SETUP = {
-  inviteFunctionId: "CreateAuthAccount",
-  contactFunctionId: "ContactEmail",
-  passSyncFunctionId: "PassSyncFunction",
-  sepaExportFunctionId: "SepaExport",
-  tryoutEmailFunctionId: "TryoutEmail",
-  diagnosticsFunctionId: "69fe0260003aa6db005b",
-  profilePicturesBucketId: "ProfilePictures",
-  rosterPicturesBucketId: "RosterPictures",
-  equipmentPicturesBucketId: "equipment",
-  hallOfFamePicturesBucketId: "hall_of_fame",
-  teamsBucketId: "teams",
-  authEmailMode: "appwrite"
-};
-
+// Consolidated production setup: two functions and one media bucket.
+// Legacy Appwrite resources were backed up and removed on 22 October 2026.
 const CLUBHUB_FREE_PLAN_SETUP = {
   publicFunctionId: "emperors-public",
   adminFunctionId: "emperors-admin",
@@ -70,4 +50,4 @@ window.ClubHubAppwriteConfig = Object.assign({
   equipmentTableId: "equipment_inventory",
   diagnosticsTableId: "diagnostics_logs",
   hallOfFameTableId: "hall_of_fame"
-}, CLUBHUB_USE_FREE_PLAN_SETUP ? CLUBHUB_FREE_PLAN_SETUP : CLUBHUB_LEGACY_APPWRITE_SETUP);
+}, CLUBHUB_FREE_PLAN_SETUP);

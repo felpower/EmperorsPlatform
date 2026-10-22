@@ -1,156 +1,106 @@
-# Moving EmperorsPlatform to the Appwrite Free plan
+# Appwrite Free readiness — 22 October 2026
 
-Deadline: **before 1 Nov 2026** (end of the Education plan). Everything below runs while the
-project still has Pro-level limits, so the new resources exist next to the old ones and the
-switch is a one-line config change that can be rolled back.
+Production has already been consolidated. The Education subscription is unchanged.
+Target switch: the weekend of 31 October / 1 November 2026.
 
-| Free plan limit | Before | After |
+## Completed and verified
+
+| Resource | Live configuration | Target |
 |---|---|---|
-| Databases (1) | 1 | 1 |
-| Buckets (1) | 5 | 1 – `media` |
-| Functions (2) | 6 | 2 – `emperors-public`, `emperors-admin` |
-| Platforms (3) | 4 | 3 – drop `felpower.github.io` |
-| Webhooks (2) | ? | check in Console › Settings › Webhooks |
-| Storage (2 GB) | 6.98 GB (old builds) | ~0.1 GB after deployment cleanup |
+| Organization members / projects | 1 owner / 1 project | Within Free limits |
+| Database | `emperors` | 1 |
+| Storage bucket | `media` (58 files) | 1 |
+| Functions | `emperors-public`, `emperors-admin` | 2 |
+| Web platforms | localhost, emperors.page, www.emperors.page | 3 |
+| Webhooks / teams / topics | 0 / 0 / 0 | Within Free limits |
+| Organization domains | 3; two unused external zones await approval to remove | 1 |
 
-## What changed in the repo
+The six retired functions and five original picture buckets were backed up and deleted.
+All 58 copied files were verified byte-for-byte using SHA-256, including their effective
+permissions, before the originals were removed. The obsolete `felpower.github.io` platform
+was removed after checking its redirect to emperors.page.
 
-**Functions** (`appwrite/functions/`)
+Production configuration now only contains the consolidated setup. Do not recreate the
+old functions/buckets or switch back to the retired configuration. Their old source files
+are historical references. Deploy the two resources in `appwrite.json` only.
 
-| Function | Execute | Tasks (`task` field in the payload) | Was |
-|---|---|---|---|
-| `emperors-public` | `any` | `contact`, `log`, `passwordReset` | ContactEmail, LogClientEvent, *(new)* |
-| `emperors-admin` | `users` | `invite`, `passSync`, `sepaExport`, `tryoutEmail`, `setPassword` | CreateAuthAccount, PassSyncFunction, SepaExport, TryoutEmail, *(new)* |
+Both functions use Mailgun for custom invite/reset/tryout/contact mail. They do not depend
+on paid Appwrite custom SMTP for these flows. Required environment variables were checked.
+The public roster and validation routes were exercised live without sending emails;
+the admin endpoint correctly rejects an anonymous execution. No schedules or event triggers
+are configured. Runtime memory is 512 MB; both functions have Git path filters set to their
+own source directories, preventing frontend-only commits from rebuilding the backends.
 
-* The router is `src/main.js`; each old function lives on almost unchanged in `src/tasks/`.
-  The field is called `task`, not `action`, because pass sync already uses `action: preview|apply`.
-  Without `task` the router infers it from the payload, so old frontends keep working.
-* `emperors-admin` checks the caller's roles server-side (`src/auth.js`, member_roles → roles_json →
-  user labels; admin can do everything). Defaults mirror the UI:
-  invite = admin/coach/finance_admin/tech_admin · passSync = admin · sepaExport = admin/finance_admin ·
-  tryoutEmail = admin/coach · setPassword = any signed-in user (own account, only inside an open link window).
-  Override with the variable `ADMIN_TASK_ROLES`, e.g. `{"tryoutEmail":["admin"]}`.
-* Shared code lives in `appwrite/functions/shared/` and is **copied** into both functions
-  (`npm run functions:sync-shared`; CI fails if a copy is stale), because each function only deploys its own folder.
-* Each function has its own tiny `package.json` (public: no deps, admin: `xlsx`). The old functions built from
-  the repo root and installed express/sqlite3/… every time – that is where the 85–147 MB per build came from.
-* No event or schedule triggers exist in the code. `setup-free-plan-functions.mjs` carries over any it finds
-  in the Console and warns about them.
+The console's last-30-days figures at verification were about 519 MB bandwidth,
+891 MB storage and 1.1 GB-hours compute. Usage reports can lag after deletion.
+Future usage is variable; this is a readiness check, not a guarantee against future quotas.
 
-**Invite / password-reset emails without custom SMTP** (Free has no custom SMTP or templates):
-the functions create a one-time login token (`POST /users/{id}/tokens`) and mail
-`https://emperors.page/recovery?mode=token&kind=invite|reset&userId=…&secret=…` through Mailgun with the
-club templates (`appwrite/templates/*.html`). The recovery page signs in with that token and calls
-`setPassword`. Links: invite 72 h (`INVITE_LINK_TTL_SECONDS`), reset 1 h (`RESET_LINK_TTL_SECONDS`);
-reset requests are throttled to one per 2 min per account and never reveal whether an email exists.
-Links only ever point at hosts in `AUTH_LINK_ALLOWED_HOSTS` (default emperors.page, www.emperors.page, localhost).
+## Remaining domain cleanup
 
-**Storage**: all pictures go to one bucket `media`. File ids are kept (avatar-…, equipment-…, hof-…, rp_…,
-random team-logo ids are unique), so only stored URLs change. If the old buckets had different permissions,
-`media` uses file security and every file keeps exactly its old effective permissions; new uploads get
-the permissions from `storageFilePermissions` in the config.
+The Free selector currently reports no project resource overages. Its remaining blocker
+is organization domains (3/1). Keep `api.emperors.page`. Remove only the unused, unverified
+third-party DNS zones `felpower-software.com` and `vrraiders.com` from Appwrite after approval.
+Both zones were exported to ignored `migration-reports/free-*-zone.txt` files.
+The former uses external Hosttech nameservers; the latter did not resolve during the check.
+Removing these Appwrite zones does not cancel registrations at their external registrar.
 
-**Frontend**: `src/appwrite-config.js` has a switch `CLUBHUB_USE_FREE_PLAN_SETUP` (false = old setup).
-All function calls now send `task`; uploads pass explicit permissions; the recovery page understands `mode=token`.
+## Switching the plan
 
-**Scripts** (all read the API key from `.env`; nothing deletes unless stated):
+1. Open https://appwrite.io/upgrade?orgId=69dd0e351860e33460fe.
+2. Select **Free** and verify there are no over-limit resources or domains.
+3. Enter the required feedback, for example: `Education benefit ending; project prepared for Free.`
+4. Click **Change plan** yourself at the intended time. The console states the change is immediate.
+5. Check login, roster/images, a normal admin action and invite/password-reset functionality.
 
-| Command | Does |
-|---|---|
-| `node scripts/setup-free-plan-functions.mjs [--dry-run]` | creates the 2 functions, copies settings, Git connection (+ path filter) and readable variables; prints what to set by hand |
-| `node scripts/migrate-storage-to-single-bucket.mjs [--dry-run]` | creates `media`, copies all files (content, name, permissions), rewrites stored URLs in all tables, writes a report to `migration-reports/` – idempotent, never deletes |
-| `node scripts/cleanup-function-deployments.mjs [--apply] [--keep=N] [--function=ID]` | deletes inactive deployments (dry run without `--apply`); active deployment is always kept |
-| `node scripts/sync-function-shared.mjs [--check]` | copies shared function code into both functions |
+The subscription has deliberately not been changed during preparation.
+The original Education billing screen displayed a cycle of 10 October–9 November;
+that does not establish the Education benefit expiry. Use the actual benefit notice for that date.
 
-The API key needs: `functions.read/write`, `buckets.read/write`, `files.read/write`, `databases.read`,
-`collections.read`, `documents.read/write` (or the `tables/rows` equivalents), `users.read`.
+## Backups and maintenance
 
-## Deployments: only rebuild what changed
+Appwrite's downgrade preview explicitly says its scheduled database backup policies will
+stop running on Free and the Backups management screen will not be available.
+A verified local snapshot was taken on 22 October: 20 collections, 2,569 documents, 58 files,
+and both current function configurations. No users, memberships, fees or registrations
+were changed by this cleanup.
 
-Both new functions stay connected to Git, with a **build trigger path filter**
-(Console › Functions › *function* › Settings › Configuration › Git settings):
+Run a fresh manual snapshot whenever needed:
 
-* `emperors-public` → root `appwrite/functions/public`, path filter `appwrite/functions/public/**`
-* `emperors-admin`  → root `appwrite/functions/admin`, path filter `appwrite/functions/admin/**`
+```powershell
+npm run backup:appwrite
+```
 
-The setup script tries to set this through the API (`providerPaths`); if the API refuses it, it tells you to
-set it in the Console. Check it once: push a commit that only touches `index.html` → no new deployment;
-push one that touches `appwrite/functions/admin/` → only `emperors-admin` builds.
-(Alternative without Git: `appwrite push functions --function-id emperors-admin` using `appwrite.json` –
-note that a CLI push also applies the settings in `appwrite.json`.)
+This writes a new folder under ignored `migration-reports/appwrite-snapshot-*`.
+`snapshot.dpapi` contains collection schemas/documents, file metadata/permissions and function
+settings/variables. It is encrypted for the current Windows account using DPAPI and verified
+by decryption before `summary.json` is written. Pictures are stored under `files/` in that
+private local folder. Keep the folder private: function source archives and picture backups
+are not encrypted. DPAPI metadata requires this Windows account/profile to decrypt.
+This is a logical application snapshot, not Appwrite native point-in-time recovery or an
+export of Auth password hashes/sessions. It does not replace an independent disaster-recovery plan.
 
----
+The retired function settings/variables are encrypted in
+`migration-reports/free-final-backup-2026-10-22T10-22-06-226Z/manifest.dpapi`.
+That folder also holds their active source archives and copies of the original bucket files.
+No secrets or user snapshots are committed to Git.
 
-## Cut-over checklist
+Check project resources without deleting anything:
 
-### Phase 0 – preparation (no user-visible change)
+```powershell
+npm run free-plan:check
+```
 
-- [ ] In the Console, **disconnect Git from the 6 old functions** (Settings › Git). Their current deployment keeps
-      running; they just stop rebuilding on every push. (Reversible: reconnect.)
-- [ ] Commit and push this change as is (`CLUBHUB_USE_FREE_PLAN_SETUP = false`). The site behaves exactly as before.
-- [ ] `node scripts/cleanup-function-deployments.mjs` → check the list → `node scripts/cleanup-function-deployments.mjs --apply`
-      (*deletes old builds – irreversible, only inactive ones*). Storage should drop from ~7 GB to well under 1 GB.
-- [ ] `node scripts/setup-free-plan-functions.mjs --dry-run`, then without `--dry-run`.
-- [ ] Set the variables the script lists as "SET BY HAND" (secrets: `APPWRITE_API_KEY`, `MAILGUN_API_KEY`,
-      `SEPA_CREDITOR_*`, …). Both functions need `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `MAILGUN_FROM_EMAIL`
-      (public: contact + reset mails, admin: tryout + invite mails) and `APPWRITE_DATABASE_ID`.
-      The `APPWRITE_API_KEY` of **emperors-public** now also needs `users.read` + `users.write` (password reset) –
-      the key copied from LogClientEvent may only have row/document scopes. emperors-admin's key needs
-      `users.read/write` and `documents.read/write` (or `rows.*`).
-- [ ] Check the Git root directory + path filter of both functions, then create the first deployment
-      (Console › Deployments › Create deployment, or push a commit touching their folders). Build must be green.
-- [ ] Quick smoke test in the Console › emperors-public › Execute, body `{"task":"log","event":{"level":"info","message":"smoke test"}}`
-      → `ok: true`, new row in diagnostics_logs.
-- [ ] `node scripts/migrate-storage-to-single-bucket.mjs --dry-run` – read the report (permission mode, file count,
-      rows that will change, warnings). Then run it without `--dry-run`. Re-running is safe.
-- [ ] Paste the printed `storageFilePermissions` block into `CLUBHUB_FREE_PLAN_SETUP` in `src/appwrite-config.js`.
-- [ ] Optional dry run of the whole new setup **locally** (that's why localhost stays a platform): set the switch to
-      `true` without committing, run the site on localhost and go through the tests below.
+Clean old inactive deployments when needed (retains the active deployment plus one rollback):
 
-### Phase 1 – switch (one commit)
+```powershell
+node scripts/cleanup-function-deployments.mjs --function=emperors-admin --keep=1 --apply
+node scripts/cleanup-function-deployments.mjs --function=emperors-public --keep=1 --apply
+```
 
-- [ ] In `src/appwrite-config.js` set `CLUBHUB_USE_FREE_PLAN_SETUP = true` and bump `appwrite-config.js?v=…` in `index.html`. Push.
-- [ ] Run the tests below. **Rollback** = set the switch back to `false` and push (old functions and buckets still exist).
+Free projects can be paused after inactivity. Open the console regularly and check its
+usage dashboard, particularly storage and compute. No reminder or scheduled automation
+was created during this migration.
 
-### Phase 2 – clean up (after ~1 week without problems, before 1 Nov)
-
-- [ ] Run the storage migration once more (picks up files uploaded to old buckets during the transition, idempotent).
-- [ ] Delete the 6 old functions and the 5 old buckets by hand in the Console (*irreversible*).
-- [ ] Remove platform `felpower.github.io` (Console › Overview › Platforms): with the `emperors.page` CNAME,
-      GitHub Pages redirects the github.io URL to emperors.page, so no browser request comes from that origin.
-      Check first: opening the github.io URL must end on emperors.page. Keep `localhost` for local development/testing
-      and both `emperors.page` + `www.emperors.page`.
-- [ ] Webhooks: at most 2.
-- [ ] Remove the old function sources from the repo in a separate commit: root `index.js`, `LogClientEvent.js`,
-      `pass-sync-function.js`, `appwrite/functions/contact-email`, `sepa-export`, `tryout-email`.
-- [ ] Usage page: storage < 2 GB, 1 bucket, 2 functions, 3 platforms → switch the organization to Free.
-
-### Tests after the switch
-
-Public (signed out):
-- [ ] Roster, Hall of Fame, team logos and equipment photos load (network tab: URLs contain `/buckets/media/`).
-- [ ] Contact form → email arrives at the recipient.
-- [ ] "Forgot password?" → Mailgun email with the club template → link opens `/recovery` → set password → sign in with it.
-      A second request within 2 minutes sends nothing; an unknown address shows the same success message.
-- [ ] An expired/used link shows a clear error and "request a new one".
-
-Signed in:
-- [ ] Admin: invite a test member → invite email (72 h link) → set password → member is linked (`profile_id`, `invite_sent_at`).
-- [ ] Admin/coach: create a member with email → auth user is created without email.
-- [ ] Upload own profile picture; a second user sees it; replace it again (delete + upload must work).
-- [ ] Equipment photo and Hall-of-Fame photo: upload, replace, remove.
-- [ ] Pass sync: preview + apply with a Clubee XLSX.
-- [ ] SEPA export for a quarter downloads valid XML.
-- [ ] Tryout email to yourself.
-- [ ] Diagnostics (Settings): remote logs connected.
-- [ ] Role checks: a player account gets "not allowed" for SEPA/invite; a coach can invite and send tryout mails but not export SEPA.
-- [ ] Deployments: a frontend-only commit creates no function deployment.
-
-## Known limits / follow-ups
-
-* **Free projects are paused after 7 days without "development activity in the Console"**
-  ([changelog](https://appwrite.io/changelog/entry/2026-02-20-1)). Users report pauses despite daily app traffic.
-  Open the Console at least weekly (calendar reminder), and know that a paused project is reactivated from the Console.
-* Collection permissions currently let any signed-in user write `member_roles`/`members`, so the server-side
-  role check can be bypassed by a malicious member. Tightening collection permissions is a separate task.
-* The repo-root `server.mjs`/SQLite backend is not part of the Appwrite setup and was not changed.
+Official references: https://appwrite.io/pricing,
+https://appwrite.io/docs/advanced/billing/free,
+https://appwrite.io/changelog/entry/2026-02-20-1.

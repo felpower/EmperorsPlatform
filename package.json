@@ -20,6 +20,8 @@
     "free-plan:setup-functions": "node scripts/setup-free-plan-functions.mjs",
     "free-plan:migrate-storage": "node scripts/migrate-storage-to-single-bucket.mjs",
     "free-plan:cleanup-deployments": "node scripts/cleanup-function-deployments.mjs",
+    "free-plan:check": "node scripts/finalize-free-plan.mjs",
+    "backup:appwrite": "node scripts/backup-appwrite-data.mjs",
     "build:public": "node scripts/build-public-pages.mjs"
   },
   "dependencies": {

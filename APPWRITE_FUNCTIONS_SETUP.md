@@ -1,3 +1,5 @@
+> Production update (22 October 2026): use only `emperors-public`, `emperors-admin` and the `media` bucket. Retired standalone functions/buckets have been deleted. Follow [FREE_PLAN_MIGRATION.md](FREE_PLAN_MIGRATION.md) and `appwrite.json`; older standalone deployment examples below are historical.
+
 # Appwrite Functions Setup
 
 > **Free plan (Oct 2026):** the six functions below are being merged into `emperors-public` and `emperors-admin` (`appwrite/functions/public`, `appwrite/functions/admin`). See `FREE_PLAN_MIGRATION.md`; this page describes the old layout.
