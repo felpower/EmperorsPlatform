@@ -1,6 +1,6 @@
 # Appwrite Free readiness — 22 October 2026
 
-Production has already been consolidated. The Education subscription is unchanged.
+Production has already been consolidated. The Education subscription is unchanged and must remain in place through the end of October. No plan change or scheduled plan change was made.
 Target switch: the weekend of 31 October / 1 November 2026.
 
 ## Completed and verified
@@ -13,7 +13,7 @@ Target switch: the weekend of 31 October / 1 November 2026.
 | Functions | `emperors-public`, `emperors-admin` | 2 |
 | Web platforms | localhost, emperors.page, www.emperors.page | 3 |
 | Webhooks / teams / topics | 0 / 0 / 0 | Within Free limits |
-| Organization domains | 3; two unused external zones await approval to remove | 1 |
+| Organization domains | `api.emperors.page` only | 1 |
 
 The six retired functions and five original picture buckets were backed up and deleted.
 All 58 copied files were verified byte-for-byte using SHA-256, including their effective
@@ -35,14 +35,23 @@ The console's last-30-days figures at verification were about 519 MB bandwidth,
 891 MB storage and 1.1 GB-hours compute. Usage reports can lag after deletion.
 Future usage is variable; this is a readiness check, not a guarantee against future quotas.
 
-## Remaining domain cleanup
+## Domain cleanup completed
 
-The Free selector currently reports no project resource overages. Its remaining blocker
-is organization domains (3/1). Keep `api.emperors.page`. Remove only the unused, unverified
-third-party DNS zones `felpower-software.com` and `vrraiders.com` from Appwrite after approval.
-Both zones were exported to ignored `migration-reports/free-*-zone.txt` files.
-The former uses external Hosttech nameservers; the latter did not resolve during the check.
-Removing these Appwrite zones does not cancel registrations at their external registrar.
+After explicit user approval, both unused, unverified third-party DNS zones
+`felpower-software.com` and `vrraiders.com` were deleted from Appwrite. Only
+`api.emperors.page` remains. The console still shows Education. Both zones were exported
+to ignored `migration-reports/free-*-zone.txt` files before deletion. The domains themselves
+were not cancelled with their external registrar.
+
+## Usage warning before the eventual switch
+
+The refreshed Free preview now warns about **515K database reads in the last 30 days**
+versus **500K on Free**. The preview explicitly uses a rolling window, not the current
+billing cycle. This is a usage warning, not an excess-resource count, and does not establish
+that the project would immediately be blocked on changing plans. Check current-cycle
+usage and read volume again before the user changes the subscription. Do not describe
+the migration as unconditionally ready or promise that Free usage will remain within quota.
+No subscription change is authorized before the end of October.
 
 ## Switching the plan
 
