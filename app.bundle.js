@@ -2079,7 +2079,9 @@ Uni Wien Emperors`;
     const authMessage = authState.loading
       ? "Checking your session..."
       : shouldRequireAuth()
-        ? "Use your email and password to sign in. If you were invited, set your password from the email you received first."
+        ? (authState.googleSignInEnabled
+          ? "Use Google with the email from your Emperors invitation, or sign in with email and password."
+          : "Use your email and password to sign in. If you were invited, set your password from the email you received first.")
         : "Sign in is available for Appwrite users, but local demo mode is still active on localhost.";
 
     return `
@@ -2101,7 +2103,7 @@ Uni Wien Emperors`;
           <button id="auth-reset-password" type="button" class="ghost-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""} aria-label="Send password reset email">${resetBusy ? "Sending reset email..." : "Forgot password?"}</button>
           <button id="auth-sign-out" type="button" class="ghost-button" data-no-toast="true" ${signInBusy || resetBusy || signOutBusy ? "disabled" : ""}>${signOutBusy ? "Signing out..." : "Sign out"}</button>
         </div>
-        <p class="meta">Invited users must set their password first before normal sign-in. Use Forgot password? to send a reset email and return to the password setup screen.</p>
+        <p class="meta">For email/password sign-in, invited users can set their password using the invitation email or the password reset option.</p>
       </form>
     `;
   }
