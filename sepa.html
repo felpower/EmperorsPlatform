@@ -13,13 +13,13 @@
 <body><main class="sepa-page">
   <header><a href="/" class="ghost-button">← Emperors</a><span class="pill">No account required</span></header>
   <p class="eyebrow">Membership · Uni Wien Emperors</p><h1>Your SEPA mandate</h1>
-  <p class="muted">Send Finance your signed mandate and bank details in one place. Use the player's first and last name as known to the club. Your contact email can be different from your club account.</p>
+  <p class="muted">Send Finance your signed mandate and bank details in one place. Use the player's first and last name as known to the club.</p>
   <section class="setup-card" id="sepa-success" hidden role="status" tabindex="-1"><h2>Submission received</h2><p>Your details and document have been saved privately. Finance will check the signed mandate before using the bank details for collection.</p><p id="sepa-receipt" class="sepa-reference"></p><p>You do not need to submit again. If anything needs correcting, contact <a href="mailto:p.felbauer@emperors.at">p.felbauer@emperors.at</a> with your reference.</p><a class="primary-button" href="/">Back to the Emperors</a></section>
   <form id="sepa-form" class="setup-card">
     <div><h2>1. Player details</h2><p class="meta">Names are used for matching. If a name is ambiguous or different in our roster, Finance will assign the submission manually.</p></div>
     <div class="work-form-grid"><label>Player's first name<input name="first_name" autocomplete="given-name" maxlength="80" required></label><label>Player's last name<input name="last_name" autocomplete="family-name" maxlength="80" required></label></div>
     <label>Contact email<input name="email" type="email" autocomplete="email" maxlength="200" required><small class="muted">Any email where we can reach you; it does not need to match your club account.</small></label>
-    <label>Approximate joining date<input name="joined_on" type="date" required><small class="muted">An approximate date is fine, as in the previous Google form.</small></label>
+    <label>Approximate joining date<input name="joined_on" type="date" required><small class="muted">An approximate date is fine</small></label>
     <div><h2>2. Bank details and signed mandate</h2><p>Complete and sign the existing mandate template. Leave the mandate reference blank. A digital signature on the PDF is fine for submission, as in the previous form.</p><a class="ghost-button" href="/assets/sepa-mandate-template.pdf" download="Emperors-SEPA-mandate.pdf" target="_blank" rel="noopener noreferrer">Open the mandate template (PDF)</a></div>
     <label>Account holder's full name<input name="account_holder" autocomplete="off" maxlength="160" required><small class="muted">May be different from the player's name, for example a parent.</small></label>
     <label>IBAN<input name="iban" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="42" required placeholder="AT00 0000 0000 0000 0000"><small class="muted">Enter the same IBAN as on the signed document.</small></label>
