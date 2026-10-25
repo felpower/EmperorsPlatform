@@ -249,9 +249,12 @@
   async function getCurrentSession() {
     try {
       const user = await account.get();
-      return {
-        user: normalizeUser(user)
-      };
+      const normalized = normalizeUser(user);
+      if (config.googleSignInEnabled && !normalized.user_metadata?.password_set && typeof account.getSession === "function") {
+        const session = await account.getSession({ sessionId: "current" });
+        normalized.app_metadata = { auth_provider: session.provider };
+      }
+      return { user: normalized };
     } catch {
       return null;
     }
@@ -861,6 +864,21 @@
 
   const compatClient = {
     auth: {
+      async signInWithGoogle() {
+        try {
+          if (!config.googleSignInEnabled) throw new Error("Google sign-in is not configured yet.");
+          const origin = window.location.origin;
+          await account.createOAuth2Session({
+            provider: "google",
+            success: `${origin}/`,
+            failure: `${origin}/?login=1&oauth=failed`
+          });
+          return { error: null };
+        } catch (error) {
+          return { error: createError(error && error.message) };
+        }
+      },
+
       async signInWithPassword(input) {
         try {
           await account.createEmailPasswordSession(String(input?.email || "").trim(), String(input?.password || ""));

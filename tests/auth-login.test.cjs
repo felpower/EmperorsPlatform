@@ -44,3 +44,31 @@ test('standings remain a table while member tables receive mobile card labels', 
   assert.equal(standings.classes.has('work-responsive-table'), false);
   assert.equal(members.classes.has('work-responsive-table'), true);
 });
+test('Google login redirects through Appwrite with fixed same-origin callbacks and can stay disabled', async () => {
+  let request;
+  class Client { setEndpoint() { return this; } setProject() { return this; } }
+  class Account { async createOAuth2Session(input) { request = input; } }
+  const config = { projectId: 'test', databaseId: 'test', googleSignInEnabled: false };
+  const window = { ClubHubAppwriteConfig: config, location: { origin: 'https://emperors.page' }, Appwrite: { Client, Account, TablesDB: class {}, Query: {}, ID: {} } };
+  vm.runInNewContext(fs.readFileSync('src/appwrite-backend-compat.js', 'utf8'), { window, console, setTimeout, localStorage: { getItem: () => null, setItem() {} } });
+  const api = window.ClubHubDataClient.createClient();
+  assert.match((await api.auth.signInWithGoogle()).error.message, /not configured/);
+  assert.equal(request, undefined);
+  config.googleSignInEnabled = true;
+  assert.equal((await api.auth.signInWithGoogle()).error, null);
+  assert.equal(request.provider, 'google');
+  assert.equal(request.success, 'https://emperors.page/');
+  assert.equal(request.failure, 'https://emperors.page/?login=1&oauth=failed');
+  assert.equal(request.scopes, undefined);
+});
+test('Google sessions do not require password setup; ordinary email sessions still do', async () => {
+  const source = fs.readFileSync('app.bundle.js', 'utf8');
+  const fn = source.slice(source.indexOf('  function needsPasswordSetup()'), source.indexOf('  function hasRecoveryContext()'));
+  const ctx = { authState: { user: { user_metadata: {}, app_metadata: { auth_provider: 'google' } } } };
+  vm.createContext(ctx); vm.runInContext(fn, ctx);
+  assert.equal(ctx.needsPasswordSetup(), false);
+  ctx.authState.user.app_metadata.auth_provider = 'email';
+  assert.equal(ctx.needsPasswordSetup(), true);
+  ctx.authState.user.user_metadata.password_set = true;
+  assert.equal(ctx.needsPasswordSetup(), false);
+});

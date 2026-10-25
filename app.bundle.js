@@ -611,7 +611,8 @@ Uni Wien Emperors`;
     ready: false,
     loading: true,
     roles: [],
-    pendingAction: ""
+    pendingAction: "",
+    googleSignInEnabled: Boolean(APPWRITE_CONFIG?.googleSignInEnabled)
   };
   let recoveryState = {
     show: false,
@@ -1978,7 +1979,7 @@ Uni Wien Emperors`;
   }
 
   function needsPasswordSetup() {
-    return Boolean(authState.user) && !authState.user?.user_metadata?.password_set;
+    return Boolean(authState.user) && authState.user?.app_metadata?.auth_provider !== "google" && !authState.user?.user_metadata?.password_set;
   }
 
   function hasRecoveryContext() {
@@ -2090,6 +2091,7 @@ Uni Wien Emperors`;
         </div>
         <div class="auth-status" role="status" aria-live="polite">${authState.status || "Enter your email and password to continue."}</div>
         ${signInBusy || resetBusy || signOutBusy ? `<div class="auth-progress"><span class="auth-spinner" aria-hidden="true"></span><span>${authState.status || "Working..."}</span></div>` : ""}
+        ${authState.googleSignInEnabled ? `<button id="auth-google-sign-in" type="button" class="ghost-button" ${authState.pendingAction ? "disabled" : ""}>${authActionActive("google-sign-in") ? "Opening Google…" : "Continue with Google"}</button><p class="meta">Use the Google account with the same email as your Emperors invitation, or sign in below.</p>` : ""}
         <div class="form-grid">
           <label>Email<input id="auth-email" value="${escapeAttribute(authEmailDraft)}" type="email" autocomplete="email" placeholder="you@example.com" ${signInBusy || resetBusy ? "disabled" : ""} /></label>
           <label>Password<input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
@@ -13621,6 +13623,24 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindAuthActions() {
+    const googleButton = document.getElementById("auth-google-sign-in");
+    if (googleButton) googleButton.onclick = async function () {
+      if (authState.pendingAction) return;
+      authEmailDraft = document.getElementById("auth-email")?.value || authEmailDraft;
+      authState.pendingAction = "google-sign-in";
+      mount();
+      try {
+        const result = await backendClient.auth.signInWithGoogle();
+        if (result.error) throw result.error;
+      } catch (error) {
+        authState.status = error.message || "Google sign-in failed. Please try again.";
+        showToast(authState.status, "error");
+      } finally {
+        authState.pendingAction = "";
+        mount();
+      }
+    };
+
     const authEmailInput = document.getElementById("auth-email");
     if (authEmailInput) authEmailInput.oninput = () => { authEmailDraft = authEmailInput.value; };
     const signInForm = document.getElementById("auth-sign-in-form");

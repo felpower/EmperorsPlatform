@@ -30,6 +30,8 @@ window.ClubHubAppwriteConfig = Object.assign({
   projectId: "69dd0fdd00336ea1b4b5",
   databaseId: "69dd11140002e2b4254a",
   apiBaseUrl: "",
+  // Google OAuth is configured in Appwrite; public self-registration is blocked there.
+  googleSignInEnabled: true,
   contactRecipientEmail: "p.felbauer@emperors.at",
   teamLogoFiles: {
     "JKU Astros": "69ec923f001233031abb"
