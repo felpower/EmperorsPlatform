@@ -8,6 +8,7 @@
 const { parseBody, applyEnvDefaults } = require("./shared/runtime");
 
 const TASKS = {
+  sepaSubmit: () => require("./tasks/sepaSubmit"),
   contact: () => require("./tasks/contact"),
   log: () => require("./tasks/log"),
   passwordReset: () => require("./tasks/passwordReset"),

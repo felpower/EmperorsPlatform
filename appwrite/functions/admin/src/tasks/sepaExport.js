@@ -170,7 +170,8 @@ module.exports = async ({ req, res, log }) => {
       last_name: String(member?.lastName || "").trim(),
       display_name: String(member?.name || "").trim(),
       iban: String(member?.iban || "").trim(),
-      mandate_date: String(member?.mandateDate || "").trim()
+      mandate_date: String(member?.mandateDate || "").trim(),
+      account_holder: String(member?.accountHolder || "").trim()
     }));
 
     const normalizePayloadFees = (rows) => rows.map((fee) => ({
@@ -203,6 +204,7 @@ module.exports = async ({ req, res, log }) => {
         if (!extra) return;
         if (extra.iban) member.iban = extra.iban;
         if (extra.mandate_date) member.mandate_date = extra.mandate_date;
+        if (extra.account_holder) member.account_holder = extra.account_holder;
       });
     }
     const membersById = new Map(
@@ -284,7 +286,7 @@ module.exports = async ({ req, res, log }) => {
         continue;
       }
 
-      const debtorName = memberName;
+      const debtorName = String(member?.account_holder || "").trim() || memberName;
       const realMandateDate = normalizeDate(member?.mandate_date || fee?.mandate_date || fallbackFee?.mandate_date);
       const mandateDate = realMandateDate || mandateDateOverride || todayIso();
       const mandateDateEstimated = !realMandateDate;
@@ -311,7 +313,8 @@ module.exports = async ({ req, res, log }) => {
         outstandingAmount: amountString(outstandingCents),
         iban: debtorIban,
         mandateDate,
-        mandateDateEstimated
+        mandateDateEstimated,
+        accountHolder: debtorName
       });
     }
 

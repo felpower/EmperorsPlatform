@@ -2534,6 +2534,8 @@ Uni Wien Emperors`;
       email: member.email || "",
       iban: String(member.iban || "").trim(),
       memberIban: String(member.memberIban || member.iban || "").trim(),
+      mandateDate: String(member.mandateDate || member.mandate_date || "").trim(),
+      accountHolder: String(member.accountHolder || member.account_holder || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
       rosterImage: String(member.rosterImage || member.roster_image || "").trim(),
@@ -4583,6 +4585,7 @@ Uni Wien Emperors`;
         iban: String(row.iban || latestFee?.iban || "").trim(),
         memberIban: String(row.iban || "").trim(),
         mandateDate: String(row.mandate_date || "").trim(),
+        accountHolder: String(row.account_holder || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
@@ -5859,7 +5862,8 @@ Uni Wien Emperors`;
       lastName: String(member.lastName || "").trim(),
       name: String(member.name || "").trim(),
       iban: String(memberIban(member.id) || "").trim(),
-      mandateDate: String(member.mandateDate || "").trim()
+      mandateDate: String(member.mandateDate || "").trim(),
+      accountHolder: String(member.accountHolder || "").trim()
     }));
     const feesPayload = state.fees.map((fee) => ({
       id: String(fee.id || "").trim(),
@@ -6537,7 +6541,7 @@ Uni Wien Emperors`;
           </div>
           <div class="button-row">
             <button class="primary-button" id="athlete-view-profile-btn" type="button" data-no-toast="true">View Full Profile</button>
-            <a class="ghost-button" href="${specialTeamsSearchUrl}" target="_blank" rel="noopener noreferrer">Find my Special Teams</a>
+            <a class="ghost-button" href="${specialTeamsSearchUrl}" target="_blank" rel="noopener noreferrer">Find my Special Teams</a><a class="ghost-button" href="/sepa.html" target="_blank" rel="noopener noreferrer">Submit SEPA mandate</a>
           </div>
         </div>
       </article>
@@ -9822,7 +9826,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (!hasBootstrapped) {
       return `
         <div class="section-head">
-          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
+          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         </div>
         <article class="card" style="display:flex; align-items:center; gap:14px; padding: 32px; justify-content:center;">
           <span class="loading-spinner-lg" aria-hidden="true"></span>
@@ -9863,7 +9867,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
           <p class="meta">Review the amounts, collection date and exclusions. Downloading does not submit any payment.</p>
           <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
           ${sepaEstimatedDateCount ? `<p class="meta" style="color: var(--warning);">${sepaEstimatedDateCount} of ${sepaIncluded.length} used an estimated mandate signature date (no real date on file yet). Set the real date under that member's "Sensitive finance" section when you have it.</p>` : ""}
-          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${escapeHtml(item.name || "")} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
+          ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${escapeHtml(item.name || "")}${item.accountHolder && item.accountHolder !== item.name ? ` — account holder: ${escapeHtml(item.accountHolder)}` : ""} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
           ${sepaSkipped.length ? `<div style="margin-top: 10px;">${sepaSkipped.map((item) => `<div class="meta">${escapeHtml(item.name || "Unknown")}: ${formatSepaSkipReason(item.reason)}</div>`).join("")}</div>` : ""}
         </article>
       `
@@ -9871,7 +9875,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
 
     return `
       <div class="section-head">
-        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
+        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         <div class="button-row">
           <details class="export-menu">
             <summary class="ghost-button export-menu-trigger">Export</summary>
@@ -13556,6 +13560,15 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindTableExports() {
+    const sepaIntakeButton = document.getElementById("sepa-intake-overview");
+    if (sepaIntakeButton) sepaIntakeButton.onclick = async () => {
+      await moduleRegistry.sepaIntake.open({ client: backendClient, onApplied: ({ memberId, iban, mandateDate, accountHolder }) => {
+        state.members = state.members.map(member => String(member.id) === String(memberId) ? { ...member, iban, mandateDate, accountHolder } : member);
+        reviewedSepaFile = null; sepaExportPreview = null;
+        invalidateCache(bootstrapCacheKey()); saveState();
+      } });
+    };
+
     const feeHistory = document.getElementById("fee-history");
     if (feeHistory) feeHistory.onclick = async () => {
       feeHistory.disabled = true;

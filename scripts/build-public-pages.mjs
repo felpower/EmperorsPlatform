@@ -8,7 +8,7 @@ if (output !== path.join(root, "dist", "site")) throw new Error("Unexpected outp
 await fs.rm(output, { recursive: true, force: true });
 await fs.mkdir(output, { recursive: true });
 // Only frontend assets belong in the public artifact; never copy server code, keys or datasets.
-for (const name of ["index.html", "thank-you.html", "404.html", "impressum.html", "datenschutz.html", "styles.css", "workspace.css", "app.bundle.js", "manifest.webmanifest", "favicon.svg", "robots.txt", "sitemap.xml", "CNAME", "src", "assets"]) {
+for (const name of ["index.html", "sepa.html", "thank-you.html", "404.html", "impressum.html", "datenschutz.html", "styles.css", "workspace.css", "app.bundle.js", "manifest.webmanifest", "favicon.svg", "robots.txt", "sitemap.xml", "CNAME", "src", "assets"]) {
   await fs.cp(path.join(root, name), path.join(output, name), { recursive: true, filter: source => !source.startsWith(path.join(root, "src", "server")) && !/\.(xlsx?|csv|tsv|db|sqlite3?)$/i.test(source) });
 }
 const bundle = await fs.readFile(path.join(root, "app.bundle.js"), "utf8");
