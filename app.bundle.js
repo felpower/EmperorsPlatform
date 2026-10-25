@@ -2008,6 +2008,7 @@ Uni Wien Emperors`;
     }
     authState.user = session?.user || null;
     authState.roles = extractUserRoles(session?.user);
+    authState.rolePending = Boolean(authState.user);
     if (authState.user) {
       if (authState.roles.length) {
         currentAccessRole = primaryRoleFromRoles(authState.roles);
@@ -2037,6 +2038,37 @@ Uni Wien Emperors`;
       : (window.location.hostname.includes("localhost") || window.location.hostname === "127.0.0.1"
         ? "Local database mode active."
         : "Static preview mode active.");
+  }
+
+  let authRoleLookup = null;
+  async function resolveSessionRoles() {
+    const userId = String(authState.user?.id || "");
+    if (!backendClient || !userId) return;
+    if (authRoleLookup?.userId === userId) return authRoleLookup.promise;
+    const promise = (async () => {
+      try {
+        const response = await backendClient.from("member_roles").select("profile_id, role_code").eq("profile_id", userId).limit(20);
+        if (response.error) return;
+        let roles = (response.data || []).map((row) => row.role_code).filter(Boolean);
+        if (!roles.length) {
+          const member = await backendClient.from("members").select("id, profile_id, roles_json").eq("profile_id", userId).limit(1);
+          if (!member.error) roles = parseJsonArrayField(member.data?.[0]?.roles_json, []);
+        }
+        if (String(authState.user?.id || "") !== userId) return;
+        authState.roles = capabilitySet(roles);
+        currentAccessRole = primaryRoleFromRoles(authState.roles);
+        saveStoredValue(ACCESS_KEY, currentAccessRole);
+      } catch (_) {
+        // The regular bootstrap can retry role resolution if this bounded read fails.
+      }
+    })();
+    const lookup = { userId, promise };
+    authRoleLookup = lookup;
+    try { await promise; }
+    finally {
+      if (String(authState.user?.id || "") === userId) authState.rolePending = false;
+      if (authRoleLookup === lookup) authRoleLookup = null;
+    }
   }
 
   function renderAuthGate() {
@@ -4395,8 +4427,8 @@ Uni Wien Emperors`;
     }
 
     await loadFeeRates();
-    const canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
-    const canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
+    let canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    let canReadPassesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "tech_admin";
     const canReadAllMemberRolesOnline = currentAccessRole === "admin" || currentAccessRole === "coach" || currentAccessRole === "finance_admin" || currentAccessRole === "tech_admin";
 
     const queryWarnings = [];
@@ -4438,18 +4470,33 @@ Uni Wien Emperors`;
     const memberRoleRows = canReadAllMemberRolesOnline
       ? await selectMaybe("member_roles", "profile_id, role_code", true)
       : await selectMaybe("member_roles", "profile_id, role_code", true);
-    const passRows = canReadPassesOnline
-      ? await selectMaybe("player_passes", "member_id, pass_status, expires_on, federation_reference, notes, updated_at", true)
-      : [];
-    const feeRows = canReadFeesOnline
-      ? await selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true)
-      : [];
-    const organizationRows = await selectMaybe("organization", "*", true);
-    const hallOfFameRows = await selectMaybe("hall_of_fame", "id, year, name, position, photo_file_id, photo_url", true);
-    const eventRows = await selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true);
-    const recipientRows = await selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true);
-    const inviteRows = await selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true);
-    const tryoutSettingsRows = await selectMaybe("tryout_settings", "key, tryout_date, tryout_note", true);
+    const currentUserRoles = (memberRoleRows || [])
+      .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
+      .map((row) => String(row.role_code || "").trim())
+      .filter(Boolean);
+    const profileMatchedMember = (memberRows || []).find((row) => String(row.profile_id || "") === String(authState.user.id || ""));
+    const emailMatchedMember = profileMatchedMember
+      ? null
+      : (memberRows || []).find((row) => String(row.email || "").trim().toLowerCase() === String(authState.user?.email || "").trim().toLowerCase());
+    const memberRoleFallback = parseJsonArrayField(profileMatchedMember?.roles_json ?? emailMatchedMember?.roles_json, []);
+    const effectiveRoles = currentUserRoles.length ? currentUserRoles : (memberRoleFallback.length ? memberRoleFallback : authState.roles);
+    if (effectiveRoles.length) {
+      currentAccessRole = primaryRoleFromRoles(effectiveRoles);
+      saveStoredValue(ACCESS_KEY, currentAccessRole);
+    }
+
+    canReadFeesOnline = currentAccessRole === "admin" || currentAccessRole === "finance_admin";
+    canReadPassesOnline = ["admin", "coach", "tech_admin"].includes(currentAccessRole);
+    const [passRows, feeRows, organizationRows, hallOfFameRows, eventRows, recipientRows, inviteRows, tryoutSettingsRows] = await Promise.all([
+      canReadPassesOnline ? selectMaybe("player_passes", "member_id, pass_status, expires_on, federation_reference, notes, updated_at", true) : [],
+      canReadFeesOnline ? selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true) : [],
+      selectMaybe("organization", "*", true),
+      selectMaybe("hall_of_fame", "id, year, name, position, photo_file_id, photo_url", true),
+      selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true),
+      selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true),
+      selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true),
+      selectMaybe("tryout_settings", "key, tryout_date, tryout_note", true)
+    ]);
 
     const rolesByProfile = new Map();
     (memberRoleRows || []).forEach((row) => {
@@ -4614,21 +4661,6 @@ Uni Wien Emperors`;
     const previousInvites = Array.isArray(state?.invites) ? state.invites : [];
     const shouldUseCachedBootstrap = !members.length && previousMembers.length;
 
-    const currentUserRoles = (memberRoleRows || [])
-      .filter((row) => String(row.profile_id || "") === String(authState.user.id || ""))
-      .map((row) => String(row.role_code || "").trim())
-      .filter(Boolean);
-    const profileMatchedMember = (memberRows || []).find((row) => String(row.profile_id || "") === String(authState.user.id || ""));
-    const emailMatchedMember = profileMatchedMember
-      ? null
-      : (memberRows || []).find((row) => String(row.email || "").trim().toLowerCase() === String(authState.user?.email || "").trim().toLowerCase());
-    const memberRoleFallback = parseJsonArrayField(profileMatchedMember?.roles_json ?? emailMatchedMember?.roles_json, []);
-    const effectiveRoles = currentUserRoles.length ? currentUserRoles : (memberRoleFallback.length ? memberRoleFallback : authState.roles);
-    if (effectiveRoles.length) {
-      currentAccessRole = primaryRoleFromRoles(effectiveRoles);
-      saveStoredValue(ACCESS_KEY, currentAccessRole);
-    }
-
     const tryoutSettings = (tryoutSettingsRows || []).length
       ? mapTryoutSettingsRow((tryoutSettingsRows || []).find((row) => String(row.key || "") === "tryout") || tryoutSettingsRows[0])
       : state.tryoutSettings;
@@ -4705,14 +4737,11 @@ Uni Wien Emperors`;
   async function loadBootstrapDataWithCache() {
     const signedIn = Boolean(backendClient && authState.user);
     if (signedIn) await loadFeeRates();
-    const cached = getCacheWithTTL(bootstrapCacheKey(), signedIn ? CACHE_TTL : PUBLIC_CACHE_TTL);
+    let cached = getCacheWithTTL(bootstrapCacheKey(), signedIn ? CACHE_TTL : PUBLIC_CACHE_TTL);
+    if (signedIn && cached?.accessRole !== currentAccessRole) cached = null;
     if (cached) {
       applyBootstrap(cached);
       if (signedIn) {
-        if (cached.accessRole) {
-          currentAccessRole = cached.accessRole;
-          saveStoredValue(ACCESS_KEY, currentAccessRole);
-        }
         // Cache is fresh: no database reads on this page load.
         return;
       }
@@ -4730,14 +4759,8 @@ Uni Wien Emperors`;
       return;
     }
 
-    // Load from source and cache. On the first load on a device the role is only known
-    // after the data arrived; if it changed (e.g. player -> admin), load once more so
-    // role-gated tables (fees, passes) are included.
-    const roleBeforeLoad = currentAccessRole;
+    // Roles are resolved before role-gated tables, so a single bootstrap is sufficient.
     await loadBootstrapData();
-    if (signedIn && currentAccessRole !== roleBeforeLoad) {
-      await loadBootstrapData();
-    }
     setCacheWithTTL(bootstrapCacheKey(), bootstrapSnapshot());
   }
 
@@ -6376,7 +6399,7 @@ Uni Wien Emperors`;
     heroActions.innerHTML = `
       <div class="hero-stack">
         <div class="toolbar-row">
-          ${authState.user || isLocalPreviewMode() ? `<div class="role-switcher"><span>${authState.user ? "Signed in" : "Local mode"}</span><strong>${signedInLabel}</strong><div class="meta">${roleLabel(currentAccessRole)}</div></div>` : ""}
+          ${authState.user || isLocalPreviewMode() ? `<div class="role-switcher"><span>${authState.user ? "Signed in" : "Local mode"}</span><strong>${signedInLabel}</strong><div class="meta">${authState.rolePending ? "Checking access…" : roleLabel(currentAccessRole)}</div></div>` : ""}
           ${isLocalhostAuthBypassEnabled() ? `
             <label class="role-switcher" for="localhost-role-select" style="gap:6px;">
               <span>Preview as</span>
@@ -15518,9 +15541,11 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   if (backendClient) {
     const { data } = await backendClient.auth.getSession();
     syncAuthSession(data?.session || null);
+    await resolveSessionRoles();
     backendClient.auth.onAuthStateChange(function (_event, session) {
       syncAuthSession(session || null);
       Promise.resolve()
+        .then(() => resolveSessionRoles())
         .then(() => promoteInvitedMemberOnFirstSignIn())
         .then(() => loadBootstrapDataWithCache())
         .then(() => loadEquipmentDataWithCache())

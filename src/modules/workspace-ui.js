@@ -19,7 +19,10 @@
   }
   function enhance() {
     document.querySelectorAll("table").forEach((table) => {
-      if (table.closest(".games-standings") || table.querySelector("thead tr:nth-child(2)")) return;
+      if (table.matches(".standings-table") || table.closest(".standings-shell, .members-sticky-header, .fees-sticky-header, .passes-sticky-header") || table.querySelector("thead tr:nth-child(2)")) {
+        table.classList.remove("work-responsive-table");
+        return;
+      }
       const headers = [...table.querySelectorAll("thead tr:first-child th")].map((cell) => cell.textContent.trim());
       table.classList.add("work-responsive-table");
       table.querySelectorAll("tbody tr").forEach((row) => {

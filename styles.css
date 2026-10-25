@@ -3890,3 +3890,14 @@ body[data-consent-open="true"] .mobile-tryout-cta { display: none; }
 .tryout-merge-panel{margin:0 0 12px;padding:10px 14px;border:1px solid #f6c316;border-radius:12px;background:rgba(246,195,22,.08)}
 .tryout-merge-panel summary{cursor:pointer}.tryout-merge-panel .meta{margin:8px 0}
 .tryout-merge-list{margin:6px 0 10px;padding-left:18px;max-height:240px;overflow:auto;display:grid;gap:4px}
+
+/* Keep wide tables inside their own scroller instead of widening the mobile page. */
+@media (max-width: 820px) {
+  .main-content, .view, .setup-card { min-width: 0; }
+  .table-wrap { max-width: 100%; overflow-x: auto; }
+  #events .standings-table { table-layout: fixed; }
+  #events .standings-table th:first-child { width: 30px; }
+  #events .standings-table th:nth-child(2) { width: 48%; }
+  #events .standings-team-cell { min-width: 0; }
+  #events .standings-team-cell > div { min-width: 0; }
+}
