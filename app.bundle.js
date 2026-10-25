@@ -603,6 +603,12 @@ Uni Wien Emperors`;
   let selectedPassSyncMemberIds = [];
   let passSyncUpload = null;
   let sepaExportPreview = null;
+  let reviewedSepaFile = null;
+  let personalOverview = null;
+  let personalOverviewOwner = "";
+  let personalOverviewPending = false;
+  let personalOverviewError = "";
+  const specialTeamsSearchUrl = "https://script.google.com/macros/s/AKfycbwGU_vJPd9u8q-kBRa1_wamd4f59lX_Tkfct74aLAaglBSWJMDP6DhEP6ScSwsViEx-/exec";
   let authEmailDraft = "";
   let authState = {
     mode: "local",
@@ -4494,8 +4500,8 @@ Uni Wien Emperors`;
     const [passRows, feeRows, organizationRows, hallOfFameRows, eventRows, recipientRows, inviteRows, tryoutSettingsRows] = await Promise.all([
       canReadPassesOnline ? selectMaybe("player_passes", "member_id, pass_status, expires_on, federation_reference, notes, updated_at", true) : [],
       canReadFeesOnline ? selectMaybe("membership_fees", "id, member_id, fee_period, season_label, amount_cents, paid_cents, status, iban, status_note, due_date, created_at", true) : [],
-      selectMaybe("organization", "*", true),
-      selectMaybe("hall_of_fame", "id, year, name, position, photo_file_id, photo_url", true),
+      [], // Organization loads when its page is opened.
+      [], // Hall of Fame has its own page loader.
       selectMaybe("events", "id, title, event_type, starts_at, location, notes, created_by, created_at", true),
       selectMaybe("event_recipients", "event_id, member_id, response, responded_at", true),
       selectMaybe("invites", "id, event_id, channel, sent_by, sent_at, recipient_count", true),
@@ -5379,7 +5385,12 @@ Uni Wien Emperors`;
         else if (normalizedStatus === "partial") paidCents = paidCents > 0 && paidCents < amountCents ? paidCents : Math.round(amountCents / 2);
         else if (FEE_ZERO_PAID_STATUSES.includes(normalizedStatus)) paidCents = 0;
 
-        const update = await backendClient
+        const update = backendClient.runAdminTask
+          ? await backendClient.runAdminTask({ task: "feeChange", feeId: row.id, patch: { status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents } }).then(result => {
+              if (result.auditWarning) workspaceUi?.message(result.auditWarning, "error");
+              return { error: null };
+            })
+          : await backendClient
           .from("membership_fees")
           .update({ status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents })
           .eq("id", row.id);
@@ -5416,7 +5427,16 @@ Uni Wien Emperors`;
       if (FEE_PAID_STATUSES.includes(normalizedStatus) && normalizedStatus !== "paid_with_fee") paidCents = amountCents;
       else if (FEE_ZERO_PAID_STATUSES.includes(normalizedStatus)) paidCents = 0;
 
-      const response = await backendClient
+      const feePatch = {
+          status: normalizedStatus, amount_cents: amountCents, paid_cents: paidCents,
+          status_note: String(note || "").trim() || null, iban: String(iban || "").trim() || null
+      };
+      const response = backendClient.runAdminTask
+        ? await backendClient.runAdminTask({ task: "feeChange", feeId: String(feeId), patch: feePatch }).then(result => {
+            if (result.auditWarning) workspaceUi?.message(result.auditWarning, "error");
+            return { error: null };
+          })
+        : await backendClient
         .from("membership_fees")
         .update({
           status: normalizedStatus,
@@ -5908,12 +5928,7 @@ Uni Wien Emperors`;
       throw new Error("SEPA export function returned no XML content.");
     }
 
-    downloadBlobFile(
-      xmlText,
-      "application/xml;charset=utf-8",
-      String(parsedBody.fileName || `SEPA_Lastschrift_${periodToken}.xml`).trim()
-    );
-
+    reviewedSepaFile = { owner: String(authState.user?.id || ""), xml: xmlText, fileName: String(parsedBody.fileName || `SEPA_Lastschrift_${periodToken}.xml`), snapshot: JSON.stringify({ fees: state.fees, members: state.members }), summary: parsedBody.summary };
     sepaExportPreview = parsedBody.preview || null;
     return parsedBody;
   }
@@ -6458,13 +6473,17 @@ Uni Wien Emperors`;
     const quarterToken = currentQuarterToken();
     const quarterFormatted = quarterToken.replace("_", " ");
     const currentQuarterFee = userMember ? memberFeesByPeriod(userMember.id).get(quarterToken) : null;
-    const currentQuarterFeeStatusLabel = currentQuarterFee
-      ? statusLabel(currentQuarterFee.status)
-      : statusLabel(userMember?.feeStatus || "pending");
-    const passValidationDate = userMember?.passExpiry ? formatDate(userMember.passExpiry) : "-";
+    const ownCurrentFee = personalOverviewOwner === String(authState.user?.id || "") ? personalOverview?.fees?.find(row => row.period === quarterToken) : null;
+    const currentQuarterFeeStatusLabel = currentQuarterFee || ownCurrentFee
+      ? statusLabel((currentQuarterFee || ownCurrentFee).status)
+      : personalOverview?.linked ? "No contribution on file for this quarter" : "Checking contribution status…";
+    const ownPass = personalOverviewOwner === String(authState.user?.id || "") ? personalOverview?.pass : null;
+    const passValidationDate = (ownPass?.expires || userMember?.passExpiry) ? formatDate(ownPass?.expires || userMember.passExpiry) : "-";
     const passValidity = (() => {
       if (!userMember) return "-";
-      const normalizedPassStatus = String(userMember.passStatus || "").trim().toLowerCase();
+      const passExpiry = ownPass?.expires || userMember.passExpiry;
+      if (passExpiry && new Date(`${passExpiry}T23:59:59`).getTime() < Date.now()) return "Expired";
+      const normalizedPassStatus = String(ownPass?.status || userMember.passStatus || "").trim().toLowerCase();
       if (normalizedPassStatus === "expired") return "Expired";
       if (normalizedPassStatus === "valid" || normalizedPassStatus === "expiring") return "Valid";
       if (userMember.passExpiry) {
@@ -6475,6 +6494,7 @@ Uni Wien Emperors`;
       }
       return "Missing";
     })();
+    const nextPractice = (state.events || []).filter(event => event.type === "practice" && event.date >= new Intl.DateTimeFormat("sv-SE", { timeZone:"Europe/Vienna" }).format(new Date())).sort((a,b) => a.date.localeCompare(b.date))[0];
     const athleteStatsHtml = userMember ? `
       <article class="setup-card">
         <p class="eyebrow">Your Profile</p>
@@ -6517,6 +6537,7 @@ Uni Wien Emperors`;
           </div>
           <div class="button-row">
             <button class="primary-button" id="athlete-view-profile-btn" type="button" data-no-toast="true">View Full Profile</button>
+            <a class="ghost-button" href="${specialTeamsSearchUrl}" target="_blank" rel="noopener noreferrer">Find my Special Teams</a>
           </div>
         </div>
       </article>
@@ -6530,6 +6551,15 @@ Uni Wien Emperors`;
     return `
       <div style="max-width: 760px; display: grid; gap: 12px;">
         ${leagueGamesStore?.nextCard(EMPERORS_TEAM_NAME) || ""}
+        <article class="setup-card" aria-live="polite"><p class="eyebrow">What do I need to do?</p><h3>Your next steps</h3>
+          ${personalOverviewError ? `<p class="work-error">${escapeHtml(personalOverviewError)}</p><button id="retry-personal-overview" type="button" class="ghost-button">Retry</button>` : !personalOverview || personalOverviewOwner !== String(authState.user?.id || "") ? `<p class="work-status"><span class="work-spinner" aria-hidden="true"></span>Checking your contributions…</p>` : personalOverview.linked ? (() => {
+            const open = personalOverview.fees.filter(row => !["exempt","exit","not_applicable","paid","paid_with_fee","paid_rookie_fee"].includes(row.status) && row.amount > row.paid);
+            return open.length ? `<p>${open.length} contribution(s) need attention · ${formatMoney(open.reduce((sum,row) => sum + row.amount - row.paid,0))} outstanding.</p>${open.map(row => `<p class="meta">${escapeHtml(row.period)}: ${escapeHtml(statusLabel(row.status))} · ${formatMoney(row.amount-row.paid)}</p>`).join("")}` : `<p>No outstanding contributions on file.</p>`;
+          })() : `<p>Ask an administrator to link your player profile.</p>`}
+          <p>Player pass: ${escapeHtml(passValidity)}${passValidity === "Missing" || passValidity === "Expired" ? " — contact your coach before the next game." : ""}</p>
+          <a class="ghost-button" href="${specialTeamsSearchUrl}" target="_blank" rel="noopener noreferrer">Check my Special Teams assignments</a>
+        </article>
+        ${nextPractice ? `<article class="setup-card"><p class="eyebrow">Next training</p><h3>${escapeHtml(nextPractice.title)}</h3><p>${escapeHtml(formatDate(nextPractice.date))} · ${escapeHtml(nextPractice.location || "Location to be confirmed")}</p></article>` : ""}
         ${athleteStatsHtml}
       </div>
     `;
@@ -6830,7 +6860,7 @@ Uni Wien Emperors`;
   }
 
   function ensureHallOfFameLoaded() {
-    if (!backendClient || authState.user || hallOfFameLoadPromise || hallOfFameLoadAttempted) return;
+    if (!backendClient || hallOfFameLoadPromise || hallOfFameLoadAttempted) return;
     hallOfFameLoadAttempted = true;
     hallOfFameStatus = hallOfFameStatus || "Loading Hall of Fame...";
     hallOfFameLoadPromise = loadPublicHallOfFameBootstrap()
@@ -8449,6 +8479,7 @@ Uni Wien Emperors`;
             <div class="button-row">
               <button type="button" class="secondary-button" id="tryout-prepare-invitation">Invitation template</button>
               <button type="button" class="secondary-button" id="tryout-prepare-reminder">Prepare reminder for selected participants</button>
+              <button type="button" class="ghost-button" id="tryout-check-delivery">Check delivery for selected (max 20)</button>
               <button type="button" class="primary-button" id="tryout-send-email" ${selectedRows.length ? "" : "disabled"}>Send email to ${selectedRows.length} selected</button>
             </div>
             ${tryoutEmailResult ? `
@@ -9791,7 +9822,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (!hasBootstrapped) {
       return `
         <div class="section-head">
-          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3></div>
+          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         </div>
         <article class="card" style="display:flex; align-items:center; gap:14px; padding: 32px; justify-content:center;">
           <span class="loading-spinner-lg" aria-hidden="true"></span>
@@ -9822,11 +9853,14 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     const sepaIncluded = Array.isArray(sepaExportPreview?.included) ? sepaExportPreview.included : [];
     const sepaSkipped = Array.isArray(sepaExportPreview?.skipped) ? sepaExportPreview.skipped : [];
     const sepaEstimatedDateCount = sepaIncluded.filter((item) => item.mandateDateEstimated).length;
-    const sepaSummaryCard = sepaExportPreview
+    const sepaSummaryCard = sepaExportPreview && reviewedSepaFile?.owner === String(authState.user?.id || "")
       ? `
         <article class="card" style="margin-bottom: 14px;">
           <p class="eyebrow">SEPA Preview</p>
-          <h3>Last export summary</h3>
+          <h3>Review before download</h3>
+          <p class="meta">Quarter: ${escapeHtml(sepaExportPreview.feePeriod || "")} · Total: ${formatMoney(Number(reviewedSepaFile?.summary?.totalAmount || 0))} · Collection date: ${escapeHtml(reviewedSepaFile?.summary?.collectionDate || "")}</p>
+          <button id="download-reviewed-sepa" class="primary-button" type="button">Download reviewed XML</button>
+          <p class="meta">Review the amounts, collection date and exclusions. Downloading does not submit any payment.</p>
           <p class="muted">Included ${sepaIncluded.length} member(s), skipped ${sepaSkipped.length}.</p>
           ${sepaEstimatedDateCount ? `<p class="meta" style="color: var(--warning);">${sepaEstimatedDateCount} of ${sepaIncluded.length} used an estimated mandate signature date (no real date on file yet). Set the real date under that member's "Sensitive finance" section when you have it.</p>` : ""}
           ${sepaIncluded.length ? `<p class="meta"><strong>Included:</strong> ${sepaIncluded.map((item) => `${escapeHtml(item.name || "")} (${formatMoney(Number(item.outstandingAmount || 0))})`).join(", ")}</p>` : `<p class="meta">No included members recorded yet.</p>`}
@@ -9837,7 +9871,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
 
     return `
       <div class="section-head">
-        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3></div>
+        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         <div class="button-row">
           <details class="export-menu">
             <summary class="ghost-button export-menu-trigger">Export</summary>
@@ -11754,6 +11788,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function renderOrganization() {
+    if (organizationLoading) return `<article class="work-status" role="status"><span class="work-spinner" aria-hidden="true"></span>Loading organization…</article>`;
+    if (organizationLoadError) return `<article class="work-error" role="alert">${escapeHtml(organizationLoadError)}<button id="retry-organization" class="ghost-button" type="button">Retry</button></article>`;
     if (!(authState.user || isLocalPreviewMode())) {
       return `
       <div class="section-head">
@@ -12228,8 +12264,20 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (canonicalLink) canonicalLink.setAttribute("href", fullUrl);
   }
 
+  let organizationLoadScope = "";
+  let organizationLoading = false;
+  let organizationLoadError = "";
   function switchView(nextViewId) {
     const finalView = resolveAllowedView(nextViewId);
+    if (finalView === "organization" && backendClient && authState.user && organizationLoadScope !== cacheScope() && !organizationLoading) {
+      organizationLoadScope = cacheScope(); organizationLoading = true; organizationLoadError = "";
+      backendClient.from("organization").select("*").then(result => {
+        if (result.error) throw result.error;
+        state.organization = sortOrganizationRows(result.data || []); saveState();
+      }).catch(error => { organizationLoadError = error.message || "Organization could not be loaded."; })
+        .finally(() => { organizationLoading = false; mount(); });
+      mount();
+    }
     if (finalView === "events" && !activeGamesRoute) {
       selectGamesSeason(leagueGamesStore?.seasons()[0] || "2026/27");
       selectedGamesViewMode = "schedule";
@@ -13508,6 +13556,29 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindTableExports() {
+    const feeHistory = document.getElementById("fee-history");
+    if (feeHistory) feeHistory.onclick = async () => {
+      feeHistory.disabled = true;
+      try {
+        const result = await backendClient.runAdminTask({ task: "feeChange", action: "history" });
+        const panel = document.createElement("dialog"); panel.className = "work-dialog";
+        panel.innerHTML = `<h3>Recent contribution changes</h3><p class="meta">Changes recorded since this feature was enabled. Notes and bank details are excluded.</p>${result.entries.map(entry => `<p>${escapeHtml(entry.logged_at)} · ${escapeHtml(entry.message)}<br><small>${(() => { try { const detail = JSON.parse(entry.details || "{}"); const member = state.members.find(row => String(row.id) === String(detail.memberId)); return escapeHtml(`${member?.name || detail.memberId || ""} · ${detail.feePeriod || ""} · ${Object.entries(detail.changes || {}).map(([field, value]) => `${field === "status" ? "Status" : field === "amount_cents" ? "Contribution" : "Paid"}: ${field === "status" ? statusLabel(value.from) : formatMoney(Number(value.from || 0)/100)} → ${field === "status" ? statusLabel(value.to) : formatMoney(Number(value.to || 0)/100)}`).join("; ")}`); } catch { return "Details unavailable"; } })()}</small></p>`).join("") || "<p>No changes recorded yet.</p>"}<button type="button">Close</button>`;
+        panel.querySelector("button").onclick = () => { panel.close(); panel.remove(); };
+        panel.addEventListener("close", () => panel.remove(), { once: true }); document.body.append(panel); panel.showModal();
+      } catch (error) { showToast(error.message || "Could not load contribution history.", "error"); }
+      finally { feeHistory.disabled = false; }
+    };
+
+    const reviewedDownload = document.getElementById("download-reviewed-sepa");
+    if (reviewedDownload) reviewedDownload.onclick = () => {
+      if (!reviewedSepaFile || reviewedSepaFile.owner !== String(authState.user?.id || "") || reviewedSepaFile.snapshot !== JSON.stringify({ fees: state.fees, members: state.members })) {
+        reviewedSepaFile = null; sepaExportPreview = null;
+        showToast("Data changed. Prepare a fresh SEPA preview before downloading.", "error"); mount(); return;
+      }
+      downloadBlobFile(reviewedSepaFile.xml, "application/xml;charset=utf-8", reviewedSepaFile.fileName);
+      showToast("Reviewed SEPA XML downloaded.", "success");
+    };
+
     const exportMembersCsvButton = document.getElementById("export-members-csv-option");
     if (exportMembersCsvButton) {
       exportMembersCsvButton.onclick = function () {
@@ -13602,7 +13673,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
           } else {
             await downloadFromApi(apiUrl(`/api/fees/export-sepa-xml?period=${encodeURIComponent(period)}`), `SEPA_Lastschrift_${period}.xml`);
           }
-          authState.status = "SEPA XML exported.";
+          authState.status = reviewedSepaFile ? "SEPA prepared. Review the summary before downloading." : "SEPA XML exported.";
           showToast(authState.status, "success");
           mount();
           switchView("fees");
@@ -14780,6 +14851,17 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindDashboardActions() {
+    const retryPersonal = document.getElementById("retry-personal-overview");
+    if (retryPersonal) retryPersonal.onclick = () => { personalOverviewOwner = ""; personalOverviewError = ""; mount(); };
+    const owner = String(authState.user?.id || "");
+    if (owner && currentAccessRole !== "admin" && hasBootstrapped && backendClient?.runAdminTask && !personalOverviewPending && personalOverviewOwner !== owner) {
+      personalOverviewPending = true; personalOverviewOwner = owner; personalOverview = null; personalOverviewError = "";
+      backendClient.runAdminTask({ task: "myOverview" }).then(result => {
+        if (String(authState.user?.id || "") === owner) { personalOverview = result; personalOverviewError = ""; }
+      }).catch(error => { if (String(authState.user?.id || "") === owner) personalOverviewError = error.message || "Could not check contributions."; })
+        .finally(() => { personalOverviewPending = false; mount(); });
+    }
+
     const athleteProfileBtn = document.getElementById("athlete-view-profile-btn");
     if (athleteProfileBtn) {
       athleteProfileBtn.onclick = function () {
@@ -15155,6 +15237,21 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       };
     });
 
+    const deliveryCheck = document.getElementById("tryout-check-delivery");
+    if (deliveryCheck) deliveryCheck.onclick = async () => {
+      const ids = [...selectedTryoutSubmissionIds];
+      if (!ids.length || ids.length > 20) { showToast("Select between 1 and 20 registrations to check.", "error"); return; }
+      deliveryCheck.disabled = true; deliveryCheck.textContent = "Checking delivery…";
+      try {
+        const result = await backendClient.runAdminTask({ task: "tryoutDelivery", ids });
+        const panel = document.createElement("dialog"); panel.className = "work-dialog";
+        panel.innerHTML = `<h3>Mailgun delivery events</h3><p class="meta">Recent events for these recipients, including earlier campaigns. Match the subject and date. Accepted means queued; delivered means accepted by the recipient's mail server, not necessarily read. No events may mean the retention period has expired.</p>${result.entries.map(entry => `<h4>${escapeHtml(entry.email || entry.id)}</h4>${entry.error ? `<p>${escapeHtml(entry.error)}</p>` : entry.events.map(event => `<p>${escapeHtml(event.event)} ${escapeHtml(event.severity)} · ${escapeHtml(new Date(event.timestamp * 1000).toLocaleString())}<br>${escapeHtml(event.subject)}<br>${escapeHtml(event.reason)}</p>`).join("") || "<p>No retained events found.</p>"}`).join("")}<button type="button">Close</button>`;
+        panel.querySelector("button").onclick = () => { panel.close(); panel.remove(); };
+        panel.addEventListener("close", () => panel.remove(), { once:true }); document.body.append(panel); panel.showModal();
+      } catch(error) { showToast(error.message || "Delivery lookup failed.", "error"); }
+      finally { deliveryCheck.disabled = false; deliveryCheck.textContent = "Check delivery for selected (max 20)"; }
+    };
+
     const emailComposerDetails = document.getElementById("tryout-email-composer");
     if (emailComposerDetails) {
       emailComposerDetails.ontoggle = function () {
@@ -15453,6 +15550,8 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
       setViewHtml("user", renderUserPage());
       setViewHtml("passes", renderPasses());
       setViewHtml("organization", renderOrganization());
+      const retryOrganization = document.getElementById("retry-organization");
+      if (retryOrganization) retryOrganization.onclick = () => { organizationLoadScope = ""; organizationLoadError = ""; switchView("organization"); };
       setViewHtml("sponsor-outreach", renderSponsorOutreach());
       setViewHtml("equipment", renderEquipment());
       setViewHtml("pass-sync", renderPassSyncReview());

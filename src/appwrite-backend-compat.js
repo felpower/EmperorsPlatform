@@ -863,6 +863,11 @@
   }
 
   const compatClient = {
+    async runAdminTask(payload) {
+      const result = await runFunctionTask(config.adminFunctionId || "emperors-admin", payload);
+      if (result.ok !== true) throw new Error("No confirmed result received. Refresh before retrying a change.");
+      return result;
+    },
     auth: {
       async signInWithGoogle() {
         try {

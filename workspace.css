@@ -42,3 +42,13 @@
   .button-row { flex-wrap:wrap; }
 }
 @media(prefers-reduced-motion:reduce) { .work-spinner { animation-duration:1.8s!important; } }
+/* Keep mobile actions and long values inside the same predictable card layout. */
+@media(max-width:640px) {
+  .work-responsive-table td > .button-row { gap:8px; }
+  .work-responsive-table td button,.work-responsive-table td select { min-height:44px; }
+  .work-responsive-table td input:not([type="checkbox"]):not([type="radio"]) { width:100%; min-width:0; }
+  .work-responsive-table td[data-label="Selection"]::before { display:none; }
+  .work-responsive-table td[colspan] { text-align:left; }
+  .work-dialog { max-width:calc(100vw - 24px); overflow-wrap:anywhere; }
+  .section-head > *,.button-row > * { min-width:0; max-width:100%; }
+}

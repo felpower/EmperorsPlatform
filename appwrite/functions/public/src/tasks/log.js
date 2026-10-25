@@ -85,6 +85,8 @@ module.exports = async ({ req, res, log }) => {
   const body = parseBody();
   const event = body && typeof body.event === "object" && body.event ? body.event : body;
 
+  if (String(event.scope || "").trim().startsWith("finance-audit")) return res.json({ ok: false, error: "Reserved diagnostic scope." }, 403);
+
   const normalized = {
     logged_at: normalizeIso(event.loggedAt || event.logged_at),
     level: clamp(event.level || "info", 32).toLowerCase() || "info",
