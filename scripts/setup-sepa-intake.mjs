@@ -17,4 +17,5 @@ for(let attempt=0;attempt<30;attempt++){
 }
 const indexes=await request(`${base}/sepa_submissions/indexes`);
 if(!indexes.indexes.some(index=>index.key==='email_created'))await request(`${base}/sepa_submissions/indexes`,{method:'POST',body:{key:'email_created',type:'key',attributes:['email_hash','$createdAt'],orders:['ASC','DESC'],lengths:[64,0]}});
+if(!indexes.indexes.some(index=>index.key==='status_count'))await request(`${base}/sepa_submissions/indexes`,{method:'POST',body:{key:'status_count',type:'key',attributes:['status'],orders:['ASC']}});
 console.log('Private SEPA collection and mandate file reference are ready.');

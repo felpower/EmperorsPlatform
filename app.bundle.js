@@ -6100,6 +6100,7 @@ Uni Wien Emperors`;
       && (["expiring", "expired", "missing", "pending"].includes(member.passStatus) || isPassExpiringSoon(member.passExpiry)));
   }
 
+  let dashboardSepaCount = null;
   async function loadAdminDashboard(force = false) {
     if (currentAccessRole !== "admin" || dashboardLoading || (dashboardLoadAttempted && !force)) return;
     dashboardLoadAttempted = true;
@@ -6109,6 +6110,12 @@ Uni Wien Emperors`;
     try {
       const results = await Promise.allSettled([
         loadTryoutSubmissions(true),
+        (async () => {
+          dashboardSepaCount = null;
+          if (!backendClient?.runAdminTask) return;
+          const result = await backendClient.runAdminTask({ task: "sepaReview", action: "count" });
+          dashboardSepaCount = result.count;
+        })(),
         (async () => {
           if (!authState.user || !backendClient || sponsorOutreachLoaded) return;
           const response = await backendClient.from("sponsor_outreach").select("*");
@@ -6136,6 +6143,7 @@ Uni Wien Emperors`;
       ${dashboardLoading ? `<div class="work-status" role="status"><span class="work-spinner"></span>Loading registrations and follow-ups…</div>` : ""}
       ${dashboardError ? `<div class="work-status work-error" role="alert">Some overview data could not be loaded: ${escapeHtml(dashboardError)}</div>` : ""}
       <div class="admin-task-grid">
+        <button type="button" class="admin-task-card" id="dashboard-sepa-open"><span>New SEPA uploads</span><strong>${dashboardLoading ? "…" : typeof dashboardSepaCount === "number" ? dashboardSepaCount : "—"}</strong><span class="meta">Review signed mandates and assign bank details</span></button>
         ${card("tryout", fresh.length, "New tryout registrations", "Review and invite participants")}
         ${card("fees", fees.length, "Open fee rows", formatMoney(fees.reduce((sum, row) => sum + Math.max(Number(row.amount) - Number(row.paidAmount), 0), 0)) + " across all quarters")}
         ${card("passes", passes.length, "Player passes to review", "Missing, expired or expiring soon")}
@@ -13554,7 +13562,11 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   function bindTableExports() {
     const sepaIntakeButton = document.getElementById("sepa-intake-overview");
     if (sepaIntakeButton) sepaIntakeButton.onclick = async () => {
-      await moduleRegistry.sepaIntake.open({ client: backendClient, onApplied: ({ memberId, iban, mandateDate, accountHolder }) => {
+      await moduleRegistry.sepaIntake.open({ client: backendClient, onReviewed: () => {
+        if (typeof dashboardSepaCount === "number") dashboardSepaCount = Math.max(0, dashboardSepaCount - 1);
+        const count = document.querySelector("#dashboard-sepa-open strong");
+        if (count && typeof dashboardSepaCount === "number") count.textContent = String(dashboardSepaCount);
+      }, onApplied: ({ memberId, iban, mandateDate, accountHolder }) => {
         state.members = state.members.map(member => String(member.id) === String(memberId) ? { ...member, iban, mandateDate, accountHolder } : member);
         reviewedSepaFile = null; sepaExportPreview = null;
         invalidateCache(bootstrapCacheKey()); saveState();
@@ -14856,6 +14868,12 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindDashboardActions() {
+    const sepaDashboardButton = document.getElementById("dashboard-sepa-open");
+    if (sepaDashboardButton) sepaDashboardButton.onclick = () => {
+      navigateToRoute("fees"); switchView("fees");
+      document.getElementById("sepa-intake-overview")?.click();
+    };
+
     const retryPersonal = document.getElementById("retry-personal-overview");
     if (retryPersonal) retryPersonal.onclick = () => { personalOverviewOwner = ""; personalOverviewError = ""; mount(); };
     const owner = String(authState.user?.id || "");

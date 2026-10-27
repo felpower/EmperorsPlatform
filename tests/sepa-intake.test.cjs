@@ -67,3 +67,34 @@ test('SEPA XML uses the actual account holder and signature date from the approv
     assert.equal(result.summary.estimatedMandateDates,0);assert.equal(result.preview.included[0].accountHolder,'Different Account Holder');
   }finally{for(const key of Object.keys(process.env))if(!(key in oldEnv))delete process.env[key];Object.assign(process.env,oldEnv);}
 });
+
+test('submission overview defaults to new uploads, sorts newest first and paginates ten at a time',()=>{
+  const fs=require('node:fs'),vm=require('node:vm'),window={};
+  vm.runInNewContext(fs.readFileSync('src/modules/sepa-intake-ui.js','utf8'),{window});
+  const rows=Array.from({length:23},(_,i)=>({id:String(i),firstName:'Player',lastName:String(i),email:'contact@example.invalid',status:i<20?'new':'approved',submittedAt:`2026-10-${String(i+1).padStart(2,'0')}`}));
+  const first=window.ClubHubModules.sepaIntake.submissionPage(rows);
+  assert.equal(first.total,20);assert.equal(first.rows.length,10);assert.equal(first.rows[0].id,'19');assert.equal(first.pages,2);
+  const second=window.ClubHubModules.sepaIntake.submissionPage(rows,{page:99});assert.equal(second.page,1);assert.equal(second.rows[0].id,'9');
+  const approved=window.ClubHubModules.sepaIntake.submissionPage(rows,{status:'approved'});assert.equal(approved.total,3);
+  assert.equal(window.ClubHubModules.sepaIntake.submissionPage(rows,{search:'not present'}).rows.length,0);
+});
+test('dashboard count reads only one ID and uses the server total for new submissions',async()=>{
+  const sepa=require('../appwrite/functions/admin/src/shared/sepa-intake'),old=sepa.checked;
+  sepa.checked=async path=>{
+    const decoded=decodeURIComponent(path);assert.match(decoded,/"status"/);assert.match(decoded,/"new"/);assert.match(decoded,/"limit","values":\[1\]/);assert.match(decoded,/"select","values":\["\$id"\]/);
+    return {total:234,documents:[{$id:'one'}]};
+  };
+  const file=require.resolve('../appwrite/functions/admin/src/tasks/sepaReview');delete require.cache[file];
+  try{const result=await require(file)(context({action:'count'}));assert.equal(result.count,234);assert.equal(result.ok,true);assert.equal(result.members,undefined);}
+  finally{sepa.checked=old;delete require.cache[file];}
+});
+test('PDF preview embeds an authenticated result as a temporary blob and revokes it on close',async()=>{
+  const fs=require('node:fs'),vm=require('node:vm');const source=fs.readFileSync('src/modules/sepa-intake-ui.js','utf8');
+  const content={},closeButton={},revoked=[];let cleanup;
+  const viewer={isConnected:false,set innerHTML(value){this.html=value;},querySelector:selector=>selector==='[data-preview-close]'?closeButton:content,addEventListener:(name,fn)=>{cleanup=fn;},showModal(){},close(){cleanup();},remove(){this.isConnected=false;}};
+  const ctx={escape:String,document:{createElement:()=>viewer,body:{append:()=>{viewer.isConnected=true;}}},URL:{createObjectURL:()=> 'blob:private-pdf',revokeObjectURL:url=>revoked.push(url)},Blob,Uint8Array,atob};
+  const preview=vm.runInNewContext(source.slice(source.indexOf('  async function previewPdf'),source.indexOf('  async function open('))+';previewPdf',ctx);
+  let calls=0;await preview({runAdminTask:async task=>{calls++;assert.equal(task.action,'download');return {pdfBase64:Buffer.from('%PDF-test').toString('base64')};}},{id:'private-id',firstName:'Test',lastName:'Player'});
+  assert.equal(calls,1);assert.match(content.innerHTML,/<iframe.*src="blob:private-pdf"/);assert.doesNotMatch(content.innerHTML,/download=/);
+  closeButton.onclick();assert.deepEqual(revoked,['blob:private-pdf']);
+});

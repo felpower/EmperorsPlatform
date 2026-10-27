@@ -3,6 +3,12 @@ const sepa=require('../shared/sepa-intake');
 module.exports=async({req,res})=>{
   const body=parseBody(req);
   try {
+    if(body.action==='count'){
+      const { queryParam } = require('../shared/runtime');
+      const queries=[{method:'equal',attribute:'status',values:['new']},{method:'select',values:['$id']},{method:'limit',values:[1]}];
+      const result=await sepa.checked(`${sepa.path(sepa.TABLE)}?${queries.map(queryParam).join('&')}`);
+      return res.json({ok:true,count:Number(result.total || 0)});
+    }
     if(body.action==='overview'){
       const [members,privateRows,submissions,fees]=await Promise.all([
         sepa.list('members',[{method:'select',values:['$id','first_name','last_name','displayName','membership_status','roles_json','deleted_at','iban','mandate_date']}],5000),

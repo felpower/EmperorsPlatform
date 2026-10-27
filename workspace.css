@@ -60,3 +60,20 @@
 .sepa-submission-list .status-check { display:flex; align-items:flex-start; }
 .sepa-submission-list input[type="checkbox"] { width:20px; flex-shrink:0; }
 @media(max-width:760px) { .sepa-member-row { grid-template-columns:1fr 1fr; }.sepa-member-row strong { grid-column:1/-1; }.sepa-admin-dialog h2 { font-size:1.4rem; } }
+.sepa-submission-list { gap:8px; }
+.sepa-submission-list .sepa-submission { padding:0; }
+.sepa-submission > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; padding:16px; }
+.sepa-submission > summary > span { display:grid; gap:6px; min-width:0; }
+.sepa-submission > summary::before { content:"▸"; flex-shrink:0; }
+.sepa-submission[open] > summary::before { content:"▾"; }
+.sepa-submission > summary button { flex-shrink:0; }
+.sepa-submission-detail { padding:0 18px 18px; border-top:1px solid var(--line); }
+.sepa-member-checklist { margin:24px 0; border-top:1px solid var(--line); padding-top:18px; }
+.sepa-member-checklist > summary { cursor:pointer; padding:12px 0; }
+.sepa-pdf-dialog { width:min(1100px,calc(100vw - 24px)); height:90dvh; display:flex; flex-direction:column; }
+.sepa-pdf-dialog:not([open]) { display:none; }
+.sepa-pdf-dialog .section-head { flex-shrink:0; }
+.sepa-pdf-content { flex:1; min-height:0; display:flex; flex-direction:column; }
+.sepa-pdf-content iframe { width:100%; flex:1; min-height:300px; border:1px solid var(--line); background:white; }
+button.admin-task-card { background:var(--paper-strong); text-align:left; cursor:pointer; font:inherit; }
+@media(max-width:640px) { .sepa-submission > summary { flex-wrap:wrap; }.sepa-submission > summary > span { flex:1; }.sepa-submission > summary button { margin-left:auto; } }
