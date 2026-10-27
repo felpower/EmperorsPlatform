@@ -102,3 +102,11 @@ test('PDF preview renders private bytes locally and cleans up the renderer and b
   assert.match(nodes['[data-pdf-page]'].textContent,/Page 1 of 1/);
   closeButton.onclick();assert.deepEqual(revoked,['blob:private-pdf']);assert.equal(destroyed,1);
 });
+test('self-hosted PDF renderer and worker are present in the source tree used by deployment',()=>{
+  const fs=require('node:fs');
+  const source=fs.readFileSync('src/modules/sepa-intake-ui.js','utf8');
+  const renderer=source.match(/import\('([^']+pdf\.mjs)'\)/)[1];
+  const worker=source.match(/workerSrc='([^']+)'/)[1];
+  for(const file of [renderer,worker])assert.ok(fs.existsSync('.'+file),file+' must be published');
+  assert.ok(fs.existsSync('src/vendor/pdfjs/LICENSE'));
+});
