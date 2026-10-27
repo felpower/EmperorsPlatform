@@ -8477,6 +8477,7 @@ Uni Wien Emperors`;
             <span class="member-filter-summary-meta">${selectedRows.length} selected</span>
           </summary>
           <div style="display: grid; gap: 10px; margin-top: 10px;">
+            ${canManageTryoutSettings() ? `<button type="button" class="ghost-button" id="tryout-edit-confirmation-email">Edit automatic registration email</button><p class="meta">Manage the confirmation sent immediately to new registrants, independently of the bulk invitation below.</p>` : ""}
             <p class="muted">${selectedRows.length} selected${missingEmailCount ? ` (${missingEmailCount} missing a valid email and will be skipped)` : ""}. Use {{firstName}}, {{lastName}}, or {{email}} as placeholders.</p>
             <p class="muted">${dateParts
               ? `{{tryoutDate}} and {{tryoutDateEn}} are filled in automatically from <strong>Next tryout</strong> above: <strong>${escapeHtml(dateParts.de)}</strong> / <strong>${escapeHtml(dateParts.en)}</strong>.${dateParts.isPast ? ` <strong>This date is in the past - update Next tryout before sending.</strong>` : ""}`
@@ -14938,6 +14939,9 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindTryoutActions() {
+    const editConfirmation = document.getElementById("tryout-edit-confirmation-email");
+    if (editConfirmation) editConfirmation.onclick = async () => { await moduleRegistry.tryoutConfirmation.open(backendClient); };
+
     bindTryoutWorkflowActions();
     const qrDialog = document.getElementById("tryout-qr-dialog");
     const qrOpenButton = document.getElementById("open-tryout-qr-dialog");

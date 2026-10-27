@@ -1,14 +1,12 @@
 // Tryout registration from the website (replaces the direct table insert).
 // - Detects repeat registrations (same e-mail, or same phone number) for the current tryout
 //   cycle and updates the existing entry instead of creating another one.
-// - Sends a confirmation e-mail for new registrations: "you are on the list, no need to sign up
-//   again, we will send the details about a week before the tryout".
+// - Sends the current administrator-configured confirmation for first registrations only.
 const { parseBody, appwriteConfig, appwriteRequest, queryParam } = require("../shared/runtime");
 const { sendMailgun, isMailgunConfigured } = require("../shared/mailgun");
 const { renderTryoutEmail, plainTextFooter } = require("./tryoutEmailTemplate");
 
 const TABLE = String(process.env.APPWRITE_TRYOUT_REGISTRATIONS_COLLECTION_ID || "tryout_registrations").trim();
-const SETTINGS = String(process.env.APPWRITE_TRYOUT_SETTINGS_TABLE_ID || "tryout_settings").trim();
 const REPLY_TO = String(process.env.TRYOUT_REPLY_TO_EMAIL || "p.felbauer@emperors.at").trim();
 const TEXT_FIELDS = { first_name: 80, last_name: 80, email: 200, phone: 40, uni_wien_student: 40, study_program: 200, previous_football_experience: 80, football_experience_details: 2000, other_sports: 500, preferred_position: 80, availability_notes: 2000, referred_by: 120 };
 const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -35,54 +33,12 @@ async function findExisting(data) {
   return (payload.rows || []).find((row) => String(row.email || "").trim().toLowerCase() === data.email || (key.length >= 8 && phoneKey(row.phone) === key)) || null;
 }
 
-async function tryoutDateText() {
-  const { response, payload } = await appwriteRequest(`/tablesdb/${encodeURIComponent(appwriteConfig().databaseId)}/tables/${encodeURIComponent(SETTINGS)}/rows?${queryParam({ method: "limit", values: [5] })}`);
-  const row = response.ok ? (payload.rows || []).find((r) => r.tryout_date) : null;
-  const iso = String(row?.tryout_date || "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return { de: "", en: "" };
-  const date = new Date(`${iso}T12:00:00Z`);
-  return {
-    de: new Intl.DateTimeFormat("de-AT", { weekday: "long", day: "numeric", month: "numeric", year: "numeric", timeZone: "UTC" }).format(date),
-    en: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date)
-  };
-}
-
 async function sendConfirmation(data, log) {
   if (!isMailgunConfigured()) return false;
-  const when = await tryoutDateText().catch(() => ({ de: "", en: "" }));
-  const subject = "Uni Wien Emperors Tryout – Anmeldung bestätigt";
-  const text = `Hallo ${data.first_name},
-
-danke für deine Anmeldung zum Tryout der Uni Wien Emperors${when.de ? ` am ${when.de}` : ""}!
-
-Du stehst auf unserer Liste – du musst dich nicht noch einmal anmelden.
-Ca. eine Woche vor dem Tryout schicken wir dir alle Details per E-Mail:
-- Uhrzeit und Treffpunkt
-- Ort
-- was du mitbringen sollst
-
-Fragen? Antworte einfach auf diese E-Mail.
-
-Sportliche Grüße
-Uni Wien Emperors
-
----------- English version below ----------
-
-Hi ${data.first_name},
-
-thanks for registering for the Uni Wien Emperors tryout${when.en ? ` on ${when.en}` : ""}!
-
-You're on our list – no need to register again.
-About one week before the tryout we'll email you all the details:
-- Time and meeting point
-- Location
-- What to bring
-
-Questions? Just reply to this email.
-
-Best regards,
-Uni Wien Emperors`;
   try {
+    const confirmation = require('../shared/tryout-confirmation');
+    const config = await confirmation.load();
+    const {subject,text} = confirmation.render(config,data);
     await sendMailgun({ to: data.email, subject, text: `${text}${plainTextFooter()}`, html: renderTryoutEmail({ subject, text }), replyTo: REPLY_TO });
     return true;
   } catch (error) {

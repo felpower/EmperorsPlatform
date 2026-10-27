@@ -62,3 +62,37 @@ test("mail success and database failure are reported separately, joined particip
 test("member conversion is restricted to admins server-side", () => {
   assert.deepEqual(require("../appwrite/functions/admin/src/auth").DEFAULT_TASK_ROLES.tryoutConvert, ["admin"]);
 });
+
+test('automatic registration template renders saved wording and personal/date placeholders',async()=>{
+  const helper=require('../appwrite/functions/public/src/shared/tryout-confirmation');
+  assert.equal(helper.DEFAULT_SUBJECT,'Uni Wien Emperors Tryout \u2013 Anmeldung best\u00e4tigt');
+  const result=helper.render({subject:'Welcome {{firstName}}',body:'Hi {{firstName}} {{lastName}}, {{tryoutDateEn}}; {{email}}',values:{tryoutDateEn:'Tuesday, 27 October 2026'}},{first_name:'Rookie',last_name:'Example',email:'r@example.invalid'});
+  assert.equal(result.subject,'Welcome Rookie');assert.match(result.text,/Rookie Example, Tuesday/);assert.match(result.text,/r@example.invalid/);
+  assert.throws(()=>helper.validate('Subject\ninjection','Text'),/one line/);
+  assert.throws(()=>helper.validate('Subject','Hi {{unknown}}'),/Unknown placeholder/);
+});
+test('new tryout registrations use configured confirmation; duplicate registrations do not send again',async()=>{
+  const runtime=require('../appwrite/functions/public/src/shared/runtime'),mailgun=require('../appwrite/functions/public/src/shared/mailgun'),helper=require('../appwrite/functions/public/src/shared/tryout-confirmation');
+  const oldRuntime={...runtime},oldMail={...mailgun},oldLoad=helper.load;let existing=false,sends=0;
+  runtime.appwriteConfig=()=>({databaseId:'test'});
+  runtime.appwriteRequest=async(path,options={})=>{
+    if(options.method==='POST')return result({$id:'new-person'});
+    if(options.method==='PATCH')return result({});
+    return result({rows:existing?[{$id:'old-person',email:'rookie@example.invalid',phone:'',tryout_cycle:'next'}]:[]});
+  };
+  helper.load=async()=>({subject:'Today: {{firstName}}',body:'Meet at 19:30 today, {{firstName}}.',values:{}});
+  mailgun.isMailgunConfigured=()=>true;mailgun.sendMailgun=async message=>{sends++;assert.equal(message.subject,'Today: Rookie');assert.match(message.text,/19:30 today, Rookie/);return 'accepted';};
+  const file=require.resolve('../appwrite/functions/public/src/tasks/tryoutRegister');delete require.cache[file];
+  try{
+    const task=require(file),body={registration:{first_name:'Rookie',last_name:'Example',email:'rookie@example.invalid',contact_consent:true}};
+    const response=await task({...context(body),log(){}});assert.equal(response.ok,true);assert.equal(response.emailed,true);
+    existing=true;const duplicate=await task({...context(body),log(){}});assert.equal(duplicate.duplicate,true);assert.equal(duplicate.emailed,false);assert.equal(sends,1);
+    existing=false;helper.load=async()=>{throw Error('Settings unavailable');};
+    const failed=await task({...context(body),log(){}});assert.equal(failed.ok,true);assert.equal(failed.emailed,false);assert.equal(sends,1);
+  }finally{Object.assign(runtime,oldRuntime);Object.assign(mailgun,oldMail);helper.load=oldLoad;delete require.cache[file];}
+});
+test('automatic confirmation editing is admin-only and saving validates before any write',async()=>{
+  assert.deepEqual(require('../appwrite/functions/admin/src/auth').DEFAULT_TASK_ROLES.tryoutConfirmation,['admin']);
+  const task=require('../appwrite/functions/admin/src/tasks/tryoutConfirmation');
+  const response=await task(context({action:'save',subject:'',body:'hello'}));assert.equal(response.httpStatus,400);
+});
