@@ -8,12 +8,23 @@
     const current=Math.min(Math.max(0,page),pages-1);
     return {rows:matches.slice(current*pageSize,(current+1)*pageSize),total:matches.length,page:current,pages};
   }
+  let pdfRendererPromise;
+  function loadPdfRenderer() {
+    if(!pdfRendererPromise)pdfRendererPromise=import('/src/vendor/pdfjs/build/pdf.mjs').then(renderer=>{
+      renderer.GlobalWorkerOptions.workerSrc='/src/vendor/pdfjs/build/pdf.worker.mjs';return renderer;
+    }).catch(error=>{pdfRendererPromise=null;throw error;});
+    return pdfRendererPromise;
+  }
   async function previewPdf(client,row) {
     const viewer=document.createElement('dialog');viewer.className='work-dialog sepa-pdf-dialog';
-    let url='';
+    let url='',loadingTask=null,renderTask=null,pdf=null,pageNumber=1,zoom=1,rendering=false;
     viewer.innerHTML=`<div class="section-head"><h3>Signed mandate · ${escape(row.firstName)} ${escape(row.lastName)}</h3><button type="button" class="ghost-button" data-preview-close>Close preview</button></div><div data-preview-content class="work-status" role="status"><span class="work-spinner" aria-hidden="true"></span>Loading private PDF…</div>`;
     viewer.querySelector('[data-preview-close]').onclick=()=>viewer.close();
-    viewer.addEventListener('close',()=>{if(url)URL.revokeObjectURL(url);viewer.remove();},{once:true});
+    viewer.addEventListener('close',()=>{
+      renderTask?.cancel();
+      if(loadingTask)void loadingTask.destroy().catch(()=>{});
+      if(url)URL.revokeObjectURL(url);viewer.remove();
+    },{once:true});
     document.body.append(viewer);viewer.showModal();
     try {
       const result=await client.runAdminTask({task:'sepaReview',action:'download',submissionId:row.id});
@@ -21,8 +32,45 @@
       const bytes=Uint8Array.from(atob(result.pdfBase64),char=>char.charCodeAt(0));
       url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
       const content=viewer.querySelector('[data-preview-content]');content.className='sepa-pdf-content';
-      content.innerHTML=`<p class="meta">If your browser cannot display the embedded PDF, <a href="${url}" target="_blank" rel="noopener noreferrer">open it in a browser tab</a>.</p><iframe title="Signed mandate PDF" src="${url}"></iframe>`;
-    } catch(error) {if(viewer.isConnected)viewer.querySelector('[data-preview-content]').textContent=error.message||'Could not load PDF.';}
+      content.innerHTML=`<p class="meta"><a href="${url}" target="_blank" rel="noopener noreferrer">Open original PDF in a browser tab</a></p><div class="button-row sepa-pdf-controls"><button type="button" class="ghost-button small-button" data-pdf-previous disabled>Previous page</button><span data-pdf-page role="status">Loading…</span><button type="button" class="ghost-button small-button" data-pdf-next disabled>Next page</button><button type="button" class="ghost-button small-button" data-pdf-out disabled>−</button><button type="button" class="ghost-button small-button" data-pdf-in disabled>+</button><button type="button" class="ghost-button small-button" data-pdf-fit disabled>Fit to width</button></div><p data-pdf-error class="work-error" role="alert"></p><div class="sepa-pdf-pages"><canvas aria-label="Signed mandate page" role="img"></canvas></div>`;
+      const renderer=await loadPdfRenderer();
+      if(!viewer.isConnected)return;
+      loadingTask=renderer.getDocument({data:bytes,isEvalSupported:false,standardFontDataUrl:'/src/vendor/pdfjs/standard_fonts/',cMapUrl:'/src/vendor/pdfjs/cmaps/',cMapPacked:true,wasmUrl:'/src/vendor/pdfjs/wasm/'});
+      pdf=await loadingTask.promise;
+      if(!viewer.isConnected)return;
+      const controls=content.querySelectorAll('.sepa-pdf-controls button');
+      async function draw() {
+        if(rendering||!viewer.isConnected)return;
+        rendering=true;controls.forEach(button=>{button.disabled=true;});
+        try {
+          const page=await pdf.getPage(pageNumber);
+          if(!viewer.isConnected)return;
+          const host=content.querySelector('.sepa-pdf-pages'),canvas=content.querySelector('canvas');
+          const base=page.getViewport({scale:1});
+          const viewport=page.getViewport({scale:Math.max(240,host.clientWidth-24)/base.width*zoom});
+          const ratio=Math.min(window.devicePixelRatio||1,2);
+          canvas.width=Math.floor(viewport.width*ratio);canvas.height=Math.floor(viewport.height*ratio);
+          canvas.style.width=`${viewport.width}px`;canvas.style.height=`${viewport.height}px`;
+          canvas.setAttribute('aria-label',`Signed mandate, page ${pageNumber} of ${pdf.numPages}`);
+          renderTask=page.render({canvasContext:canvas.getContext('2d'),viewport,transform:ratio===1?null:[ratio,0,0,ratio,0,0]});
+          await renderTask.promise;renderTask=null;
+          content.querySelector('[data-pdf-page]').textContent=`Page ${pageNumber} of ${pdf.numPages} · ${Math.round(zoom*100)}%`;
+          content.querySelector('[data-pdf-error]').textContent='';
+        } catch(error) {if(viewer.isConnected)content.querySelector('[data-pdf-error]').textContent=error.message||'This PDF page could not be displayed.';}
+        finally {
+          rendering=false;
+          if(viewer.isConnected){controls.forEach(button=>{button.disabled=false;});content.querySelector('[data-pdf-previous]').disabled=pageNumber<=1;content.querySelector('[data-pdf-next]').disabled=pageNumber>=pdf.numPages;}
+        }
+      }
+      content.querySelector('[data-pdf-previous]').onclick=()=>{if(!rendering&&pageNumber>1){pageNumber--;void draw();}};
+      content.querySelector('[data-pdf-next]').onclick=()=>{if(!rendering&&pageNumber<pdf.numPages){pageNumber++;void draw();}};
+      content.querySelector('[data-pdf-out]').onclick=()=>{if(!rendering){zoom=Math.max(.5,zoom-.25);void draw();}};
+      content.querySelector('[data-pdf-in]').onclick=()=>{if(!rendering){zoom=Math.min(3,zoom+.25);void draw();}};
+      content.querySelector('[data-pdf-fit]').onclick=()=>{if(!rendering){zoom=1;void draw();}};
+      await draw();
+    } catch(error) {
+      if(viewer.isConnected){const errorBox=viewer.querySelector('[data-pdf-error]')||viewer.querySelector('[data-preview-content]');errorBox.textContent=error.message||'Could not load PDF.';}
+    }
   }
   async function open({client,onApplied,onReviewed}){
     const dialog=document.createElement('dialog');dialog.className='work-dialog sepa-admin-dialog';dialog.setAttribute('aria-label','SEPA overview');

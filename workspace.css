@@ -77,3 +77,6 @@
 .sepa-pdf-content iframe { width:100%; flex:1; min-height:300px; border:1px solid var(--line); background:white; }
 button.admin-task-card { background:var(--paper-strong); text-align:left; cursor:pointer; font:inherit; }
 @media(max-width:640px) { .sepa-submission > summary { flex-wrap:wrap; }.sepa-submission > summary > span { flex:1; }.sepa-submission > summary button { margin-left:auto; } }
+.sepa-pdf-controls { flex-shrink:0; align-items:center; gap:6px; }
+.sepa-pdf-pages { flex:1; min-height:0; overflow:auto; background:#e8ecef; border:1px solid var(--line); padding:12px; }
+.sepa-pdf-pages canvas { display:block; margin:0 auto; background:white; box-shadow:0 2px 10px #0002; }

@@ -88,13 +88,17 @@ test('dashboard count reads only one ID and uses the server total for new submis
   try{const result=await require(file)(context({action:'count'}));assert.equal(result.count,234);assert.equal(result.ok,true);assert.equal(result.members,undefined);}
   finally{sepa.checked=old;delete require.cache[file];}
 });
-test('PDF preview embeds an authenticated result as a temporary blob and revokes it on close',async()=>{
+test('PDF preview renders private bytes locally and cleans up the renderer and blob on close',async()=>{
   const fs=require('node:fs'),vm=require('node:vm');const source=fs.readFileSync('src/modules/sepa-intake-ui.js','utf8');
-  const content={},closeButton={},revoked=[];let cleanup;
+  const closeButton={},revoked=[],nodes={};let cleanup,renders=0,destroyed=0;
+  const canvas={style:{},setAttribute(){},getContext:()=>({})};
+  const content={querySelectorAll:()=>[],querySelector:selector=>selector==='canvas'?canvas:selector==='.sepa-pdf-pages'?{clientWidth:600}:(nodes[selector]||=( {} ))};
   const viewer={isConnected:false,set innerHTML(value){this.html=value;},querySelector:selector=>selector==='[data-preview-close]'?closeButton:content,addEventListener:(name,fn)=>{cleanup=fn;},showModal(){},close(){cleanup();},remove(){this.isConnected=false;}};
-  const ctx={escape:String,document:{createElement:()=>viewer,body:{append:()=>{viewer.isConnected=true;}}},URL:{createObjectURL:()=> 'blob:private-pdf',revokeObjectURL:url=>revoked.push(url)},Blob,Uint8Array,atob};
+  const page={getViewport:({scale})=>({width:600*scale,height:800*scale}),render:()=>{renders++;return {promise:Promise.resolve(),cancel(){}};}};
+  const ctx={escape:String,window:{devicePixelRatio:1},loadPdfRenderer:async()=>({getDocument:options=>{assert.equal(options.isEvalSupported,false);return {promise:Promise.resolve({numPages:1,getPage:async()=>page}),destroy:async()=>{destroyed++;}};}}),document:{createElement:()=>viewer,body:{append:()=>{viewer.isConnected=true;}}},URL:{createObjectURL:()=> 'blob:private-pdf',revokeObjectURL:url=>revoked.push(url)},Blob,Uint8Array,atob};
   const preview=vm.runInNewContext(source.slice(source.indexOf('  async function previewPdf'),source.indexOf('  async function open('))+';previewPdf',ctx);
   let calls=0;await preview({runAdminTask:async task=>{calls++;assert.equal(task.action,'download');return {pdfBase64:Buffer.from('%PDF-test').toString('base64')};}},{id:'private-id',firstName:'Test',lastName:'Player'});
-  assert.equal(calls,1);assert.match(content.innerHTML,/<iframe.*src="blob:private-pdf"/);assert.doesNotMatch(content.innerHTML,/download=/);
-  closeButton.onclick();assert.deepEqual(revoked,['blob:private-pdf']);
+  assert.equal(calls,1);assert.equal(renders,1);assert.ok(canvas.width>0);assert.match(content.innerHTML,/<canvas/);assert.doesNotMatch(content.innerHTML,/download=/);
+  assert.match(nodes['[data-pdf-page]'].textContent,/Page 1 of 1/);
+  closeButton.onclick();assert.deepEqual(revoked,['blob:private-pdf']);assert.equal(destroyed,1);
 });
