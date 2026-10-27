@@ -10,8 +10,8 @@
   }
   let pdfRendererPromise;
   function loadPdfRenderer() {
-    if(!pdfRendererPromise)pdfRendererPromise=import('/src/vendor/pdfjs/build/pdf.mjs').then(renderer=>{
-      renderer.GlobalWorkerOptions.workerSrc='/src/vendor/pdfjs/build/pdf.worker.mjs';return renderer;
+    if(!pdfRendererPromise)pdfRendererPromise=import('/src/vendor/pdfjs/pdf.mjs').then(renderer=>{
+      renderer.GlobalWorkerOptions.workerSrc='/src/vendor/pdfjs/pdf.worker.mjs';return renderer;
     }).catch(error=>{pdfRendererPromise=null;throw error;});
     return pdfRendererPromise;
   }
