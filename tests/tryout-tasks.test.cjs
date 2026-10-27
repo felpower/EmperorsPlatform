@@ -96,3 +96,19 @@ test('automatic confirmation editing is admin-only and saving validates before a
   const task=require('../appwrite/functions/admin/src/tasks/tryoutConfirmation');
   const response=await task(context({action:'save',subject:'',body:'hello'}));assert.equal(response.httpStatus,400);
 });
+
+test('saving the automatic template writes only its settings document and never sends a message',async()=>{
+  const runtime=require('../appwrite/functions/admin/src/shared/runtime'),original={...runtime},writes=[];
+  runtime.appwriteConfig=()=>({databaseId:'test'});
+  runtime.appwriteRequest=async(path,options)=>{writes.push({path,...options});return options.method==='PATCH'?result({},404):result({$updatedAt:'2026-10-27T12:00:00Z'});};
+  const filename=require.resolve('../appwrite/functions/admin/src/tasks/tryoutConfirmation');delete require.cache[filename];
+  try {
+    const task=require(filename),saved=await task(context({action:'save',subject:'New instructions',body:'Hi {{firstName}}, see you today at 19:30.'}));
+    assert.equal(saved.ok,true);assert.equal(writes.length,2);
+    assert.ok(writes.every(write=>write.path.includes('/tryout_settings/documents')));
+    assert.equal(writes[1].body.documentId,'confirmation-email');
+    assert.equal(writes[1].body.data.key,'confirmation_email');
+    assert.equal(writes[1].body.data.confirmation_subject,'New instructions');
+    assert.equal(writes[1].body.data.tryout_date,undefined);
+  }finally{Object.assign(runtime,original);delete require.cache[filename];}
+});
