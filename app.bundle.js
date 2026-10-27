@@ -12111,40 +12111,32 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     const menuToggle = document.getElementById("menu-toggle");
     const sidebar = document.querySelector(".sidebar");
     const sidebarOverlay = document.getElementById("sidebar-overlay");
-
     if (!menuToggle || !sidebar) return;
-
-    const closeMenu = () => {
-      menuToggle.classList.remove("open");
-      sidebar.classList.remove("open");
-      sidebarOverlay.classList.remove("open");
+    const compactNavigation = window.matchMedia("(max-width: 1040px)");
+    const setOpen = (requested) => {
+      const open = compactNavigation.matches && requested;
+      menuToggle.classList.toggle("open", open);
+      sidebar.classList.toggle("open", open);
+      sidebarOverlay?.classList.toggle("open", open);
+      document.body.classList.toggle("mobile-menu-open", open);
+      menuToggle.setAttribute("aria-expanded", String(open));
+      menuToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+      sidebar.inert = compactNavigation.matches && !open;
     };
-
-    const openMenu = () => {
-      menuToggle.classList.add("open");
-      sidebar.classList.add("open");
-      sidebarOverlay.classList.add("open");
-    };
-
-    menuToggle.onclick = () => {
-      if (sidebar.classList.contains("open")) {
-        closeMenu();
-      } else {
-        openMenu();
-      }
-    };
-
-    if (sidebarOverlay) {
-      sidebarOverlay.onclick = closeMenu;
-    }
-
-    // Close menu when a nav link is clicked
-    document.querySelectorAll(".nav-link[data-view]").forEach((link) => {
-      link.addEventListener("click", closeMenu);
+    const closeMenu = () => setOpen(false);
+    menuToggle.onclick = () => setOpen(!sidebar.classList.contains("open"));
+    if (sidebarOverlay) sidebarOverlay.onclick = closeMenu;
+    sidebar.addEventListener("click", (event) => {
+      if (event.target.closest("a, button")) closeMenu();
     });
-
-    // Close menu when view changes
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && sidebar.classList.contains("open")) {
+        closeMenu(); menuToggle.focus();
+      }
+    });
     window.addEventListener("popstate", closeMenu);
+    compactNavigation.addEventListener("change", closeMenu);
+    closeMenu();
   }
 
   const ROUTE_SEO = {

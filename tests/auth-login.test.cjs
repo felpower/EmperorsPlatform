@@ -72,3 +72,24 @@ test('Google sessions do not require password setup; ordinary email sessions sti
   ctx.authState.user.user_metadata.password_set = true;
   assert.equal(ctx.needsPasswordSetup(), false);
 });
+
+test('compact navigation closes with toggle, overlay, Escape and breakpoint changes',()=>{
+  const source=fs.readFileSync('app.bundle.js','utf8');
+  const fn=source.slice(source.indexOf('  function bindMobileMenu() {'),source.indexOf('  const ROUTE_SEO ='));
+  const classes=()=>{const values=new Set();return {toggle:(key,on)=>on?values.add(key):values.delete(key),contains:key=>values.has(key)};};
+  const toggle={classList:classes(),setAttribute(key,value){this[key]=value;},focus(){this.focused=true;}};
+  const sidebar={classList:classes(),addEventListener(key,handler){this[key]=handler;}};
+  const overlay={classList:classes()};const docEvents={},windowEvents={};
+  const media={matches:true,addEventListener(key,handler){this.change=handler;}};
+  const body={classList:classes()};
+  const ctx={window:{matchMedia:query=>{assert.equal(query,'(max-width: 1040px)');return media;},addEventListener:(key,fn)=>windowEvents[key]=fn},document:{body,getElementById:id=>id==='menu-toggle'?toggle:overlay,querySelector:()=>sidebar,addEventListener:(key,fn)=>docEvents[key]=fn}};
+  vm.createContext(ctx);vm.runInContext(fn,ctx);ctx.bindMobileMenu();
+  assert.equal(sidebar.inert,true);assert.equal(toggle['aria-expanded'],'false');
+  toggle.onclick();assert.equal(sidebar.inert,false);assert.equal(body.classList.contains('mobile-menu-open'),true);
+  overlay.onclick();assert.equal(sidebar.inert,true);
+  toggle.onclick();docEvents.keydown({key:'Escape'});assert.equal(toggle.focused,true);assert.equal(toggle['aria-expanded'],'false');
+  toggle.onclick();toggle.onclick();assert.equal(sidebar.classList.contains('open'),false);
+  toggle.onclick();sidebar.click({target:{closest:()=>({})}});assert.equal(sidebar.inert,true);
+  toggle.onclick();media.matches=false;media.change();assert.equal(sidebar.inert,false);assert.equal(body.classList.contains('mobile-menu-open'),false);
+  media.matches=true;media.change();assert.equal(sidebar.inert,true);
+});
