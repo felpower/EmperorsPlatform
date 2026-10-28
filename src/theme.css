@@ -29,6 +29,8 @@ html[data-theme="dark"] :is(.roster-filter-chip,.playoff-match-card,.playoff-tea
   background:var(--paper-strong); color:var(--ink); border-color:var(--line);
 }
 html[data-theme="dark"] :is(.po-card header,.po-top4 li,.po-seed,.gp-tabs,.gd-logo-fallback) { background:#293945; }
+html[data-theme="dark"] .gd-game:nth-child(even) { background:#24323d; }
+html[data-theme="dark"] .gd-game.is-emperors { background:rgba(246,195,22,.14); }
 html[data-theme="dark"] :is(.clubee-sync-meta,.clubee-sync-hint,.clubee-sync-empty,.clubee-sync-list small,.clubee-sync-all,.socials-remember,.gd-time,.gd-tag,.gd-earlier > summary,.po-top4 li small,.po-round,.po-card header span,.po-name small,.po-team.is-open .po-name,.gp-stats,.gp-season,.gp-tab,.gd-score em) { color:var(--muted); }
 html[data-theme="dark"] :is(.gp-tab.is-active,.gp-filter.is-active,.roster-filter-chip.is-active,.mi-filter.active) { background:#384c59; color:#ffe17a; border-color:#758a98; }
 html[data-theme="dark"] :is(.po-final header,.clubee-sync-actions .primary-button) { background:#101a21; color:#ffe17a; }
