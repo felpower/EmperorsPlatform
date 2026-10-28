@@ -5,7 +5,6 @@
 // Clubee vorausfüllt (Speichern macht man in Clubee selbst). Nur für Admin/Finance.
 (function () {
   const EXT = "emperors-clubee-extension";
-  const CLUBEE_ADD_URL = "https://clubee.com/acsluniwienemperors/steps/add/members?steps=add_members&redirectUrl=/admin/membermanagement/431212";
   let handledAt = 0;
   let extensionPresent = false;
 
@@ -15,6 +14,19 @@
   const today = () => new Date().toISOString().slice(0, 10);
   const fmt = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || "") ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : "–");
   const jersey = (v) => v !== null && v !== undefined && /^\d{1,3}$/.test(String(v).trim()) ? Number(v) : undefined;
+  function validateMembers(members) {
+    if (!Array.isArray(members) || !members.length) throw new Error("Keine Clubee-Mitglieder gelesen. Der Abgleich wurde abgebrochen; daraus werden keine Anlagevorschläge erzeugt.");
+    const ids = new Set();
+    members.forEach((m) => {
+      if (!m || !/^\d+$/.test(String(m.clubeeId || "")) || !String(m.firstName || "").trim() || !String(m.lastName || "").trim() || ids.has(String(m.clubeeId))) throw new Error("Clubee-Mitgliederliste ist unvollständig oder enthält doppelte IDs. Bitte neu einlesen.");
+      ids.add(String(m.clubeeId));
+    });
+  }
+  function validateSource(payload) {
+    validateMembers(payload && payload.members);
+    if (payload.group !== "431040" || payload.season !== "220" || payload.scope !== "season-team" || payload.complete !== true || payload.total !== payload.members.length) throw new Error("Quelle nicht bestätigt. Bitte Erweiterung 1.2.1 neu laden und in UNI-Wien Emperors (AllAges), Saison 2026/2027 neu einlesen.");
+    if (!Number.isFinite(payload.at) || Date.now() - payload.at > 900000 || payload.at > Date.now() + 60000) throw new Error("Clubee-Daten sind veraltet. Bitte die aktuelle Saisonliste neu einlesen.");
+  }
 
   function lev(a, b) {
     if (Math.abs(a.length - b.length) > 2) return 3;
@@ -49,6 +61,7 @@
   }
 
   function buildPlan(clubeeMembers, websiteRows, passRows) {
+    validateMembers(clubeeMembers);
     const active = websiteRows.filter((m) => !m.deleted_at);
     const byClubeeId = new Map(active.filter((m) => m.clubee_id).map((m) => [String(m.clubee_id), m]));
     const byName = new Map();
@@ -112,9 +125,15 @@
   }
 
   async function open(payload) {
+    const dlg = dialogShell();
+    const blocked = (error) => {
+      dlg.innerHTML = `<div class="clubee-sync-body"><h2>Clubee-Abgleich abgebrochen</h2><p role="alert">${esc(error.message)}</p><p>Es wurden keine Mitgliederdaten geändert. Bitte keine Personen aufgrund dieses Abrufs neu anlegen.</p><div class="clubee-sync-actions"><button type="button" data-close>Schließen</button></div></div>`;
+      dlg.querySelector("[data-close]").onclick = () => dlg.close();
+      if (!dlg.open) dlg.showModal();
+    };
+    try { validateSource(payload); } catch (error) { blocked(error); return; }
     const client = window.ClubHubDataClient && window.ClubHubDataClient.createClient();
     if (!client) return;
-    const dlg = dialogShell();
     dlg.innerHTML = `<div class="clubee-sync-body"><h2>Clubee-Abgleich</h2><p>Wird geladen …</p></div>`;
     if (!dlg.open) dlg.showModal();
     const [membersRes, privateRes, passRes] = await Promise.all([
@@ -128,6 +147,9 @@
       return;
     }
     const plan = buildPlan(payload.members || [], membersRes.data || [], passRes.data || []);
+    if ((membersRes.data || []).some((m) => !m.deleted_at) && !plan.matched.length && !plan.suggested.length) {
+      blocked(new Error("Keine Person konnte mit der Website zugeordnet werden. Bitte Quelle und Saison prüfen; es werden keine neuen Mitglieder vorgeschlagen.")); return;
+    }
     const changed = plan.matched.filter((r) => r.changes.length);
     const at = new Date(payload.at || Date.now()).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
     dlg.innerHTML = `<form method="dialog" class="clubee-sync-body">
@@ -139,25 +161,16 @@
       ${plan.suggested.length ? `<h3>Wahrscheinlich dieselbe Person (${plan.suggested.length})</h3><p class="clubee-sync-hint">Ähnlicher Name in Clubee und auf der Website – angehakt = verknüpfen (der Name auf der Website bleibt).</p><label class="clubee-sync-all"><input type="checkbox" data-all="sug" checked> alle</label><ul class="clubee-sync-list">${plan.suggested.map((r, i) => `<li><label><input type="checkbox" data-sug="${i}" checked><span><strong>${esc(r.member.first_name)} ${esc(r.member.last_name)}</strong><small>${r.changes.map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : ""}
       <h3>Nur in Clubee (${plan.onlyClubee.length})</h3>
       ${plan.onlyClubee.length ? `<p class="clubee-sync-hint">Auf der Website anlegen (Status „pending“) oder ignorieren (z. B. ehemalige Spieler).</p><ul class="clubee-sync-list">${plan.onlyClubee.map((c, i) => `<li><label><input type="checkbox" data-new="${i}"><span><strong>${esc(c.firstName)} ${esc(c.lastName)}</strong><small>${[c.licence ? `Lizenz ${c.licence.status}${c.licence.expires ? " bis " + fmt(c.licence.expires) : ""}` : "keine Lizenz", c.email, jersey(c.jerseyNumber) !== undefined ? `Trikotnummer ${jersey(c.jerseyNumber)}` : ""].filter(Boolean).map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
-      <h3>Nur auf der Website (${plan.onlyWebsite.length})</h3>
-      ${plan.onlyWebsite.length ? `<p class="clubee-sync-hint">Aktive Mitglieder, die in Clubee fehlen. Ausgewählte werden in Clubee nacheinander vorausgefüllt – speichern musst du dort selbst.${extensionPresent ? "" : " (Dafür muss die Chrome-Erweiterung installiert sein.)"}</p><label class="clubee-sync-all"><input type="checkbox" data-all="web"> alle</label><ul class="clubee-sync-list">${plan.onlyWebsite.map((m, i) => `<li><label><input type="checkbox" data-web="${i}"><span><strong>${esc(m.first_name)} ${esc(m.last_name)}</strong><small>${esc(m.email || "keine E-Mail")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
+      <h3>Nicht in der aktuellen Clubee-Saisonliste (${plan.onlyWebsite.length})</h3>
+      ${plan.onlyWebsite.length ? `<p class="clubee-sync-hint">Diese aktiven Website-Mitglieder sind in der Saisonliste nicht zugeordnet. Sie können in Clubee bereits vorhanden sein. Bitte in der Mitgliederverwaltung prüfen und gegebenenfalls zur Saison hinzufügen; hier wird kein Neuanlegen vorgeschlagen.</p><ul class="clubee-sync-list">${plan.onlyWebsite.map((m) => `<li><span><strong>${esc(m.first_name)} ${esc(m.last_name)}</strong></span></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
       <p class="clubee-sync-status" role="status"></p>
       <div class="clubee-sync-actions">
         <button type="button" data-close>Schließen</button>
-        ${plan.onlyWebsite.length ? `<button type="button" data-create>Ausgewählte in Clubee anlegen</button>` : ""}
         <button type="button" class="primary-button" data-apply>Übernehmen</button>
       </div></form>`;
     const status = dlg.querySelector(".clubee-sync-status");
     dlg.querySelectorAll("[data-all]").forEach((box) => { box.onchange = () => dlg.querySelectorAll(`[data-${box.dataset.all}]`).forEach((b) => { if (b !== box) b.checked = box.checked; }); });
     dlg.querySelector("[data-close]").onclick = () => dlg.close();
-    const createBtn = dlg.querySelector("[data-create]");
-    if (createBtn) createBtn.onclick = () => {
-      const people = [...dlg.querySelectorAll("[data-web]:checked")].map((b) => plan.onlyWebsite[Number(b.dataset.web)]).map((m) => ({ firstName: m.first_name, lastName: m.last_name, email: m.email || "" }));
-      if (!people.length) { status.textContent = "Bitte zuerst Personen auswählen."; return; }
-      if (!extensionPresent) { status.textContent = "Die Chrome-Erweiterung „Emperors ⇄ Clubee“ ist nicht aktiv."; return; }
-      window.postMessage({ source: "emperors-page", type: "clubee-create", people, addUrl: CLUBEE_ADD_URL }, location.origin);
-      status.textContent = `${people.length} Person(en) an Clubee übergeben – im neuen Tab „Einfügen“ klicken.`;
-    };
     dlg.querySelector("[data-apply]").onclick = async (event) => {
       const btn = event.currentTarget;
       const updates = [...dlg.querySelectorAll("[data-upd]:checked")].map((b) => changed[Number(b.dataset.upd)])
@@ -211,7 +224,7 @@
       handledAt = data.at;
       extensionPresent = true;
       window.postMessage({ source: "emperors-page", type: "clubee-received" }, location.origin);
-      const start = () => open({ at: data.at, members: data.members }).catch((error) => console.error("Clubee-Abgleich fehlgeschlagen", error));
+      const start = () => open({ at: data.at, group: data.group, season: data.season, scope: data.scope, complete: data.complete, total: data.total, members: data.members }).catch((error) => console.error("Clubee-Abgleich fehlgeschlagen", error));
       // warten, bis die App (Login) geladen ist
       setTimeout(start, 1500);
     }
@@ -219,5 +232,5 @@
   window.postMessage({ source: "emperors-page", type: "ready" }, location.origin);
 
   window.ClubHubModules = window.ClubHubModules || {};
-  window.ClubHubModules.clubeeSync = { buildPlan, passFromLicence, open };
+  window.ClubHubModules.clubeeSync = { buildPlan, passFromLicence, validateMembers, validateSource, open };
 })();
