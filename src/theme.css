@@ -1,0 +1,55 @@
+/* Loaded after the application styles; light mode retains the original design. */
+.theme-control { display:grid; gap:7px; padding:12px 14px; font-size:.85rem; color:#d8e1e5; }
+.theme-control select { width:100%; padding:9px 12px; background:#202c32; color:#f4f7fa; border:1px solid #53626b; border-radius:10px; }
+html[data-theme="dark"] {
+  --bg:#10171d;
+  --paper:rgba(28,39,48,.96);
+  --paper-strong:#1c2730;
+  --surface:#24323d;
+  --ink:#edf3f7;
+  --muted:#b1c0ca;
+  --line:rgba(200,220,235,.2);
+  --accent:#77cef4;
+  --success:#75d5a2;
+  --warning:#f4c465;
+  --danger:#ff9e8c;
+  --shadow:0 20px 45px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+html[data-theme="dark"], html[data-theme="dark"] body {
+  background:radial-gradient(circle at top left,rgba(246,195,22,.06),transparent 30%),#10171d;
+  color:var(--ink);
+}
+html[data-theme="dark"] :is(input,select,textarea,.member-inline-multiselect > summary) {
+  background:#14212a; color:var(--ink); border-color:#536675;
+}
+html[data-theme="dark"] :is(input,textarea)::placeholder { color:#9daeb9; opacity:1; }
+html[data-theme="dark"] :is(input,select,textarea,button,a):focus-visible { outline:2px solid #77cef4; outline-offset:3px; }
+html[data-theme="dark"] :is(.roster-filter-chip,.playoff-match-card,.playoff-team-slot,.organization-root-body,.organization-branch-body,.clubee-sync-actions button,.analytics-consent,.privacy-choices,.gd-block,.gd-chip,.po-intro,.po-card,.gp-filter) {
+  background:var(--paper-strong); color:var(--ink); border-color:var(--line);
+}
+html[data-theme="dark"] :is(.po-card header,.po-top4 li,.po-seed,.gp-tabs,.gd-logo-fallback) { background:#293945; }
+html[data-theme="dark"] :is(.clubee-sync-meta,.clubee-sync-hint,.clubee-sync-empty,.clubee-sync-list small,.clubee-sync-all,.socials-remember,.gd-time,.gd-tag,.gd-earlier > summary,.po-top4 li small,.po-round,.po-card header span,.po-name small,.po-team.is-open .po-name,.gp-stats,.gp-season,.gp-tab,.gd-score em) { color:var(--muted); }
+html[data-theme="dark"] :is(.gp-tab.is-active,.gp-filter.is-active,.roster-filter-chip.is-active,.mi-filter.active) { background:#384c59; color:#ffe17a; border-color:#758a98; }
+html[data-theme="dark"] :is(.po-final header,.clubee-sync-actions .primary-button) { background:#101a21; color:#ffe17a; }
+html[data-theme="dark"] .po-final header span { color:#ffe17a; }
+html[data-theme="dark"] .role-switcher option { background:#1c2730; color:var(--ink); }
+html[data-theme="dark"] .legal-back-link { color:#77cef4; }
+html[data-theme="dark"] .sepa-pdf-pages { background:#10171d; }
+/* PDFs, QR codes and logo artwork keep their original white backing. */
+html[data-theme="dark"] .sepa-pdf-pages canvas { background:white; }
+html[data-theme="dark"] :is(th,td) { border-color:var(--line); }
+html[data-theme="dark"] tbody tr:hover { background:rgba(119,206,244,.08); }
+html[data-theme="dark"] .theme-control select { background:#202c32; }
+html[data-theme="dark"] :is(.pill,.data-source-badge,.auth-progress,.auth-status,.sponsor-status,.sponsor-details summary,.sponsor-timeline-head span,.organization-person-link:hover,.organization-task-summary,.setup-step span,code,.mi-kind-update,.status.not_invited,.status.exempt,.status.exit,.status.coach) { color:#87d5f7; }
+html[data-theme="dark"] :is(.roster-card-body p,.hof-card-body p,.tryout-form-status,.tryout-admin-summary span,.tryout-referral-summary-hint,.tryout-referral-reward,.tryout-general-sources > span:not(.meta),.contact-form-status,.sponsor-tier-list,.status.exited,.status.deleted,.status.archived) { color:var(--muted); }
+html[data-theme="dark"] :is(.tryout-referral-duplicate-note,.tryout-duplicate-badge,.tryout-admin-summary .tryout-duplicate-summary,.syncing-indicator,.sponsor-status-postponed,.sponsor-status-follow_up,.sponsor-timeline-outbound .sponsor-timeline-head span,.mi-warn,.mi-pill-warn,.rookie-badge) { color:#f4cd7c; }
+html[data-theme="dark"] .sponsor-status-confirmed { color:var(--success); }
+html[data-theme="dark"] .sponsor-status-declined { color:var(--danger); }
+html[data-theme="dark"] :is(.tryout-date-edit-form input,.tryout-date-edit-form textarea) { color:var(--ink); }
+html[data-theme="dark"] :is(.auth-spinner,.loading-spinner-lg) { border-top-color:#87d5f7; }
+@media print {
+  html[data-theme="dark"] { --paper:#fff; --paper-strong:#fff; --ink:#151b1c; --muted:#46545e; --line:#aaa; }
+  html[data-theme="dark"], html[data-theme="dark"] body { background:white; color:#151b1c; color-scheme:light; }
+  .theme-control { display:none; }
+}
