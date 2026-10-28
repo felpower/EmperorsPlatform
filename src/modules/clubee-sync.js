@@ -14,6 +14,7 @@
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const today = () => new Date().toISOString().slice(0, 10);
   const fmt = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || "") ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : "–");
+  const jersey = (v) => v !== null && v !== undefined && /^\d{1,3}$/.test(String(v).trim()) ? Number(v) : undefined;
 
   function lev(a, b) {
     if (Math.abs(a.length - b.length) > 2) return 3;
@@ -64,6 +65,11 @@
       if (c.email && !m.email) { patch.email = c.email; changes.push(`E-Mail ${c.email}`); }
       if (c.phone && !m.phone) { patch.phone = c.phone; changes.push(`Telefon ${c.phone}`); }
       if (c.birthday && m.birthday !== c.birthday) { patch.birthday = c.birthday; changes.push(`Geburtstag ${fmt(c.birthday)}`); }
+      const nextJersey = jersey(c.jerseyNumber), currentJersey = jersey(m.jersey_number);
+      if (nextJersey !== undefined && nextJersey !== currentJersey) {
+        patch.jersey_number = nextJersey;
+        changes.push(`Trikotnummer ${currentJersey === undefined ? "–" : currentJersey} → ${nextJersey}`);
+      }
       const pass = passFromLicence(c.licence);
       const current = passByMember.get(String(m.id));
       let passChange = null;
@@ -126,12 +132,13 @@
     const at = new Date(payload.at || Date.now()).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
     dlg.innerHTML = `<form method="dialog" class="clubee-sync-body">
       <h2>Clubee-Abgleich</h2>
-      <p class="clubee-sync-meta">${(payload.members || []).length} Mitglieder aus Clubee (gelesen ${at}) · ${plan.matched.length} zugeordnet · ${plan.matched.length - changed.length} ohne Änderung</p>
+      <p class="clubee-sync-meta">${(payload.members || []).length} Mitglieder aus Clubee (gelesen ${at}) · ${plan.matched.length} zugeordnet · ${plan.matched.length - changed.length} ohne Änderung · ${(payload.members || []).filter((c) => jersey(c.jerseyNumber) !== undefined).length} Trikotnummern gelesen</p>
+      ${(payload.members || []).some((c) => jersey(c.jerseyNumber) !== undefined) ? "" : `<p class="clubee-sync-hint">Für Trikotnummern den Abruf in Clubee in der Teamgruppe mit gewählter Saison starten. In „Alle Kontakte“ stehen keine Team-Trikotnummern.</p>`}
       <h3>Änderungen übernehmen (${changed.length})</h3>
       ${changed.length ? `<label class="clubee-sync-all"><input type="checkbox" data-all="upd" checked> alle</label><ul class="clubee-sync-list">${changed.map((r, i) => `<li><label><input type="checkbox" data-upd="${i}" checked><span><strong>${esc(r.member.first_name)} ${esc(r.member.last_name)}</strong><small>${r.changes.map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Alles aktuell.</p>`}
       ${plan.suggested.length ? `<h3>Wahrscheinlich dieselbe Person (${plan.suggested.length})</h3><p class="clubee-sync-hint">Ähnlicher Name in Clubee und auf der Website – angehakt = verknüpfen (der Name auf der Website bleibt).</p><label class="clubee-sync-all"><input type="checkbox" data-all="sug" checked> alle</label><ul class="clubee-sync-list">${plan.suggested.map((r, i) => `<li><label><input type="checkbox" data-sug="${i}" checked><span><strong>${esc(r.member.first_name)} ${esc(r.member.last_name)}</strong><small>${r.changes.map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : ""}
       <h3>Nur in Clubee (${plan.onlyClubee.length})</h3>
-      ${plan.onlyClubee.length ? `<p class="clubee-sync-hint">Auf der Website anlegen (Status „pending“) oder ignorieren (z. B. ehemalige Spieler).</p><ul class="clubee-sync-list">${plan.onlyClubee.map((c, i) => `<li><label><input type="checkbox" data-new="${i}"><span><strong>${esc(c.firstName)} ${esc(c.lastName)}</strong><small>${[c.licence ? `Lizenz ${c.licence.status}${c.licence.expires ? " bis " + fmt(c.licence.expires) : ""}` : "keine Lizenz", c.email].filter(Boolean).map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
+      ${plan.onlyClubee.length ? `<p class="clubee-sync-hint">Auf der Website anlegen (Status „pending“) oder ignorieren (z. B. ehemalige Spieler).</p><ul class="clubee-sync-list">${plan.onlyClubee.map((c, i) => `<li><label><input type="checkbox" data-new="${i}"><span><strong>${esc(c.firstName)} ${esc(c.lastName)}</strong><small>${[c.licence ? `Lizenz ${c.licence.status}${c.licence.expires ? " bis " + fmt(c.licence.expires) : ""}` : "keine Lizenz", c.email, jersey(c.jerseyNumber) !== undefined ? `Trikotnummer ${jersey(c.jerseyNumber)}` : ""].filter(Boolean).map(esc).join(" · ")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
       <h3>Nur auf der Website (${plan.onlyWebsite.length})</h3>
       ${plan.onlyWebsite.length ? `<p class="clubee-sync-hint">Aktive Mitglieder, die in Clubee fehlen. Ausgewählte werden in Clubee nacheinander vorausgefüllt – speichern musst du dort selbst.${extensionPresent ? "" : " (Dafür muss die Chrome-Erweiterung installiert sein.)"}</p><label class="clubee-sync-all"><input type="checkbox" data-all="web"> alle</label><ul class="clubee-sync-list">${plan.onlyWebsite.map((m, i) => `<li><label><input type="checkbox" data-web="${i}"><span><strong>${esc(m.first_name)} ${esc(m.last_name)}</strong><small>${esc(m.email || "keine E-Mail")}</small></span></label></li>`).join("")}</ul>` : `<p class="clubee-sync-empty">Keine.</p>`}
       <p class="clubee-sync-status" role="status"></p>
@@ -164,6 +171,14 @@
       let done = 0;
       for (const r of updates) {
         status.textContent = `Speichere … ${++done}/${updates.length + creates.length}`;
+        if (Object.prototype.hasOwnProperty.call(r.patch, "jersey_number")) {
+          const fresh = await client.from("members").select("*").eq("id", r.member.id).limit(1);
+          const current = fresh.data && fresh.data[0];
+          if (fresh.error || !current || jersey(current.jersey_number) !== jersey(r.member.jersey_number)) {
+            errors.push(`${r.member.first_name} ${r.member.last_name}: Trikotnummer seit der Vorschau geändert oder nicht lesbar – bitte neu abgleichen.`);
+            continue;
+          }
+        }
         if (Object.keys(r.patch).length) {
           const res = await client.from("members").update(Object.assign({}, r.patch, { clubee_synced_at: stamp })).eq("id", r.member.id);
           if (res.error) { errors.push(`${r.member.first_name} ${r.member.last_name}: ${res.error.message}`); continue; }
@@ -175,7 +190,7 @@
       }
       for (const c of creates) {
         status.textContent = `Speichere … ${++done}/${updates.length + creates.length}`;
-        const res = await client.from("members").insert([{ display_name: `${c.firstName} ${c.lastName}`.trim(), first_name: c.firstName, last_name: c.lastName, email: c.email || null, membership_status: "pending", clubee_id: c.clubeeId, phone: c.phone || null, birthday: c.birthday || null, clubee_synced_at: stamp }]);
+        const res = await client.from("members").insert([{ display_name: `${c.firstName} ${c.lastName}`.trim(), first_name: c.firstName, last_name: c.lastName, email: c.email || null, membership_status: "pending", clubee_id: c.clubeeId, phone: c.phone || null, birthday: c.birthday || null, ...(jersey(c.jerseyNumber) !== undefined ? { jersey_number: jersey(c.jerseyNumber) } : {}), clubee_synced_at: stamp }]);
         if (res.error) { errors.push(`${c.firstName} ${c.lastName}: ${res.error.message}`); continue; }
         const pass = passFromLicence(c.licence);
         const newId = res.data && res.data[0] && res.data[0].id;
