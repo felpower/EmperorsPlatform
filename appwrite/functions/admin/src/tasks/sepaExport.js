@@ -171,7 +171,8 @@ module.exports = async ({ req, res, log }) => {
       display_name: String(member?.name || "").trim(),
       iban: String(member?.iban || "").trim(),
       mandate_date: String(member?.mandateDate || "").trim(),
-      account_holder: String(member?.accountHolder || "").trim()
+      account_holder: String(member?.accountHolder || "").trim(),
+      fee_exempt: member?.feeExempt===true
     }));
 
     const normalizePayloadFees = (rows) => rows.map((fee) => ({
@@ -205,8 +206,16 @@ module.exports = async ({ req, res, log }) => {
         if (extra.iban) member.iban = extra.iban;
         if (extra.mandate_date) member.mandate_date = extra.mandate_date;
         if (extra.account_holder) member.account_holder = extra.account_holder;
+        member.fee_exempt=Boolean(extra.fee_exemption_reason);
       });
     }
+    // Read current exemptions even when an older browser supplied a cached member snapshot.
+    const exemptionQueries=[{method:'isNotNull',attribute:'fee_exemption_reason',values:[]},{method:'select',values:['$id','fee_exemption_reason']},{method:'limit',values:[5000]}];
+    const exemptionPath=`/databases/${encodeURIComponent(databaseId)}/collections/${encodeURIComponent(String(process.env.APPWRITE_MEMBER_PRIVATE_TABLE_ID || "member_private"))}/documents?${exemptionQueries.map(q=>'queries[]='+encodeURIComponent(JSON.stringify(q))).join('&')}`;
+    const exemptionResult=await request(exemptionPath);
+    if(!exemptionResult.response.ok)throw Error('Could not verify contribution exemptions. Refresh and retry before exporting.');
+    const exemptIds=new Set((exemptionResult.payload.documents||[]).filter(row=>row.fee_exemption_reason).map(row=>row.$id));
+    memberRows.forEach(member=>{if(exemptIds.has(String(member.$id||member.id)))member.fee_exempt=true;});
     const membersById = new Map(
       memberRows.map((member) => [String(member?.$id || member?.id || "").trim(), member])
     );
@@ -261,6 +270,7 @@ module.exports = async ({ req, res, log }) => {
         });
       };
 
+      if(member?.fee_exempt){skip("member_fee_exempt");continue;}
       if (nonDebitableStatuses.has(feeStatus)) {
         skip(`status_${feeStatus}`);
         continue;

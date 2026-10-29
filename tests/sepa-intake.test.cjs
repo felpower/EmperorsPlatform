@@ -2,6 +2,13 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const shared=require('../appwrite/functions/shared/sepa-intake');
 const context=body=>({req:{body,headers:{'x-appwrite-user-id':'finance-user'}},res:{json:(payload,status=200)=>({...payload,httpStatus:status})}});
 const registration={first_name:'Test',last_name:'Player',email:'different@example.invalid',account_holder:'Parent Test',iban:'AT61 1904 3002 3457 3201',joined_on:'2026-10-01',signed_on:'2026-10-24',confirm_signed:true,privacy_acknowledged:true};
+test('setting and removing a contribution exemption only changes its private reason field',async()=>{
+  const sepa=require('../appwrite/functions/admin/src/shared/sepa-intake'),old=sepa.checked,writes=[];
+  sepa.checked=async(path,options={})=>{if(options.method){writes.push(options.body.data);return {};}assert.match(path,/\/members\/documents\/member$/);return {$id:'member'};};
+  const file=require.resolve('../appwrite/functions/admin/src/tasks/sepaReview');delete require.cache[file];
+  try{const task=require(file);const added=await task(context({action:'setExemption',memberId:'member',exempt:true,reason:'Coach / orga'}));assert.equal(added.ok,true);assert.deepEqual(writes[0],{fee_exemption_reason:'Coach / orga'});const removed=await task(context({action:'setExemption',memberId:'member',exempt:false}));assert.equal(removed.ok,true);assert.deepEqual(writes[1],{fee_exemption_reason:null});}
+  finally{sepa.checked=old;delete require.cache[file];}
+});
 test('historical Drive imports cannot overwrite bank details through review actions',async()=>{
   const sepa=require('../appwrite/functions/admin/src/shared/sepa-intake'),old=sepa.checked;
   sepa.checked=async(path,options={})=>{assert.equal(options.method,undefined);return {status:'imported',payload:JSON.stringify({source:'drive-archive',file_id:'archive'})};};
@@ -63,16 +70,18 @@ test('SEPA review is restricted to finance and admins; public page needs no acco
   assert.match(fs.readFileSync('index.html','utf8'),/sepa-intake-ui\.js/);
 });
 test('SEPA XML uses the actual account holder and signature date from the approved mandate',async()=>{
-  const oldEnv={...process.env};
+  const oldEnv={...process.env},oldFetch=global.fetch;
+  global.fetch=async url=>{assert.match(url,/member_private/);return {ok:true,json:async()=>({documents:[{$id:"exempt-member",fee_exemption_reason:"Coach"}]})};};
   Object.assign(process.env,{APPWRITE_ENDPOINT:'https://example.invalid',APPWRITE_PROJECT_ID:'test',APPWRITE_API_KEY:'test',APPWRITE_DATABASE_ID:'test',SEPA_CREDITOR_NAME:'Test Club',SEPA_CREDITOR_IBAN:'AT611904300234573201',SEPA_CREDITOR_ID:'AT88EMP00000071393'});
   try{
     const exportTask=require('../appwrite/functions/admin/src/tasks/sepaExport');
-    const result=await exportTask({...context({feePeriod:'Q4_2026',members:[{id:'member',firstName:'Test',lastName:'Player',iban:'AT611904300234573201',accountHolder:'Different Account Holder',mandateDate:'2026-10-24'}],fees:[{id:'fee',memberId:'member',feePeriod:'Q4_2026',amount:90,paidAmount:0,status:'pending'}]}),log(){}});
+    const result=await exportTask({...context({feePeriod:'Q4_2026',members:[{id:'exempt-member',firstName:'Exempt',lastName:'Coach',iban:'AT611904300234573201'}, {id:'member',firstName:'Test',lastName:'Player',iban:'AT611904300234573201',accountHolder:'Different Account Holder',mandateDate:'2026-10-24'}],fees:[{id:'exempt-fee',memberId:'exempt-member',feePeriod:'Q4_2026',amount:90,paidAmount:0,status:'pending'},{id:'fee',memberId:'member',feePeriod:'Q4_2026',amount:90,paidAmount:0,status:'pending'}]}),log(){}});
     assert.equal(result.ok,true,result.error);
     const xml=Buffer.from(result.xmlBase64,'base64').toString('utf8');
     assert.match(xml,/<Nm>Different Account Holder<\/Nm>/);assert.match(xml,/<DtOfSgntr>2026-10-24<\/DtOfSgntr>/);
+    assert.doesNotMatch(xml,/Exempt Coach/);assert.equal(result.preview.included.length,1);
     assert.equal(result.summary.estimatedMandateDates,0);assert.equal(result.preview.included[0].accountHolder,'Different Account Holder');
-  }finally{for(const key of Object.keys(process.env))if(!(key in oldEnv))delete process.env[key];Object.assign(process.env,oldEnv);}
+  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in oldEnv))delete process.env[key];Object.assign(process.env,oldEnv);}
 });
 
 test('submission overview defaults to new uploads, sorts newest first and paginates ten at a time',()=>{

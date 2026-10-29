@@ -495,6 +495,7 @@
       const extra = byId.get(String(row.$id || row.id));
       if (!extra) return;
       PRIVATE_MEMBER_FIELDS.forEach(function (key) { row[key] = extra[key] === null || extra[key] === undefined ? (key === "mandate_date" ? null : "") : extra[key]; });
+      row.fee_exemption_reason=String(extra.fee_exemption_reason||"");
     });
   }
 

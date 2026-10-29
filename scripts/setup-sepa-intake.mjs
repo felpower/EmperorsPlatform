@@ -6,6 +6,7 @@ for(const [key,size] of Object.entries({status:40,member_id:36,email_hash:64,sub
   if(!table.attributes.some(attr=>attr.key===key))await request(`${base}/sepa_submissions/attributes/string`,{method:'POST',body:{key,size,required:false,array:false}});
 }
 const privateTable=await request(`${base}/member_private`);
+if(!privateTable.attributes.some(attr=>attr.key==='fee_exemption_reason'))await request(`${base}/member_private/attributes/string`,{method:'POST',body:{key:'fee_exemption_reason',size:500,required:false,array:false}});
 if(!privateTable.attributes.some(attr=>attr.key==='account_holder'))await request(`${base}/member_private/attributes/string`,{method:'POST',body:{key:'account_holder',size:160,required:false,array:false}});
 if(!privateTable.attributes.some(attr=>attr.key==='mandate_file_id'))await request(`${base}/member_private/attributes/string`,{method:'POST',body:{key:'mandate_file_id',size:36,required:false,array:false}});
 for(let attempt=0;attempt<30;attempt++){

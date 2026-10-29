@@ -82,7 +82,10 @@ async function main() {
   const rates = await listAllRows("fee_rates");
   if(!rates.length)throw Error("Contribution settings are missing.");
   const members = await listAllRows(MEMBERS_COLLECTION_ID);
+  const privateRows=await listAllRows("member_private");
+  const exemptIds=new Set(privateRows.filter(row=>row.fee_exemption_reason).map(row=>row.member_id||row.$id));
   const eligibleMembers = members.filter((member) => {
+    if(exemptIds.has(member.$id))return false;
     const status = String(member.membership_status || member.membershipStatus || "").trim().toLowerCase();
     if (status === "exited" || status === "coach") return false;
     if (member.deleted_at || member.deletedAt) return false;

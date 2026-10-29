@@ -9,10 +9,22 @@ module.exports=async({req,res})=>{
       const result=await sepa.checked(`${sepa.path(sepa.TABLE)}?${queries.map(queryParam).join('&')}`);
       return res.json({ok:true,count:Number(result.total || 0)});
     }
+    if(body.action==='setExemption'){
+      const memberId=String(body.memberId||'');
+      if(!/^[\w.-]{1,36}$/.test(memberId)||typeof body.exempt!=='boolean')return res.json({ok:false,error:'Invalid exemption request.'},400);
+      const member=await sepa.checked(`${sepa.path('members')}/${memberId}`);
+      if(member.deleted_at)return res.json({ok:false,error:'Member has been deleted.'},400);
+      const reason=body.exempt?String(body.reason||'Contribution exemption confirmed by Finance').trim():null;
+      if(body.exempt&&(!reason||reason.length>500))return res.json({ok:false,error:'Enter an exemption reason, at most 500 characters.'},400);
+      const patch={fee_exemption_reason:reason};
+      try{await sepa.checked(`${sepa.path('member_private')}/${memberId}`,{method:'PATCH',body:{data:patch}});}
+      catch(error){if(error.status!==404)throw error;await sepa.checked(sepa.path('member_private'),{method:'POST',body:{documentId:memberId,data:{member_id:memberId,...patch}}});}
+      return res.json({ok:true,memberId,feeExempt:body.exempt,feeExemptionReason:reason||''});
+    }
     if(body.action==='overview'){
       const [members,privateRows,submissions,fees]=await Promise.all([
         sepa.list('members',[{method:'select',values:['$id','first_name','last_name','displayName','membership_status','roles_json','deleted_at','iban','mandate_date']}],5000),
-        sepa.list('member_private',[{method:'select',values:['$id','iban','mandate_date','mandate_file_id']}],5000),
+        sepa.list('member_private',[{method:'select',values:['$id','iban','mandate_date','mandate_file_id','fee_exemption_reason']}],5000),
         sepa.list(sepa.TABLE,[{method:'orderDesc',attribute:'$createdAt'}],500),
         sepa.list('membership_fees',[{method:'select',values:['member_id','fee_period','iban']}],5000)
       ]);
@@ -23,7 +35,7 @@ module.exports=async({req,res})=>{
       const memberRows=members.filter(row=>!row.deleted_at).map(row=>{
         const extra=byId.get(row.$id)||{};
         const iban=extra.iban||row.iban||feeIban.get(row.$id)?.iban||'';
-        return {id:row.$id,firstName:row.first_name||'',lastName:row.last_name||'',name:`${row.first_name||''} ${row.last_name||''}`.trim()||row.displayName||'Unknown member',membershipStatus:row.membership_status||'',roles:row.roles_json||'[]',ibanPresent:sepa.validIban(iban),mandateDatePresent:sepa.isoDate(extra.mandate_date||row.mandate_date),documentPresent:Boolean(extra.mandate_file_id),ibanEnding:String(iban).slice(-4)};
+        return {id:row.$id,firstName:row.first_name||'',lastName:row.last_name||'',name:`${row.first_name||''} ${row.last_name||''}`.trim()||row.displayName||'Unknown member',membershipStatus:row.membership_status||'',feeExempt:Boolean(extra.fee_exemption_reason),feeExemptionReason:extra.fee_exemption_reason||'',roles:row.roles_json||'[]',ibanPresent:sepa.validIban(iban),mandateDatePresent:sepa.isoDate(extra.mandate_date||row.mandate_date),documentPresent:Boolean(extra.mandate_file_id),ibanEnding:String(iban).slice(-4)};
       });
       return res.json({ok:true,members:memberRows,submissions:submissions.map(row=>{
         const data=sepa.storedPayload(row);

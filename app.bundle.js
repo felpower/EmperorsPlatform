@@ -645,7 +645,7 @@ Uni Wien Emperors`;
   // bootstrap is cached per signed-in account and re-read only when the cache is older than
   // CACHE_TTL or after this browser wrote something. Keys include the user id so two accounts
   // on the same browser never see each other's data.
-  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v2";
+  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v3";
   const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v2";
   function cacheScope() {
     return String(authState?.user?.id || "public");
@@ -2536,6 +2536,7 @@ Uni Wien Emperors`;
       memberIban: String(member.memberIban || member.iban || "").trim(),
       mandateDate: String(member.mandateDate || member.mandate_date || "").trim(),
       accountHolder: String(member.accountHolder || member.account_holder || "").trim(),
+      feeExemptionReason: String(member.feeExemptionReason || member.fee_exemption_reason || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
       rosterImage: String(member.rosterImage || member.roster_image || "").trim(),
@@ -4586,6 +4587,7 @@ Uni Wien Emperors`;
         memberIban: String(row.iban || "").trim(),
         mandateDate: String(row.mandate_date || "").trim(),
         accountHolder: String(row.account_holder || "").trim(),
+        feeExemptionReason: String(row.fee_exemption_reason || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
@@ -5474,7 +5476,7 @@ Uni Wien Emperors`;
 
   function eligibleFeeMembers() {
     return state.members.filter((member) => {
-      if (member.deletedAt) return false;
+      if (member.deletedAt || member.feeExemptionReason) return false;
       const membershipStatus = String(member.membershipStatus || "").trim().toLowerCase();
       if (membershipStatus === "exited" || membershipStatus === "coach") return false;
       return (member.roles || []).includes("player");
@@ -5863,7 +5865,8 @@ Uni Wien Emperors`;
       name: String(member.name || "").trim(),
       iban: String(memberIban(member.id) || "").trim(),
       mandateDate: String(member.mandateDate || "").trim(),
-      accountHolder: String(member.accountHolder || "").trim()
+      accountHolder: String(member.accountHolder || "").trim(),
+      feeExempt: Boolean(member.feeExemptionReason)
     }));
     const feesPayload = state.fees.map((fee) => ({
       id: String(fee.id || "").trim(),
@@ -13563,7 +13566,10 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   function bindTableExports() {
     const sepaIntakeButton = document.getElementById("sepa-intake-overview");
     if (sepaIntakeButton) sepaIntakeButton.onclick = async () => {
-      await moduleRegistry.sepaIntake.open({ client: backendClient, onReviewed: () => {
+      await moduleRegistry.sepaIntake.open({ client: backendClient, onExemption: ({memberId,feeExemptionReason}) => {
+        state.members=state.members.map(member=>String(member.id)===String(memberId)?{...member,feeExemptionReason}:member);
+        reviewedSepaFile=null;sepaExportPreview=null;invalidateCache(bootstrapCacheKey());saveState();
+      }, onReviewed: () => {
         if (typeof dashboardSepaCount === "number") dashboardSepaCount = Math.max(0, dashboardSepaCount - 1);
         const count = document.querySelector("#dashboard-sepa-open strong");
         if (count && typeof dashboardSepaCount === "number") count.textContent = String(dashboardSepaCount);
