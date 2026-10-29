@@ -8,7 +8,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/workspace.css?v=20261025d">
   <style>body{display:block;min-height:100vh}.sepa-page{max-width:820px;margin:auto;padding:32px 20px 64px}.sepa-page header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:32px}.sepa-page form{display:grid;gap:18px}.sepa-page label{display:grid;gap:7px}.sepa-page input{width:100%;min-width:0}.sepa-page .sepa-check{display:flex;align-items:flex-start;gap:10px}.sepa-check input{width:20px;flex-shrink:0;margin-top:3px}.sepa-hidden{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}.sepa-page [hidden]{display:none!important}.sepa-page h1{font-size:clamp(2rem,5vw,3rem)}.sepa-page .setup-card{padding:24px}.sepa-reference{overflow-wrap:anywhere}</style>
   <script defer src="https://cdn.jsdelivr.net/npm/appwrite@26.2.0"></script>
-  <script defer src="/src/appwrite-config.js"></script><script defer src="/src/sepa-form.js?v=20261029a"></script>
+  <script defer src="/src/appwrite-config.js"></script><script defer src="/src/sepa-form.js?v=20261029b"></script>
 </head>
 <body><main class="sepa-page">
   <header><a href="/" class="ghost-button">← Emperors</a><span class="pill">No account required</span></header>
@@ -25,6 +25,14 @@
     <label>IBAN<input name="iban" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="42" required placeholder="AT00 0000 0000 0000 0000"><small class="muted">Enter the same IBAN as on the signed document.</small></label>
     <label>Signature date on the mandate<input name="signed_on" type="date" required><small class="muted">Use the same date as written on the signed SEPA document.</small></label>
     <label>Signed mandate PDF<input name="mandate" type="file" accept="application/pdf,.pdf" required><small class="muted">PDF only, maximum 2 MB. The document is stored privately and is not published.</small></label>
+    <section aria-labelledby="collection-plan-heading"><h2 id="collection-plan-heading">3. Contribution collection schedule</h2>
+      <p>Membership contributions are normally collected on the following dates:</p>
+      <ul><li><strong>Q1: February–April</strong> — 10 February</li><li><strong>Q2: May–July</strong> — 10 May</li><li><strong>Q3: August–October</strong> — 10 August</li><li><strong>Q4: November–January</strong> — 10 November</li></ul>
+      <p>If the date is not a bank business day, collection takes place on the next bank business day. The club will notify the account holder of the actual amount and collection date at least seven calendar days before each debit, including any changes to the usual schedule.</p>
+      <p>The club normally sends these notices via WhatsApp. If the account holder cannot receive them there, please contact <a href="mailto:p.felbauer@emperors.at">p.felbauer@emperors.at</a> to arrange another way to receive the notices.</p>
+      <p>If you use a parent's or another person's account, that account holder must read and accept the collection agreement below.</p>
+    </section>
+    <label class="sepa-check"><input name="collection_agreed" type="checkbox" required><span>As the account holder, I agree to the collection schedule above and to a pre-notification period of at least seven calendar days instead of the usual fourteen calendar days. I will receive advance notice of the actual amount and collection date before each debit.</span></label>
     <label class="sepa-check"><input name="confirm_signed" type="checkbox" required><span>I confirm that the account holder signed the attached mandate and that the bank details above match the document.</span></label>
     <label class="sepa-check"><input name="membership_confirmed" type="checkbox" required><span>I confirm that I am joining the Uni Wien Emperors as a member from the date I submit this form and agree to pay the applicable membership contributions. These may be collected in accordance with the signed SEPA mandate. The club will notify me via WhatsApp of the amount and collection date before each debit.</span></label>
     <label class="sepa-check"><input name="privacy_acknowledged" type="checkbox" required><span>I have read the <a href="/datenschutz.html" target="_blank" rel="noopener noreferrer">privacy information</a>. The club will use these details to administer my membership, check the mandate and process authorised membership contributions.</span></label>

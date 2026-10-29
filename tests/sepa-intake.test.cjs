@@ -119,3 +119,11 @@ test('joining month becomes the first day while mandate signature remains exact 
   assert.throws(()=>shared.validate({...registration,membership_confirmation_version:'2026-10-29',membership_confirmed:false}),/confirm/);
   assert.equal(shared.validate(registration).membership_confirmed,undefined);
 });
+
+test('seven-day collection agreement is versioned and never assumed for earlier submissions',()=>{
+ const data=shared.validate({...registration,collection_agreement_version:'2026-10-29-v1',collection_agreed:true});
+ assert.equal(data.collection_agreed,true);assert.match(data.collection_schedule,/10 February/);assert.match(data.collection_schedule,/10 November/);assert.match(data.collection_agreement_text,/account holder/);
+ assert.throws(()=>shared.validate({...registration,collection_agreement_version:'2026-10-29-v1',collection_agreed:false}),/confirm/);
+ assert.throws(()=>shared.validate({...registration,collection_agreement_version:'unknown',collection_agreed:true}),/confirm/);
+ assert.equal(shared.validate(registration).collection_agreed,undefined);
+});

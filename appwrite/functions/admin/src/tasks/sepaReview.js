@@ -27,7 +27,7 @@ module.exports=async({req,res})=>{
       });
       return res.json({ok:true,members:memberRows,submissions:submissions.map(row=>{
         const data=sepa.storedPayload(row);
-        return {id:row.$id,status:row.status,memberId:row.member_id||null,submittedAt:row.submitted_at,firstName:data.first_name,lastName:data.last_name,email:data.email,accountHolder:data.account_holder,iban:data.iban,joinedOn:data.joined_on,signedOn:data.signed_on,reviewedAt:data.reviewed_at||null};
+        return {id:row.$id,status:row.status,memberId:row.member_id||null,submittedAt:row.submitted_at,firstName:data.first_name,lastName:data.last_name,email:data.email,accountHolder:data.account_holder,iban:data.iban,joinedOn:data.joined_on,signedOn:data.signed_on,collectionAgreed:data.collection_agreed===true,collectionAgreementVersion:data.collection_agreement_version||null,reviewedAt:data.reviewed_at||null};
       })});
     }
     const id=String(body.submissionId||'');

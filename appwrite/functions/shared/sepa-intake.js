@@ -44,6 +44,13 @@ function validate(input) {
     data.membership_confirmation_version='2026-10-29';
     data.membership_confirmation_text='I confirm that I am joining the Uni Wien Emperors as a member from the date I submit this form and agree to pay the applicable membership contributions. These may be collected in accordance with the signed SEPA mandate. The club will notify me via WhatsApp of the amount and collection date before each debit.';
   }
+  if (input.collection_agreement_version !== undefined) {
+    if (input.collection_agreement_version !== '2026-10-29-v1' || input.collection_agreed !== true) throw Error('Please ask the account holder to confirm the collection schedule and seven-day notice period.');
+    data.collection_agreed=true;
+    data.collection_agreement_version='2026-10-29-v1';
+    data.collection_agreement_text='As the account holder, I agree to the collection schedule above and to a pre-notification period of at least seven calendar days instead of the usual fourteen calendar days. I will receive advance notice of the actual amount and collection date before each debit.';
+    data.collection_schedule='Q1 February-April: 10 February; Q2 May-July: 10 May; Q3 August-October: 10 August; Q4 November-January: 10 November. Next bank business day if needed. Notify the account holder of actual amount and date at least seven calendar days before each debit, including schedule changes. Normally via WhatsApp; contact Finance to arrange another channel if needed.';
+  }
   return data;
 }
 let rosterCache=null;
