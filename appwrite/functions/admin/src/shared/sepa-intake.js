@@ -28,8 +28,9 @@ function validate(input) {
   for(const [key,max] of Object.entries({first_name:80,last_name:80,email:200,account_holder:160,joined_on:10,signed_on:10})) {
     data[key]=String(input[key] || '').trim(); if (!data[key] || data[key].length>max) throw Error(`Please check ${key.replaceAll('_',' ')}.`);
   }
+  if (/^\d{4}-\d{2}$/.test(data.joined_on)) data.joined_on+='-01';
   data.email=data.email.toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))throw Error('Please enter a valid contact email. It does not need to match your club account.');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))throw Error('Please enter a valid contact email.');
   data.iban=String(input.iban || '').replace(/\s/g,'').toUpperCase();
   if(!validIban(data.iban))throw Error('Please check the IBAN, including its check digits.');
   if(!isoDate(data.joined_on)||!isoDate(data.signed_on))throw Error('Please enter valid joining and signature dates.');
@@ -37,6 +38,12 @@ function validate(input) {
   if(data.signed_on>today)throw Error('The signature date cannot be in the future.');
   if(input.confirm_signed!==true || input.privacy_acknowledged!==true)throw Error('Please confirm the signed mandate and privacy information.');
   data.confirm_signed=true;data.privacy_acknowledged=true;
+  if (input.membership_confirmation_version !== undefined) {
+    if (input.membership_confirmation_version !== '2026-10-29' || input.membership_confirmed !== true) throw Error('Please confirm the membership and contribution information.');
+    data.membership_confirmed=true;
+    data.membership_confirmation_version='2026-10-29';
+    data.membership_confirmation_text='I confirm that I am joining the Uni Wien Emperors as a member from the date I submit this form and agree to pay the applicable membership contributions. These may be collected in accordance with the signed SEPA mandate. The club will notify me via WhatsApp of the amount and collection date before each debit.';
+  }
   return data;
 }
 let rosterCache=null;

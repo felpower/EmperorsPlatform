@@ -19,6 +19,9 @@
       const config=window.ClubHubAppwriteConfig;
       if(!window.Appwrite || !config?.projectId)throw Error('The secure form could not load. Refresh and try again.');
       const registration=Object.fromEntries(['first_name','last_name','email','account_holder','iban','joined_on','signed_on'].map(key=>[key,form.elements[key].value]));
+      if (/^\d{4}-\d{2}$/.test(registration.joined_on)) registration.joined_on+='-01';
+      registration.membership_confirmation_version='2026-10-29';
+      registration.membership_confirmed=form.elements.membership_confirmed.checked;
       registration.confirm_signed=form.elements.confirm_signed.checked;registration.privacy_acknowledged=form.elements.privacy_acknowledged.checked;
       const api=new window.Appwrite.Functions(new window.Appwrite.Client().setEndpoint(config.endpoint).setProject(config.projectId));
       let execution=await api.createExecution(config.publicFunctionId,JSON.stringify({task:'sepaSubmit',submissionId:reference,registration,pdfBase64:await base64(file),website:form.elements.website.value}),false);

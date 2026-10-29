@@ -52,7 +52,7 @@ test('finance approval applies a mandate to the explicitly selected member priva
 });
 test('SEPA review is restricted to finance and admins; public page needs no account or matching email',()=>{
   const fs=require('node:fs');assert.deepEqual(require('../appwrite/functions/admin/src/auth').DEFAULT_TASK_ROLES.sepaReview,['admin','finance_admin']);
-  const page=fs.readFileSync('sepa.html','utf8');assert.match(page,/No account required/);assert.match(page,/does not need to match/);assert.doesNotMatch(page,/analytics|tracking|createAccount/);
+  const page=fs.readFileSync('sepa.html','utf8');assert.match(page,/No account required/);assert.match(page,/Any email where we can reach you\./);assert.match(page,/name="joined_on" type="month"/);assert.match(page,/name="signed_on" type="date"/);assert.doesNotMatch(page,/analytics|tracking|createAccount/);
   assert.match(fs.readFileSync('index.html','utf8'),/sepa-intake-ui\.js/);
 });
 test('SEPA XML uses the actual account holder and signature date from the approved mandate',async()=>{
@@ -109,4 +109,13 @@ test('self-hosted PDF renderer and worker are present in the source tree used by
   const worker=source.match(/workerSrc='([^']+)'/)[1];
   for(const file of [renderer,worker])assert.ok(fs.existsSync('.'+file),file+' must be published');
   assert.ok(fs.existsSync('src/vendor/pdfjs/LICENSE'));
+});
+
+test('joining month becomes the first day while mandate signature remains exact and confirmation is versioned',()=>{
+  const data=shared.validate({...registration,joined_on:'2026-09',membership_confirmation_version:'2026-10-29',membership_confirmed:true});
+  assert.equal(data.joined_on,'2026-09-01');assert.equal(data.signed_on,registration.signed_on);
+  assert.equal(data.membership_confirmed,true);assert.match(data.membership_confirmation_text,/WhatsApp/);
+  assert.throws(()=>shared.validate({...registration,joined_on:'2026-13'}),/valid.*dates/);
+  assert.throws(()=>shared.validate({...registration,membership_confirmation_version:'2026-10-29',membership_confirmed:false}),/confirm/);
+  assert.equal(shared.validate(registration).membership_confirmed,undefined);
 });
