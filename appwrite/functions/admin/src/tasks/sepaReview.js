@@ -27,7 +27,7 @@ module.exports=async({req,res})=>{
       });
       return res.json({ok:true,members:memberRows,submissions:submissions.map(row=>{
         const data=sepa.storedPayload(row);
-        return {id:row.$id,status:row.status,memberId:row.member_id||null,submittedAt:row.submitted_at,firstName:data.first_name,lastName:data.last_name,email:data.email,accountHolder:data.account_holder,iban:data.iban,joinedOn:data.joined_on,signedOn:data.signed_on,collectionAgreed:data.collection_agreed===true,collectionAgreementVersion:data.collection_agreement_version||null,reviewedAt:data.reviewed_at||null};
+        return {id:row.$id,status:row.status,memberId:row.member_id||null,submittedAt:row.submitted_at,firstName:data.first_name,lastName:data.last_name,email:data.email,accountHolder:data.account_holder,iban:data.iban,joinedOn:data.joined_on,signedOn:data.signed_on,imported:data.source==='drive-archive',importNote:data.import_note||null,sourceFileName:data.source_file_name||null,collectionAgreed:data.collection_agreed===true,collectionAgreementVersion:data.collection_agreement_version||null,reviewedAt:data.reviewed_at||null};
       })});
     }
     const id=String(body.submissionId||'');
@@ -42,6 +42,7 @@ module.exports=async({req,res})=>{
       if(bytes.length>sepa.MAX_PDF_BYTES)throw Error('Unexpected mandate file size.');
       return res.json({ok:true,pdfBase64:bytes.toString('base64'),fileName:`mandate-${id}.pdf`});
     }
+    if(data.source==='drive-archive')return res.json({ok:false,error:'Historical imports are read-only. Current bank details cannot be applied from an archive import.'},400);
     if(!['approve','reject','assign'].includes(body.action))return res.json({ok:false,error:'Invalid review action.'},400);
     if(row.status==='uploading')return res.json({ok:false,error:'The file upload has not completed.'},409);
     if(row.status==='approved')return res.json({ok:false,error:'This submission is already approved. Bank changes must be submitted and reviewed separately.'},409);

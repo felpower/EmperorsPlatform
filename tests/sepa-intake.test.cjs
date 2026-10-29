@@ -2,6 +2,13 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const shared=require('../appwrite/functions/shared/sepa-intake');
 const context=body=>({req:{body,headers:{'x-appwrite-user-id':'finance-user'}},res:{json:(payload,status=200)=>({...payload,httpStatus:status})}});
 const registration={first_name:'Test',last_name:'Player',email:'different@example.invalid',account_holder:'Parent Test',iban:'AT61 1904 3002 3457 3201',joined_on:'2026-10-01',signed_on:'2026-10-24',confirm_signed:true,privacy_acknowledged:true};
+test('historical Drive imports cannot overwrite bank details through review actions',async()=>{
+  const sepa=require('../appwrite/functions/admin/src/shared/sepa-intake'),old=sepa.checked;
+  sepa.checked=async(path,options={})=>{assert.equal(options.method,undefined);return {status:'imported',payload:JSON.stringify({source:'drive-archive',file_id:'archive'})};};
+  const file=require.resolve('../appwrite/functions/admin/src/tasks/sepaReview');delete require.cache[file];
+  try{for(const action of ['approve','assign','reject']){const result=await require(file)(context({action,submissionId:'sp_'+'a'.repeat(32),memberId:'member'}));assert.equal(result.httpStatus,400);assert.match(result.error,/read-only/);}}
+  finally{sepa.checked=old;delete require.cache[file];}
+});
 test('mandate validation checks IBAN checksum, actual dates and explicit signed-document confirmation',()=>{
   assert.equal(shared.validate(registration).iban,'AT611904300234573201');
   assert.equal(shared.validIban('AT611904300234573202'),false);
