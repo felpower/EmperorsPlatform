@@ -14,7 +14,22 @@ async function call(body){
 }
 function rate(){const offer=offers.find(o=>o.period===form.elements.fee_period.value);document.getElementById('join-rate').textContent=offer?`Configured rookie contribution: €${(offer.amountCents/100).toFixed(2)}. Enter the amount you actually transferred.`:'';}
 form.elements.fee_period.onchange=rate;
-(async()=>{try{const result=await call({action:'info'});offers=result.offers||[];if(!offers.length)throw Error('Contribution settings are unavailable. Contact the club.');form.elements.fee_period.innerHTML='';for(const o of offers){const option=document.createElement('option');option.value=o.period;option.textContent=o.period.replace('_',' ');form.elements.fee_period.append(option);}form.elements.fee_period.disabled=false;button.disabled=false;rate();}catch(e){errorBox.hidden=false;errorBox.textContent=e.message;document.getElementById('join-rate').textContent='Contribution settings could not be loaded. Refresh or contact the club.';}})();
+let infoPending=false;
+const retryInfo=document.getElementById('join-rate-retry');
+async function loadOffers(){
+ if(infoPending)return;infoPending=true;retryInfo.hidden=true;errorBox.hidden=true;button.disabled=true;form.elements.fee_period.disabled=true;
+ document.getElementById('join-rate').innerHTML='<span class="work-spinner" aria-hidden="true"></span> Loading contribution settings…';
+ try{
+  let result;for(let attempt=0;attempt<2;attempt++){try{result=await call({action:'info'});break;}catch(error){if(attempt||!/Failed to fetch|NetworkError/i.test(error.message))throw error;await new Promise(resolve=>setTimeout(resolve,1000));}}
+  offers=result.offers||[];if(!offers.length)throw Error('Contribution settings are unavailable. Contact the club.');
+  const selected=form.elements.fee_period.value;form.elements.fee_period.innerHTML='';
+  for(const o of offers){const option=document.createElement('option');option.value=o.period;option.textContent=o.period.replace('_',' ');form.elements.fee_period.append(option);}
+  if(offers.some(o=>o.period===selected))form.elements.fee_period.value=selected;
+  form.elements.fee_period.disabled=false;button.disabled=false;rate();
+ }catch(e){errorBox.hidden=false;errorBox.textContent=e.message;document.getElementById('join-rate').textContent='Contribution settings could not be loaded. Your entered details are still here; retry loading or contact the club.';retryInfo.hidden=false;}
+ finally{infoPending=false;}
+}
+retryInfo.onclick=loadOffers;void loadOffers();
 form.addEventListener('submit',async event=>{
  event.preventDefault();if(pending||!form.reportValidity())return;errorBox.hidden=true;
  const amount=form.elements.amount.value;if(!/^\d+(?:\.\d{1,2})?$/.test(amount)){errorBox.textContent='Enter a euro amount with at most two decimal places.';errorBox.hidden=false;return;}
