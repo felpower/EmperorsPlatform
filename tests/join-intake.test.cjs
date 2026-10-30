@@ -76,3 +76,9 @@ test('fully paid current rookie quarter defers missing-SEPA warnings, and ends a
  sepa.list=async table=>table==='members'?[{$id:'rookie',first_name:'Test',last_name:'Rookie',membership_status:'active',roles_json:'["player"]'}]:table==='membership_fees'?[{member_id:'rookie',fee_period:'Q4_2026',status:'paid_rookie_fee',amount_cents:5000,paid_cents:5000}]:[];
  try{join.periods=()=>['Q4_2026'];const task=require('../appwrite/functions/admin/src/tasks/sepaReview');assert.equal((await task(context({action:'overview'}))).members[0].sepaDeferred,true);join.periods=()=>['Q1_2027'];assert.equal((await task(context({action:'overview'}))).members[0].sepaDeferred,false);}finally{sepa.list=oldList;join.periods=oldPeriods;}
 });
+
+test('an empty rookie inbox does not read members or tryout history',async()=>{
+ const join=require('../appwrite/functions/admin/src/shared/join-intake'),old=join.list,calls=[];
+ join.list=async table=>{calls.push(table);return [];};
+ try{const result=await require('../appwrite/functions/admin/src/tasks/joinReview')(context({action:'overview'}));assert.equal(result.ok,true);assert.deepEqual(result.submissions,[]);assert.deepEqual(calls,['join_submissions']);}finally{join.list=old;}
+});

@@ -15,8 +15,9 @@ module.exports=async({req,res})=>{
    const r=await join.checked(`${join.path(TABLE)}?${q.map(queryParam).join('&')}`);return res.json({ok:true,count:Number(r.total||0)});
   }
   if(body.action==='overview'){
-   const [rows,members,tryouts]=await Promise.all([
-    join.list(TABLE,[{method:'orderDesc',attribute:'$createdAt'}],500),
+   const rows=await join.list(TABLE,[{method:'orderDesc',attribute:'$createdAt'}],500);
+   if(!rows.length)return res.json({ok:true,members:[],tryouts:[],submissions:[]});
+   const [members,tryouts]=await Promise.all([
     join.list('members',[{method:'select',values:['$id','first_name','last_name','email','membership_status','deleted_at']}],5000),
     join.list(tryoutTable(),[{method:'select',values:['$id','first_name','last_name','email','phone','age','preferred_position','linked_member_id','status','contact_consent','tryout_cycle']}],5000)
    ]);
