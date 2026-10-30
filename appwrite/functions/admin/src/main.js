@@ -59,5 +59,6 @@ module.exports = async (context) => {
     log(`Denied ${task} for user ${access.userId || "(anonymous)"} with roles [${(access.roles || []).join(", ")}].`);
     return res.json({ ok: false, error: access.error }, access.status);
   }
+  if(task==="joinReview"&&body.backgroundJobId)return require("./tasks/joinBackground")(context,loader());
   return loader()(context);
 };

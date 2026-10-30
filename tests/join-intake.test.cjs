@@ -82,3 +82,24 @@ test('an empty rookie inbox does not read members or tryout history',async()=>{
  join.list=async table=>{calls.push(table);return [];};
  try{const result=await require('../appwrite/functions/admin/src/tasks/joinReview')(context({action:'overview'}));assert.equal(result.ok,true);assert.deepEqual(result.submissions,[]);assert.deepEqual(calls,['join_submissions']);}finally{join.list=old;}
 });
+
+test('background review stores a private result, restricts it to the caller, and clears it only after acknowledgement',async()=>{
+ const f=await fixture(),jobId='jr_'+'c'.repeat(32);let called=0;
+ try{
+  const wrapper=require('../appwrite/functions/admin/src/tasks/joinBackground');
+  const execution=await wrapper(context({action:'overview',backgroundJobId:jobId}),async({res})=>{called++;return res.json({ok:true,submissions:[{id:'safe-test'}]});});
+  assert.equal(execution.ok,true);assert.equal(called,1);const stored=f.records.get('join_review_jobs/'+jobId);assert.equal(stored.requester_id,'finance-reviewer');assert.equal(stored.status,'completed');
+  const read=await f.task(context({action:'jobResult',jobId}));assert.equal(read.result.submissions[0].id,'safe-test');
+  const foreign=context({action:'jobResult',jobId});foreign.req.headers['x-appwrite-user-id']='another-user';assert.equal((await f.task(foreign)).httpStatus,403);
+  await wrapper(context({action:'overview',backgroundJobId:jobId}),async()=>{called++;});assert.equal(called,1);
+  assert.equal((await f.task(context({action:'jobAck',jobId}))).ok,true);assert.equal(f.records.get('join_review_jobs/'+jobId).result,'');assert.equal((await f.task(context({action:'jobResult',jobId}))).httpStatus,409);
+ }finally{f.restore();}
+});
+test('browser starts one background approval and polls its result without repeating the write',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),calls=[];let polls=0;
+ class Client{setEndpoint(){return this;}setProject(){return this;}}class Account{}class TablesDB{}
+ class Functions{async createExecution(fn,raw,background){const body=JSON.parse(raw);calls.push({body,background});if(background){assert.equal(body.task,'joinReview');assert.equal(body.action,'approve');return {$id:'execution',status:'waiting'};}if(body.action==='jobAck')return {status:'completed',responseBody:'{"ok":true}'};assert.equal(body.action,'jobResult');polls++;return {status:'completed',responseBody:JSON.stringify(polls===1?{ok:true,pending:true}:{ok:true,pending:false,result:{ok:true,memberId:'member'}})};}}
+ const window={crypto:{randomUUID:()=> 'd'.repeat(32)},ClubHubAppwriteConfig:{projectId:'test',databaseId:'test'},Appwrite:{Client,Account,Functions,TablesDB,ID:{unique:()=> 'id'}}};
+ vm.runInNewContext(fs.readFileSync('src/appwrite-backend-compat.js','utf8'),{window,console,setTimeout:fn=>{fn();return 1;},localStorage:{getItem:()=>null,setItem(){}}});
+ const result=await window.ClubHubDataClient.createClient().runAdminTask({task:'joinReview',action:'approve',submissionId:id});assert.equal(result.memberId,'member');assert.equal(polls,2);assert.equal(calls.filter(c=>c.body.action==='approve').length,1);assert.equal(calls[0].background,true);assert.ok(calls.some(c=>c.body.action==='jobAck'));
+});

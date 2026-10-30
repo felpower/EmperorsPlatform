@@ -19,3 +19,6 @@ Partial failures remain processing and Retry approval reuses member/fee IDs and 
 
 ## SEPA later
 Member checklist detects a fully paid rookie quarter from existing fee rows, defers missing IBAN/signature/document warnings during it (including an upcoming already-paid rookie quarter), and labels Rookie quarter — SEPA later. Afterwards the usual checks apply. No new permanent exemption is created. /sepa now explains continued membership/future debit authorisation and the original joining month; it does not restart membership. New confirmation version 2026-10-30-continuation-v1 is stored, while earlier confirmation text remains supported and unchanged for old clients/documents.
+
+## Slow Appwrite calls
+Admin overview/approval/rejection run asynchronously so the 30-second synchronous execution limit cannot interrupt their multi-step processing. Results are stored privately in join_review_jobs, tied to the requesting admin and a request fingerprint. Clients poll only the result; they never automatically replay a possibly accepted write. Result content is cleared after client acknowledgement. Count remains a cheap synchronous request. Public registration retains its stable reference on an uncertain response; retry cannot create a second registration. Setup also requires node scripts/setup-join-jobs.mjs.

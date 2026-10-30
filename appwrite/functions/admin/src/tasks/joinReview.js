@@ -10,6 +10,14 @@ const create=(table,id,data)=>join.checked(join.path(table),{method:'POST',body:
 module.exports=async({req,res})=>{
  const body=parseBody(req),actor=header(req,'x-appwrite-user-id');let working=false;
  try{
+  if(['jobResult','jobAck'].includes(body.action)){
+   const jobId=String(body.jobId||'');if(!/^jr_[a-f0-9]{32}$/.test(jobId))return res.json({ok:false,error:'Invalid operation reference.'},400);
+   const job=await read('join_review_jobs',jobId);if(!job)return res.json({ok:true,pending:true});
+   if(job.requester_id!==actor)return res.json({ok:false,error:'This operation belongs to another account.'},403);
+   if(body.action==='jobAck'){if(job.status==='completed')await patch('join_review_jobs',jobId,{status:'collected',result:''});return res.json({ok:true});}
+   if(job.status==='collected')return res.json({ok:false,error:'This result was already received. Refresh the overview.'},409);
+   return res.json(job.status==='completed'?{ok:true,pending:false,result:JSON.parse(job.result)}:{ok:true,pending:true});
+  }
   if(body.action==='count'){
    const q=[{method:'equal',attribute:'status',values:['new','processing']},{method:'select',values:['$id']},{method:'limit',values:[1]}];
    const r=await join.checked(`${join.path(TABLE)}?${q.map(queryParam).join('&')}`);return res.json({ok:true,count:Number(r.total||0)});

@@ -80,6 +80,31 @@
     if (!functionsService) throw new Error("Appwrite Functions API is unavailable in this browser runtime.");
     const normalizedId = String(functionId || "").trim();
     if (!normalizedId) throw new Error("Function id is not configured.");
+    if(payload?.task==='joinReview'&&!['count','jobResult','jobAck'].includes(payload.action)){
+      const jobId='jr_'+window.crypto.randomUUID().replaceAll('-','');
+      let execution=null,submissionError=null;
+      // Never automatically repeat a potentially mutating execution after a network error.
+      try{execution=await functionsService.createExecution(normalizedId,JSON.stringify({...payload,backgroundJobId:jobId}),true);}catch(error){submissionError=error;}
+      const deadline=Date.now()+360000;let latestError=null;
+      while(Date.now()<deadline){
+        await new Promise(resolve=>setTimeout(resolve,2500));
+        try{
+          const status=await runFunctionTask(normalizedId,{task:'joinReview',action:'jobResult',jobId});
+          if(!status.pending){
+            const result=status.result;
+            if(!result)throw new Error('No confirmed operation result. Refresh and check the registration.');
+            void runFunctionTask(normalizedId,{task:'joinReview',action:'jobAck',jobId}).catch(()=>undefined);
+            return result;
+          }
+        }catch(error){latestError=error;if(/another account|already received/i.test(error.message))throw error;}
+        if(execution?.$id&&typeof functionsService.getExecution==='function'){
+          let state=null;try{state=await functionsService.getExecution(normalizedId,execution.$id);}catch{/* Result polling remains authoritative. */}
+          if(state?.status==='failed'||Number(state?.responseStatusCode)>=400)throw new Error('The background operation could not finish. Refresh and check the registration before retrying. Reference: '+jobId);
+        }
+        if(submissionError&&!execution&&Date.now()>deadline-330000)throw new Error('The operation could not be confirmed. Do not create a new registration. Refresh and check its status before retrying. Reference: '+jobId);
+      }
+      throw new Error('The operation is taking longer than expected. Refresh and check the registration before retrying. Reference: '+jobId+(latestError?' · '+latestError.message:''));
+    }
     const execution = await functionsService.createExecution(normalizedId, JSON.stringify(payload || {}), false);
     const raw = String(execution?.responseBody || "").trim();
     let body = null;
