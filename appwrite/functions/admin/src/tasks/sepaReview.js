@@ -24,7 +24,7 @@ module.exports=async({req,res})=>{
     if(body.action==='overview'){
       const [members,privateRows,submissions,fees]=await Promise.all([
         sepa.list('members',[{method:'select',values:['$id','first_name','last_name','displayName','membership_status','roles_json','deleted_at','iban','mandate_date']}],5000),
-        sepa.list('member_private',[{method:'select',values:['$id','iban','mandate_date','mandate_file_id','fee_exemption_reason']}],5000),
+        sepa.list('member_private',[{method:'select',values:['$id','iban','mandate_date','mandate_file_id','fee_exemption_reason','exit_effective_on']}],5000),
         sepa.list(sepa.TABLE,[{method:'orderDesc',attribute:'$createdAt'}],500),
         sepa.list('membership_fees',[{method:'select',values:['member_id','fee_period','iban']}],5000)
       ]);
@@ -35,7 +35,7 @@ module.exports=async({req,res})=>{
       const memberRows=members.filter(row=>!row.deleted_at).map(row=>{
         const extra=byId.get(row.$id)||{};
         const iban=extra.iban||row.iban||feeIban.get(row.$id)?.iban||'';
-        return {id:row.$id,firstName:row.first_name||'',lastName:row.last_name||'',name:`${row.first_name||''} ${row.last_name||''}`.trim()||row.displayName||'Unknown member',membershipStatus:row.membership_status||'',feeExempt:Boolean(extra.fee_exemption_reason),feeExemptionReason:extra.fee_exemption_reason||'',roles:row.roles_json||'[]',ibanPresent:sepa.validIban(iban),mandateDatePresent:sepa.isoDate(extra.mandate_date||row.mandate_date),documentPresent:Boolean(extra.mandate_file_id),ibanEnding:String(iban).slice(-4)};
+        return {id:row.$id,firstName:row.first_name||'',lastName:row.last_name||'',name:`${row.first_name||''} ${row.last_name||''}`.trim()||row.displayName||'Unknown member',membershipStatus:extra.exit_effective_on&&extra.exit_effective_on<=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Vienna'}).format(new Date())?'exited':row.membership_status||'',feeExempt:Boolean(extra.fee_exemption_reason),feeExemptionReason:extra.fee_exemption_reason||'',roles:row.roles_json||'[]',ibanPresent:sepa.validIban(iban),mandateDatePresent:sepa.isoDate(extra.mandate_date||row.mandate_date),documentPresent:Boolean(extra.mandate_file_id),ibanEnding:String(iban).slice(-4)};
       });
       return res.json({ok:true,members:memberRows,submissions:submissions.map(row=>{
         const data=sepa.storedPayload(row);
