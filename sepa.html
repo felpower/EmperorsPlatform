@@ -7,21 +7,21 @@
   <meta name="description" content="Securely submit your signed SEPA mandate to the Uni Wien Emperors. No website or Google account required.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/workspace.css?v=20261025d">
   <link rel="stylesheet" href="/src/sepa-date-picker.css?v=20261029a">
-  <script defer src="/src/sepa-date-picker.js?v=20261030a"></script>
+  <script defer src="/src/sepa-date-picker.js?v=20261030c"></script>
   <style>body{display:block;min-height:100vh}.sepa-page{max-width:820px;margin:auto;padding:32px 20px 64px}.sepa-page header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:32px}.sepa-page form{display:grid;gap:18px}.sepa-page label{display:grid;gap:7px}.sepa-page input{width:100%;min-width:0}.sepa-page .sepa-check{display:flex;align-items:flex-start;gap:10px}.sepa-check input{width:20px;flex-shrink:0;margin-top:3px}.sepa-hidden{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}.sepa-page [hidden]{display:none!important}.sepa-page h1{font-size:clamp(2rem,5vw,3rem)}.sepa-page .setup-card{padding:24px}.sepa-reference{overflow-wrap:anywhere}</style>
   <script defer src="https://cdn.jsdelivr.net/npm/appwrite@26.2.0"></script>
-  <script defer src="/src/appwrite-config.js"></script><script defer src="/src/sepa-form.js?v=20261029b"></script>
+  <script defer src="/src/appwrite-config.js"></script><script defer src="/src/sepa-form.js?v=20261030c"></script>
 </head>
 <body><main class="sepa-page">
   <header><a href="/" class="ghost-button">← Emperors</a><span class="pill">No account required</span></header>
   <p class="eyebrow">Membership · Uni Wien Emperors</p><h1>Your SEPA mandate</h1>
-  <p class="muted">Send Finance your signed mandate and bank details in one place. Use the player's first and last name as known to the club.</p>
+  <p class="muted">Staying with the Emperors after your rookie quarter? Send Finance your signed mandate for future contribution collections. If you are already a member, this updates your payment arrangements; it does not create a second membership. New rookies who have only paid their rookie contribution should register at <a href="/join">/join</a> first. Use the player's first and last name as known to the club.</p>
   <section class="setup-card" id="sepa-success" hidden role="status" tabindex="-1"><h2>Submission received</h2><p>Your details and document have been saved privately. Finance will check the signed mandate before using the bank details for collection.</p><p id="sepa-receipt" class="sepa-reference"></p><p>You do not need to submit again. If anything needs correcting, contact <a href="mailto:p.felbauer@emperors.at">p.felbauer@emperors.at</a> with your reference.</p><a class="primary-button" href="/">Back to the Emperors</a></section>
   <form id="sepa-form" class="setup-card">
     <div><h2>1. Player details</h2><p class="meta">Names are used for matching. If a name is ambiguous or different in our roster, Finance will assign the submission manually.</p></div>
     <div class="work-form-grid"><label>Player's first name<input name="first_name" autocomplete="given-name" maxlength="80" required></label><label>Player's last name<input name="last_name" autocomplete="family-name" maxlength="80" required></label></div>
     <label>Contact email<input name="email" type="email" autocomplete="email" maxlength="200" required><small class="muted">Any email where we can reach you.</small></label>
-    <label>Joining month and year<input name="joined_on" type="month" required><small class="muted">An approximate month and year is fine</small></label>
+    <label>Original joining month and year<input name="joined_on" type="month" required><small class="muted">When you first joined the team, including your rookie quarter. An approximate month and year is fine.</small></label>
     <div><h2>2. Bank details and signed mandate</h2><p>Complete and sign the existing mandate template. Leave the mandate reference blank. A digital signature on the PDF is fine for submission, as in the previous form.</p><a class="ghost-button" href="/assets/sepa-mandate-template.pdf" download="Emperors-SEPA-mandate.pdf" target="_blank" rel="noopener noreferrer">Open the mandate template (PDF)</a></div>
     <label>Account holder's full name<input name="account_holder" autocomplete="off" maxlength="160" required><small class="muted">May be different from the player's name, for example a parent.</small></label>
     <label>IBAN<input name="iban" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="42" required placeholder="AT00 0000 0000 0000 0000"><small class="muted">Enter the same IBAN as on the signed document.</small></label>
@@ -36,7 +36,7 @@
     </section>
     <label class="sepa-check"><input name="collection_agreed" type="checkbox" required><span>As the account holder, I agree to the collection schedule above and to a pre-notification period of at least seven calendar days instead of the usual fourteen calendar days. I will receive advance notice of the actual amount and collection date before each debit.</span></label>
     <label class="sepa-check"><input name="confirm_signed" type="checkbox" required><span>I confirm that the account holder signed the attached mandate and that the bank details above match the document.</span></label>
-    <label class="sepa-check"><input name="membership_confirmed" type="checkbox" required><span>I confirm that I am joining the Uni Wien Emperors as a member from the date I submit this form and agree to pay the applicable membership contributions. These may be collected in accordance with the signed SEPA mandate. The club will notify me via WhatsApp of the amount and collection date before each debit.</span></label>
+    <label class="sepa-check"><input name="membership_confirmed" type="checkbox" required><span>I confirm my continued membership with the Uni Wien Emperors and agree to pay the applicable membership contributions for the relevant quarters. The signed SEPA mandate authorises future collections under its terms; submitting this form does not restart an existing membership or change its original joining date. The club will notify the account holder of the amount and collection date before each debit.</span></label>
     <label class="sepa-check"><input name="privacy_acknowledged" type="checkbox" required><span>I have read the <a href="/datenschutz.html" target="_blank" rel="noopener noreferrer">privacy information</a>. The club will use these details to administer my membership, check the mandate and process authorised membership contributions.</span></label>
     <label class="sepa-hidden" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
     <p id="sepa-error" class="work-error" role="alert" hidden></p>

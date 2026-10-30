@@ -6105,6 +6105,7 @@ Uni Wien Emperors`;
       && (["expiring", "expired", "missing", "pending"].includes(member.passStatus) || isPassExpiringSoon(member.passExpiry)));
   }
 
+  let dashboardJoinCount = null;
   let dashboardExitCount = null;
   let dashboardSepaCount = null;
   async function loadAdminDashboard(force = false) {
@@ -6116,6 +6117,7 @@ Uni Wien Emperors`;
     try {
       const results = await Promise.allSettled([
         loadTryoutSubmissions(true),
+        (async()=>{dashboardJoinCount=null;if(!backendClient?.runAdminTask)return;const result=await backendClient.runAdminTask({task:"joinReview",action:"count"});dashboardJoinCount=result.count;})(),
         (async()=>{dashboardExitCount=null;if(!backendClient?.runAdminTask)return;const result=await backendClient.runAdminTask({task:'exitReview',action:'count'});dashboardExitCount=result.count;})(),
         (async () => {
           dashboardSepaCount = null;
@@ -6150,7 +6152,7 @@ Uni Wien Emperors`;
       ${dashboardLoading ? `<div class="work-status" role="status"><span class="work-spinner"></span>Loading registrations and follow-ups…</div>` : ""}
       ${dashboardError ? `<div class="work-status work-error" role="alert">Some overview data could not be loaded: ${escapeHtml(dashboardError)}</div>` : ""}
       <div class="admin-task-grid">
-        <button type="button" class="admin-task-card" id="dashboard-exit-open"><span>New exit declarations</span><strong>${dashboardLoading ? "…" : typeof dashboardExitCount === "number" ? dashboardExitCount : "—"}</strong><span class="meta">Review exits and decisions on returning members</span></button><button type="button" class="admin-task-card" id="dashboard-sepa-open"><span>New SEPA uploads</span><strong>${dashboardLoading ? "…" : typeof dashboardSepaCount === "number" ? dashboardSepaCount : "—"}</strong><span class="meta">Review signed mandates and assign bank details</span></button>
+        <button type="button" class="admin-task-card" id="dashboard-join-open"><span>New rookie registrations</span><strong>${dashboardLoading ? "…" : typeof dashboardJoinCount === "number" ? dashboardJoinCount : "—"}</strong><span class="meta">Verify transfers and create member records</span></button><button type="button" class="admin-task-card" id="dashboard-exit-open"><span>New exit declarations</span><strong>${dashboardLoading ? "…" : typeof dashboardExitCount === "number" ? dashboardExitCount : "—"}</strong><span class="meta">Review exits and decisions on returning members</span></button><button type="button" class="admin-task-card" id="dashboard-sepa-open"><span>New SEPA uploads</span><strong>${dashboardLoading ? "…" : typeof dashboardSepaCount === "number" ? dashboardSepaCount : "—"}</strong><span class="meta">Review signed mandates and assign bank details</span></button>
         ${card("tryout", fresh.length, "New tryout registrations", "Review and invite participants")}
         ${card("fees", fees.length, "Open fee rows", formatMoney(fees.reduce((sum, row) => sum + Math.max(Number(row.amount) - Number(row.paidAmount), 0), 0)) + " across all quarters")}
         ${card("passes", passes.length, "Player passes to review", "Missing, expired or expiring soon")}
@@ -9842,7 +9844,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (!hasBootstrapped) {
       return `
         <div class="section-head">
-          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="exit-intake-overview" class="ghost-button small-button" type="button">Exit declarations</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
+          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="join-intake-overview" class="ghost-button small-button" type="button">Rookie registrations</button><button id="exit-intake-overview" class="ghost-button small-button" type="button">Exit declarations</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         </div>
         <article class="card" style="display:flex; align-items:center; gap:14px; padding: 32px; justify-content:center;">
           <span class="loading-spinner-lg" aria-hidden="true"></span>
@@ -9891,7 +9893,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
 
     return `
       <div class="section-head">
-        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="exit-intake-overview" class="ghost-button small-button" type="button">Exit declarations</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
+        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="join-intake-overview" class="ghost-button small-button" type="button">Rookie registrations</button><button id="exit-intake-overview" class="ghost-button small-button" type="button">Exit declarations</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         <div class="button-row">
           <details class="export-menu">
             <summary class="ghost-button export-menu-trigger">Export</summary>
@@ -13568,6 +13570,9 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindTableExports() {
+    document.querySelectorAll('#join-intake-overview, #dashboard-join-open').forEach(button=>button.onclick=()=>moduleRegistry.joinIntake.open({client:backendClient,onChanged:async()=>{
+      reviewedSepaFile=null;sepaExportPreview=null;dashboardJoinCount=null;dashboardLoadAttempted=false;tryoutSubmissionsLoadedAt=0;await reloadBootstrapAfterWrite();saveState();
+    }}));
     document.querySelectorAll('#exit-intake-overview, #dashboard-exit-open').forEach(button => button.onclick=()=>moduleRegistry.exitIntake.open({client:backendClient,onChanged:result=>{
       if(result.memberId)state.members=state.members.map(member=>String(member.id)===String(result.memberId)?{...member,exitEffectiveOn:result.effectiveOn||'',membershipStatus:result.membershipStatus||(result.effectiveOn&&result.effectiveOn<=window.EmperorsExitRules.today()?'exited':member.membershipStatus)}:member);
       reviewedSepaFile=null;sepaExportPreview=null;dashboardExitCount=null;dashboardLoadAttempted=false;invalidateCache(bootstrapCacheKey());saveState();

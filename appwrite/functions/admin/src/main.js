@@ -9,6 +9,7 @@ const { parseBody, applyEnvDefaults } = require("./shared/runtime");
 const { authorize } = require("./auth");
 
 const TASKS = {
+  joinReview: () => require("./tasks/joinReview"),
   exitReview: () => require("./tasks/exitReview"),
   tryoutConfirmation: () => require("./tasks/tryoutConfirmation"),
   sepaReview: () => require("./tasks/sepaReview"),

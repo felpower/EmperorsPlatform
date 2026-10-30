@@ -8,11 +8,13 @@ if (output !== path.join(root, "dist", "site")) throw new Error("Unexpected outp
 await fs.rm(output, { recursive: true, force: true });
 await fs.mkdir(output, { recursive: true });
 // Only frontend assets belong in the public artifact; never copy server code, keys or datasets.
-for (const name of ["index.html", "sepa.html", "exit.html", "thank-you.html", "404.html", "impressum.html", "datenschutz.html", "styles.css", "workspace.css", "app.bundle.js", "manifest.webmanifest", "favicon.svg", "robots.txt", "sitemap.xml", "CNAME", "src", "assets"]) {
+for (const name of ["index.html", "sepa.html", "exit.html", "join.html", "thank-you.html", "404.html", "impressum.html", "datenschutz.html", "styles.css", "workspace.css", "app.bundle.js", "manifest.webmanifest", "favicon.svg", "robots.txt", "sitemap.xml", "CNAME", "src", "assets"]) {
   await fs.cp(path.join(root, name), path.join(output, name), { recursive: true, filter: source => !source.startsWith(path.join(root, "src", "server")) && !/\.(xlsx?|csv|tsv|db|sqlite3?)$/i.test(source) });
 }
 await fs.mkdir(path.join(output,"exit"),{recursive:true});
 await fs.copyFile(path.join(root,"exit.html"),path.join(output,"exit","index.html"));
+await fs.mkdir(path.join(output,"join"),{recursive:true});
+await fs.copyFile(path.join(root,"join.html"),path.join(output,"join","index.html"));
 const bundle = await fs.readFile(path.join(root, "app.bundle.js"), "utf8");
 const literal = bundle.match(/const ROUTE_SEO = (\{[\s\S]*?\n  \});/);
 if (!literal) throw new Error("Public route metadata missing");

@@ -26,16 +26,19 @@ module.exports=async({req,res})=>{
         sepa.list('members',[{method:'select',values:['$id','first_name','last_name','displayName','membership_status','roles_json','deleted_at','iban','mandate_date']}],5000),
         sepa.list('member_private',[{method:'select',values:['$id','iban','mandate_date','mandate_file_id','fee_exemption_reason','exit_effective_on']}],5000),
         sepa.list(sepa.TABLE,[{method:'orderDesc',attribute:'$createdAt'}],500),
-        sepa.list('membership_fees',[{method:'select',values:['member_id','fee_period','iban']}],5000)
+        sepa.list('membership_fees',[{method:'select',values:['member_id','fee_period','iban','status','amount_cents','paid_cents']}],5000)
       ]);
       const byId=new Map(privateRows.map(row=>[row.$id,row]));
       const feeIban=new Map();
       const quarter=value=>{const match=/^Q([1-4])_(\d{4})$/.exec(String(value||''));return match?Number(match[2])*4+Number(match[1]):0;};
+      const currentRookiePeriod=require('../shared/join-intake').periods()[0];
+      const rookiePeriods=new Map();
+      for(const fee of fees)if(fee.status==='paid_rookie_fee'&&Number(fee.amount_cents)>0&&Number(fee.paid_cents)>=Number(fee.amount_cents)&&quarter(fee.fee_period)>=quarter(currentRookiePeriod))rookiePeriods.set(fee.member_id,fee.fee_period);
       for(const fee of fees)if(sepa.validIban(fee.iban)&&(!feeIban.has(fee.member_id)||quarter(fee.fee_period)>quarter(feeIban.get(fee.member_id).fee_period)))feeIban.set(fee.member_id,fee);
       const memberRows=members.filter(row=>!row.deleted_at).map(row=>{
         const extra=byId.get(row.$id)||{};
         const iban=extra.iban||row.iban||feeIban.get(row.$id)?.iban||'';
-        return {id:row.$id,firstName:row.first_name||'',lastName:row.last_name||'',name:`${row.first_name||''} ${row.last_name||''}`.trim()||row.displayName||'Unknown member',membershipStatus:extra.exit_effective_on&&extra.exit_effective_on<=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Vienna'}).format(new Date())?'exited':row.membership_status||'',feeExempt:Boolean(extra.fee_exemption_reason),feeExemptionReason:extra.fee_exemption_reason||'',roles:row.roles_json||'[]',ibanPresent:sepa.validIban(iban),mandateDatePresent:sepa.isoDate(extra.mandate_date||row.mandate_date),documentPresent:Boolean(extra.mandate_file_id),ibanEnding:String(iban).slice(-4)};
+        return {id:row.$id,firstName:row.first_name||'',lastName:row.last_name||'',name:`${row.first_name||''} ${row.last_name||''}`.trim()||row.displayName||'Unknown member',membershipStatus:extra.exit_effective_on&&extra.exit_effective_on<=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Vienna'}).format(new Date())?'exited':row.membership_status||'',sepaDeferred:rookiePeriods.has(row.$id),rookieFeePeriod:rookiePeriods.get(row.$id)||null,feeExempt:Boolean(extra.fee_exemption_reason),feeExemptionReason:extra.fee_exemption_reason||'',roles:row.roles_json||'[]',ibanPresent:sepa.validIban(iban),mandateDatePresent:sepa.isoDate(extra.mandate_date||row.mandate_date),documentPresent:Boolean(extra.mandate_file_id),ibanEnding:String(iban).slice(-4)};
       });
       return res.json({ok:true,members:memberRows,submissions:submissions.map(row=>{
         const data=sepa.storedPayload(row);

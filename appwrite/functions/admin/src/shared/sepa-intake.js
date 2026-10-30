@@ -39,10 +39,10 @@ function validate(input) {
   if(input.confirm_signed!==true || input.privacy_acknowledged!==true)throw Error('Please confirm the signed mandate and privacy information.');
   data.confirm_signed=true;data.privacy_acknowledged=true;
   if (input.membership_confirmation_version !== undefined) {
-    if (input.membership_confirmation_version !== '2026-10-29' || input.membership_confirmed !== true) throw Error('Please confirm the membership and contribution information.');
+    if (!['2026-10-29','2026-10-30-continuation-v1'].includes(input.membership_confirmation_version) || input.membership_confirmed !== true) throw Error('Please confirm the membership and contribution information.');
     data.membership_confirmed=true;
-    data.membership_confirmation_version='2026-10-29';
-    data.membership_confirmation_text='I confirm that I am joining the Uni Wien Emperors as a member from the date I submit this form and agree to pay the applicable membership contributions. These may be collected in accordance with the signed SEPA mandate. The club will notify me via WhatsApp of the amount and collection date before each debit.';
+    data.membership_confirmation_version=input.membership_confirmation_version;
+    data.membership_confirmation_text=input.membership_confirmation_version==='2026-10-30-continuation-v1'?'I confirm my continued membership with the Uni Wien Emperors and agree to pay the applicable membership contributions for the relevant quarters. The signed SEPA mandate authorises future collections under its terms; submitting this form does not restart an existing membership or change its original joining date. The club will notify the account holder of the amount and collection date before each debit.':'I confirm that I am joining the Uni Wien Emperors as a member from the date I submit this form and agree to pay the applicable membership contributions. These may be collected in accordance with the signed SEPA mandate. The club will notify me via WhatsApp of the amount and collection date before each debit.';
   }
   if (input.collection_agreement_version !== undefined) {
     if (input.collection_agreement_version !== '2026-10-29-v1' || input.collection_agreed !== true) throw Error('Please ask the account holder to confirm the collection schedule and seven-day notice period.');

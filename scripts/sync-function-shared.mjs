@@ -19,6 +19,13 @@ function listFiles(dir, prefix = "") {
 }
 
 let outdated = 0;
+const workflowSource=fs.readFileSync(path.resolve(root,"..","..","src","modules","club-workflows.js"));
+const workflowCopy=path.join(sharedDir,"club-workflows.js");
+if(!fs.existsSync(workflowCopy)||!fs.readFileSync(workflowCopy).equals(workflowSource)){
+  outdated++;
+  if(check)console.error("outdated: shared/club-workflows.js (frontend source)");
+  else fs.writeFileSync(workflowCopy,workflowSource);
+}
 for (const target of targets) {
   for (const rel of listFiles(sharedDir)) {
     const source = fs.readFileSync(path.join(sharedDir, rel));

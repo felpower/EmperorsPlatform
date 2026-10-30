@@ -22,7 +22,7 @@
       if (/^\d{4}-\d{2}$/.test(registration.joined_on)) registration.joined_on+='-01';
       registration.collection_agreement_version='2026-10-29-v1';
       registration.collection_agreed=form.elements.collection_agreed.checked;
-      registration.membership_confirmation_version='2026-10-29';
+      registration.membership_confirmation_version='2026-10-30-continuation-v1';
       registration.membership_confirmed=form.elements.membership_confirmed.checked;
       registration.confirm_signed=form.elements.confirm_signed.checked;registration.privacy_acknowledged=form.elements.privacy_acknowledged.checked;
       const api=new window.Appwrite.Functions(new window.Appwrite.Client().setEndpoint(config.endpoint).setProject(config.projectId));

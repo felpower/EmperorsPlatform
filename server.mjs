@@ -1001,6 +1001,7 @@ app.use((req, res, next) => {
   next();
 });
 if (SERVE_STATIC_FRONTEND) {
+  app.get(["/join", "/join/"], (req,res) => res.sendFile(path.join(__dirname,"join.html")));
   app.get(["/exit", "/exit/"], (req,res) => res.sendFile(path.join(__dirname,"exit.html")));
   app.use(express.static(__dirname));
 }
