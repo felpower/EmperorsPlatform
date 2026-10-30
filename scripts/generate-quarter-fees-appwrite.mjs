@@ -1,3 +1,5 @@
+import {createRequire} from "node:module";
+const exitRules=createRequire(import.meta.url)("../src/exit-rules.js");
 import feeRules from "../src/modules/club-workflows.js";
 import { Client, Databases, Query, ID } from "node-appwrite";
 
@@ -110,10 +112,12 @@ async function main() {
   }
 
   let created = 0;
+  const exitDates=new Map(privateRows.map(row=>[row.member_id||row.$id,row.exit_effective_on]));
   for (const member of eligibleMembers) {
     const memberId = String(member.$id || member.id);
     const memberIban = String(member.iban || "").trim() || lastKnownIban.get(memberId) || null;
     for (const period of targetPeriods) {
+      if(exitRules.excluded(exitDates.get(memberId),period))continue;
       const key = `${memberId}:${period}`;
       if (existingKeys.has(key)) continue;
 

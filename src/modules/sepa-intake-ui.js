@@ -18,7 +18,7 @@
   async function previewPdf(client,row) {
     const viewer=document.createElement('dialog');viewer.className='work-dialog sepa-pdf-dialog';
     let url='',loadingTask=null,renderTask=null,pdf=null,pageNumber=1,zoom=1,rendering=false;
-    viewer.innerHTML=`<div class="section-head"><h3>Signed mandate · ${escape(row.firstName)} ${escape(row.lastName)}</h3><button type="button" class="ghost-button" data-preview-close>Close preview</button></div><div data-preview-content class="work-status" role="status"><span class="work-spinner" aria-hidden="true"></span>Loading private PDF…</div>`;
+    viewer.innerHTML=`<div class="section-head"><h3>${escape(row.documentLabel||"Signed mandate")} · ${escape(row.firstName)} ${escape(row.lastName)}</h3><button type="button" class="ghost-button" data-preview-close>Close preview</button></div><div data-preview-content class="work-status" role="status"><span class="work-spinner" aria-hidden="true"></span>Loading private PDF…</div>`;
     viewer.querySelector('[data-preview-close]').onclick=()=>viewer.close();
     viewer.addEventListener('close',()=>{
       renderTask?.cancel();
@@ -148,5 +148,5 @@
     }
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();await load();
   }
-  root.ClubHubModules=root.ClubHubModules||{};root.ClubHubModules.sepaIntake={open,submissionPage};
+  root.ClubHubModules=root.ClubHubModules||{};root.ClubHubModules.sepaIntake={open,submissionPage,previewPdf};
 })(window);

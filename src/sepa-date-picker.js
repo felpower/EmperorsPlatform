@@ -4,9 +4,9 @@
   const months = Array.from({length:12}, (_,m) => new Intl.DateTimeFormat('en',{month:'long',timeZone:'UTC'}).format(new Date(Date.UTC(2020,m,1))));
   const today = new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Vienna'}).format(new Date());
   const pad = n => String(n).padStart(2,'0');
-  document.querySelectorAll('#sepa-form input[type="date"], #sepa-form input[type="month"]').forEach((input,index) => {
+  document.querySelectorAll('#sepa-form input[type="date"], #sepa-form input[type="month"], #exit-form input[name="signed_on"]').forEach((input,index) => {
     const monthOnly = input.type === 'month';
-    const title = monthOnly ? 'Joining month and year' : 'Signature date on the mandate';
+    const title = input.closest('#exit-form') ? 'Signature date on the declaration' : monthOnly ? 'Joining month and year' : 'Signature date on the mandate';
     let year, month;
     const trigger = document.createElement('button');
     trigger.type='button'; trigger.className='sepa-date-trigger';

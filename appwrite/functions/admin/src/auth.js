@@ -6,6 +6,7 @@ const { header, appwriteConfig, appwriteRequest, queryParam } = require("./share
 
 // Mirrors what the UI offers each role. "self" = any signed-in user (own account only).
 const DEFAULT_TASK_ROLES = {
+  exitReview: ["admin", "finance_admin"],
   tryoutConfirmation: ["admin"],
   sepaReview: ["admin", "finance_admin"],
   myOverview: ["self"],

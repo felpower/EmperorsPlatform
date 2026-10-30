@@ -496,6 +496,8 @@
       if (!extra) return;
       PRIVATE_MEMBER_FIELDS.forEach(function (key) { row[key] = extra[key] === null || extra[key] === undefined ? (key === "mandate_date" ? null : "") : extra[key]; });
       row.fee_exemption_reason=String(extra.fee_exemption_reason||"");
+      row.exit_effective_on=String(extra.exit_effective_on||"");
+      if(row.exit_effective_on && row.exit_effective_on<=new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Vienna"}).format(new Date()))row.membership_status="exited";
     });
   }
 

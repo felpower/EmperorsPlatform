@@ -645,7 +645,7 @@ Uni Wien Emperors`;
   // bootstrap is cached per signed-in account and re-read only when the cache is older than
   // CACHE_TTL or after this browser wrote something. Keys include the user id so two accounts
   // on the same browser never see each other's data.
-  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v3";
+  const BOOTSTRAP_CACHE_KEY = "emperors-bootstrap-cache-v4";
   const EQUIPMENT_CACHE_KEY = "emperors-equipment-cache-v2";
   function cacheScope() {
     return String(authState?.user?.id || "public");
@@ -2537,6 +2537,7 @@ Uni Wien Emperors`;
       mandateDate: String(member.mandateDate || member.mandate_date || "").trim(),
       accountHolder: String(member.accountHolder || member.account_holder || "").trim(),
       feeExemptionReason: String(member.feeExemptionReason || member.fee_exemption_reason || "").trim(),
+      exitEffectiveOn: String(member.exitEffectiveOn || member.exit_effective_on || "").trim(),
       positions: Array.isArray(member.positions) ? member.positions.filter(Boolean) : [],
       roles: capabilitySet(Array.isArray(member.roles) ? member.roles : ["player"]),
       rosterImage: String(member.rosterImage || member.roster_image || "").trim(),
@@ -4588,6 +4589,7 @@ Uni Wien Emperors`;
         mandateDate: String(row.mandate_date || "").trim(),
         accountHolder: String(row.account_holder || "").trim(),
         feeExemptionReason: String(row.fee_exemption_reason || "").trim(),
+        exitEffectiveOn: String(row.exit_effective_on || "").trim(),
         positions: parseJsonArrayField(row.positions_json, []),
         roles: capabilitySet(rolesByProfile.get(String(row.profile_id || "")) || parseJsonArrayField(row.roles_json, ["player"])),
         rosterImage: String(row.rosterImage || row.roster_image || "").trim(),
@@ -5474,9 +5476,9 @@ Uni Wien Emperors`;
     }
   }
 
-  function eligibleFeeMembers() {
+  function eligibleFeeMembers(period) {
     return state.members.filter((member) => {
-      if (member.deletedAt || member.feeExemptionReason) return false;
+      if (member.deletedAt || member.feeExemptionReason || window.EmperorsExitRules.excluded(member.exitEffectiveOn,period)) return false;
       const membershipStatus = String(member.membershipStatus || "").trim().toLowerCase();
       if (membershipStatus === "exited" || membershipStatus === "coach") return false;
       return (member.roles || []).includes("player");
@@ -5530,7 +5532,7 @@ Uni Wien Emperors`;
     const coveredMemberIds = new Set(
       state.fees.filter((fee) => fee.feePeriod === normalizedPeriod).map((fee) => String(fee.memberId))
     );
-    return eligibleFeeMembers().filter((member) => !coveredMemberIds.has(String(member.id)));
+    return eligibleFeeMembers(normalizedPeriod).filter((member) => !coveredMemberIds.has(String(member.id)));
   }
 
   async function generateFeeRowsForQuarter(period, onProgress) {
@@ -5539,7 +5541,7 @@ Uni Wien Emperors`;
     if (!shouldUseRemoteData() || !backendClient) {
       throw new Error("Creating a new quarter requires the Appwrite-backed deployment.");
     }
-    if (!eligibleFeeMembers().length) throw new Error("No eligible players found.");
+    if (!eligibleFeeMembers(normalizedPeriod).length) throw new Error("No eligible players found.");
 
     const missingMembers = missingFeeMembersForQuarter(normalizedPeriod);
     if (!missingMembers.length) {
@@ -6103,6 +6105,7 @@ Uni Wien Emperors`;
       && (["expiring", "expired", "missing", "pending"].includes(member.passStatus) || isPassExpiringSoon(member.passExpiry)));
   }
 
+  let dashboardExitCount = null;
   let dashboardSepaCount = null;
   async function loadAdminDashboard(force = false) {
     if (currentAccessRole !== "admin" || dashboardLoading || (dashboardLoadAttempted && !force)) return;
@@ -6113,6 +6116,7 @@ Uni Wien Emperors`;
     try {
       const results = await Promise.allSettled([
         loadTryoutSubmissions(true),
+        (async()=>{dashboardExitCount=null;if(!backendClient?.runAdminTask)return;const result=await backendClient.runAdminTask({task:'exitReview',action:'count'});dashboardExitCount=result.count;})(),
         (async () => {
           dashboardSepaCount = null;
           if (!backendClient?.runAdminTask) return;
@@ -6146,7 +6150,7 @@ Uni Wien Emperors`;
       ${dashboardLoading ? `<div class="work-status" role="status"><span class="work-spinner"></span>Loading registrations and follow-ups…</div>` : ""}
       ${dashboardError ? `<div class="work-status work-error" role="alert">Some overview data could not be loaded: ${escapeHtml(dashboardError)}</div>` : ""}
       <div class="admin-task-grid">
-        <button type="button" class="admin-task-card" id="dashboard-sepa-open"><span>New SEPA uploads</span><strong>${dashboardLoading ? "…" : typeof dashboardSepaCount === "number" ? dashboardSepaCount : "—"}</strong><span class="meta">Review signed mandates and assign bank details</span></button>
+        <button type="button" class="admin-task-card" id="dashboard-exit-open"><span>New exit declarations</span><strong>${dashboardLoading ? "…" : typeof dashboardExitCount === "number" ? dashboardExitCount : "—"}</strong><span class="meta">Review exits and decisions on returning members</span></button><button type="button" class="admin-task-card" id="dashboard-sepa-open"><span>New SEPA uploads</span><strong>${dashboardLoading ? "…" : typeof dashboardSepaCount === "number" ? dashboardSepaCount : "—"}</strong><span class="meta">Review signed mandates and assign bank details</span></button>
         ${card("tryout", fresh.length, "New tryout registrations", "Review and invite participants")}
         ${card("fees", fees.length, "Open fee rows", formatMoney(fees.reduce((sum, row) => sum + Math.max(Number(row.amount) - Number(row.paidAmount), 0), 0)) + " across all quarters")}
         ${card("passes", passes.length, "Player passes to review", "Missing, expired or expiring soon")}
@@ -9838,7 +9842,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
     if (!hasBootstrapped) {
       return `
         <div class="section-head">
-          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
+          <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="exit-intake-overview" class="ghost-button small-button" type="button">Exit declarations</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         </div>
         <article class="card" style="display:flex; align-items:center; gap:14px; padding: 32px; justify-content:center;">
           <span class="loading-spinner-lg" aria-hidden="true"></span>
@@ -9887,7 +9891,7 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
 
     return `
       <div class="section-head">
-        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
+        <div><p class="eyebrow">Finance</p><h3>Membership finance</h3><button id="sepa-intake-overview" class="ghost-button small-button" type="button">SEPA &amp; missing bank details</button><button id="exit-intake-overview" class="ghost-button small-button" type="button">Exit declarations</button><button id="fee-history" class="ghost-button small-button" type="button">Recent contribution changes</button></div>
         <div class="button-row">
           <details class="export-menu">
             <summary class="ghost-button export-menu-trigger">Export</summary>
@@ -13564,6 +13568,10 @@ ${enumOptions(workflows.TRYOUT_POSITION_OPTIONS, "")}
   }
 
   function bindTableExports() {
+    document.querySelectorAll('#exit-intake-overview, #dashboard-exit-open').forEach(button => button.onclick=()=>moduleRegistry.exitIntake.open({client:backendClient,onChanged:result=>{
+      if(result.memberId)state.members=state.members.map(member=>String(member.id)===String(result.memberId)?{...member,exitEffectiveOn:result.effectiveOn||'',membershipStatus:result.membershipStatus||(result.effectiveOn&&result.effectiveOn<=window.EmperorsExitRules.today()?'exited':member.membershipStatus)}:member);
+      reviewedSepaFile=null;sepaExportPreview=null;dashboardExitCount=null;dashboardLoadAttempted=false;invalidateCache(bootstrapCacheKey());saveState();
+    }}));
     const sepaIntakeButton = document.getElementById("sepa-intake-overview");
     if (sepaIntakeButton) sepaIntakeButton.onclick = async () => {
       await moduleRegistry.sepaIntake.open({ client: backendClient, onExemption: ({memberId,feeExemptionReason}) => {

@@ -216,6 +216,13 @@ module.exports = async ({ req, res, log }) => {
     if(!exemptionResult.response.ok)throw Error('Could not verify contribution exemptions. Refresh and retry before exporting.');
     const exemptIds=new Set((exemptionResult.payload.documents||[]).filter(row=>row.fee_exemption_reason).map(row=>row.$id));
     memberRows.forEach(member=>{if(exemptIds.has(String(member.$id||member.id)))member.fee_exempt=true;});
+    const exitRules=require('../shared/exit-rules');
+    const exitQueries=[{method:'isNotNull',attribute:'exit_effective_on',values:[]},{method:'select',values:['$id','exit_effective_on']},{method:'limit',values:[5000]}];
+    const exitPath=`/databases/${encodeURIComponent(databaseId)}/collections/member_private/documents?${exitQueries.map(q=>'queries[]='+encodeURIComponent(JSON.stringify(q))).join('&')}`;
+    const exitResult=await request(exitPath);
+    if(!exitResult.response.ok)throw Error('Could not verify effective exits. Refresh and retry before exporting.');
+    const exitDates=new Map((exitResult.payload.documents||[]).map(row=>[row.$id,row.exit_effective_on]));
+    if(Number(exitResult.payload.total||0)>5000)throw Error('Too many exit records to verify safely.');
     const membersById = new Map(
       memberRows.map((member) => [String(member?.$id || member?.id || "").trim(), member])
     );
@@ -270,6 +277,7 @@ module.exports = async ({ req, res, log }) => {
         });
       };
 
+      if(exitRules.excluded(exitDates.get(String(member?.$id||member?.id)),requestedPeriod)){skip("membership_ended_for_quarter");continue;}
       if(member?.fee_exempt){skip("member_fee_exempt");continue;}
       if (nonDebitableStatuses.has(feeStatus)) {
         skip(`status_${feeStatus}`);
