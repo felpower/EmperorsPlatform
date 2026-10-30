@@ -6,7 +6,7 @@
   const reference=`ex_${crypto.randomUUID().replaceAll('-','')}`;
   let pending=false;
   for(const item of window.EmperorsExitRules.nextBoundaries()){
-    const option=document.createElement('option');option.value=item.date;option.textContent=`${item.period.replace('_',' ')} — ${item.date}`;form.elements.effective_on.append(option);
+    const option=document.createElement('option');option.value=item.date;option.textContent=`${item.period.replace('_',' ')} — ${item.date}${item.date<=window.EmperorsExitRules.today()?' (grace period)':''}`;form.elements.effective_on.append(option);
   }
   form.elements.signed_on.max=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Vienna'}).format(new Date());
   const base64=file=>new Promise((resolve,reject)=>{

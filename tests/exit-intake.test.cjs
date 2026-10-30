@@ -76,3 +76,32 @@ test('authoritative XML exit check blocks already-created future rows while keep
   const prior=await run('Q3_2026');assert.equal(prior.ok,true,prior.error);assert.equal(prior.summary.transactionCount,2);
  }finally{global.fetch=oldFetch;for(const key of Object.keys(process.env))if(!(key in oldEnv))delete process.env[key];Object.assign(process.env,oldEnv);}
 });
+
+test('grace period includes quarter opening and the entire first day of month two, then closes',()=>{
+ for(const [start,deadline,closed] of [['2026-02-01','2026-03-01','2026-03-02'],['2026-05-01','2026-06-01','2026-06-02'],['2026-08-01','2026-09-01','2026-09-02'],['2026-11-01','2026-12-01','2026-12-02']]){
+  assert.equal(rules.graceDeadline(start),deadline);assert.equal(rules.selectable(start,start),true);assert.equal(rules.selectable(start,deadline),true);assert.equal(rules.selectable(start,closed),false);
+ }
+ assert.equal(rules.selectable('2026-11-01','2026-11-30'),true);
+ assert.equal(rules.selectable('2026-11-01','2027-01-01'),false);
+ assert.equal(rules.selectable('2026-10-01','2026-10-15'),false);
+ assert.equal(rules.receivedDate('2026-12-01T22:59:59Z'),'2026-12-01');
+ assert.equal(rules.receivedDate('2026-12-01T23:00:00Z'),'2026-12-02');
+ assert.equal(rules.nextBoundaries('2026-12-01')[0].date,'2026-11-01');
+ assert.equal(rules.nextBoundaries('2026-12-02')[0].date,'2027-02-01');
+ assert.equal(rules.nextBoundaries('2027-01-01')[0].date,'2027-02-01');
+});
+test('public validation applies the same grace deadline as the dropdown and stores the rule',()=>{
+ const exit=require('../appwrite/functions/shared/exit-intake'),oldToday=exit.rules.today;
+ const input={first_name:'Test',last_name:'Player',email:'test@example.invalid',signed_on:'2026-11-20',effective_on:'2026-11-01',policy_version:rules.VERSION,confirm_signed:true,policy_acknowledged:true,privacy_acknowledged:true};
+ try{exit.rules.today=()=> '2026-12-01';const data=exit.validate(input);assert.equal(data.grace_deadline,'2026-12-01');assert.equal(data.grace_rule_version,'2026-10-30-v1');exit.rules.today=()=> '2026-12-02';assert.throws(()=>exit.validate(input),/available club quarter/);}
+ finally{exit.rules.today=oldToday;}
+});
+test('delayed admin review uses Vienna receipt date, not review date, and rejects late receipt without writes',async()=>{
+ const exit=require('../appwrite/functions/admin/src/shared/exit-intake'),old={...exit},oldToday=exit.rules.today,writes=[];
+ let received='2026-12-01T22:59:59Z';exit.rules.today=()=> '2026-12-20';
+ exit.list=async()=>[];
+ exit.checked=async(path,options={})=>{if(options.method){writes.push({path,...options});return {};}if(path.includes('exit_submissions'))return {$id:id,status:'new',submitted_at:received,payload:JSON.stringify({effective_on:'2026-11-01',file_id:id})};if(path.includes('/members/'))return {$id:'member'};throw Error('Unexpected read');};
+ const file=require.resolve('../appwrite/functions/admin/src/tasks/exitReview');delete require.cache[file];
+ try{const task=require(file),body={action:'approve',submissionId:id,memberId:'member',effectiveOn:'2026-11-01',documentChecked:true};const good=await task(context(body));assert.equal(good.ok,true,good.error);assert.deepEqual(writes[0].body.data,{exit_effective_on:'2026-11-01'});assert.deepEqual(writes[1].body.data,{membership_status:'exited'});assert.equal(writes[2].body.data.status,'approved');writes.length=0;received='2026-12-01T23:00:00Z';assert.equal((await task(context(body))).httpStatus,400);assert.equal(writes.length,0);}
+ finally{Object.assign(exit,old);exit.rules.today=oldToday;delete require.cache[file];}
+});

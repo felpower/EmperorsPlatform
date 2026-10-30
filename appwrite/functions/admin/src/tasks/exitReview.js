@@ -30,7 +30,7 @@ module.exports=async({req,res})=>{
   if(body.action==='approve'){
    if(row.status!=='new')return res.json({ok:false,error:'This declaration is not awaiting review.'},409);
    const memberId=String(body.memberId||'');const effective=String(body.effectiveOn||data.effective_on||'');
-   if(!/^[\w.-]{1,36}$/.test(memberId)||!exit.rules.isBoundary(effective)||effective<data.effective_on||effective<=String(row.submitted_at).slice(0,10)||body.documentChecked!==true)return res.json({ok:false,error:'Check the signed document, select its member and confirm a valid quarter start. The received date is preserved.'},400);
+   if(!/^[\w.-]{1,36}$/.test(memberId)||!exit.rules.isBoundary(effective)||effective<data.effective_on||!exit.rules.selectable(effective,exit.rules.receivedDate(row.submitted_at))||body.documentChecked!==true)return res.json({ok:false,error:'Check the signed document, select its member and confirm a quarter that was available when this declaration was received. The received date is preserved.'},400);
    const member=await exit.checked(`${exit.path('members')}/${memberId}`);if(member.deleted_at)return res.json({ok:false,error:'Member has been deleted.'},400);
    const other=await exit.list(exit.TABLE,[{method:'equal',attribute:'member_id',values:[memberId]}],500);
    if(other.some(x=>x.$id!==id&&x.status==='approved'))return res.json({ok:false,error:'This member already has an approved exit. Review the existing record first.'},409);

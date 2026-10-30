@@ -7,9 +7,13 @@
   const validDate=value=>{try{return /^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value;}catch{return false;}};
   const quarterStart=period=>{const m=/^Q([1-4])_(\d{4})$/.exec(String(period));return m?`${m[2]}-${['02','05','08','11'][Number(m[1])-1]}-01`:'';};
   const isBoundary=date=>validDate(date)&&['02-01','05-01','08-01','11-01'].includes(date.slice(5));
-  function nextBoundaries(from=today(),count=8){const y=Number(from.slice(0,4));const all=[];for(let year=y;year<=y+3;year++)for(let q=1;q<=4;q++){const date=quarterStart(`Q${q}_${year}`);if(date>from)all.push({date,period:`Q${q}_${year}`});}return all.slice(0,count);}
+  // Include the first day of the following month, in Europe/Vienna.
+  const graceDeadline=date=>isBoundary(date)?`${date.slice(0,4)}-${String(Number(date.slice(5,7))+1).padStart(2,'0')}-01`:'';
+  const selectable=(date,on=today())=>isBoundary(date)&&validDate(on)&&on<=graceDeadline(date);
+  function receivedDate(timestamp){const date=new Date(timestamp);return Number.isNaN(date.getTime())?'':new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Vienna'}).format(date);}
+  function nextBoundaries(from=today(),count=8){const y=Number(from.slice(0,4));const all=[];for(let year=y-1;year<=y+3;year++)for(let q=1;q<=4;q++){const date=quarterStart(`Q${q}_${year}`);if(selectable(date,from))all.push({date,period:`Q${q}_${year}`});}return all.slice(0,count);}
   const anniversary=date=>{if(!validDate(date))return '';return `${Number(date.slice(0,4))+1}${date.slice(4)}`;};
   const excluded=(effective,period)=>isBoundary(effective)&&Boolean(quarterStart(period))&&quarterStart(period)>=effective;
   const needsReview=(effective,rejoin)=>isBoundary(effective)&&validDate(rejoin)&&rejoin>=effective&&rejoin<anniversary(effective);
-  return {VERSION,POLICY,today,validDate,quarterStart,isBoundary,nextBoundaries,anniversary,excluded,needsReview};
+  return {VERSION,POLICY,today,validDate,quarterStart,isBoundary,graceDeadline,selectable,receivedDate,nextBoundaries,anniversary,excluded,needsReview};
 });
